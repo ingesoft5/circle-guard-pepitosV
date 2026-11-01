@@ -1,0 +1,7 @@
+configuration-as-code
+git
+workflow-aggregator
+credentials-binding
+pipeline-stage-view
+sonar
+ws-cleanup

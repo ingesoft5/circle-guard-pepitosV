@@ -29,7 +29,7 @@ else
 fi
 
 info() {
-  printf '%s[%s] INFO %s %s\n' "${C_DIM}" "$(date +%H:%M:%S)" "${C_RESET}" "$*"
+  printf '%s[%s] INFO %s %s\n' "${C_DIM}" "$(date +%H:%M:%S)" "${C_RESET}" "$*" >&2
 }
 
 warn() {
@@ -250,4 +250,40 @@ env_file() {
 
 env_template() {
   printf '%s/%s/.env.example\n' "${ENVS_DIR}" "$1"
+}
+
+set_env_value() {
+  local file="$1"
+  local key="$2"
+  local value="$3"
+  local tmp
+
+  [[ -f "${file}" ]] || die "No se encontró el archivo env: ${file}"
+  tmp="$(mktemp)"
+  awk -v k="${key}" -v v="${value}" '
+    BEGIN { found = 0 }
+    $0 ~ "^" k "=" { print k "=" v; found = 1; next }
+    { print }
+    END { if (!found) print k "=" v }
+  ' "${file}" >"${tmp}"
+  mv "${tmp}" "${file}"
+  chmod 600 "${file}"
+}
+
+http_matches() {
+  local body
+  body="$(curl -fsS --max-time 10 "$1")" || return 1
+  [[ "${body}" == *"$2"* ]]
+}
+
+wait_http_pattern() {
+  local url="$1"
+  local pattern="$2"
+  local attempts="${3:-60}"
+  local delay="${4:-5}"
+
+  info "Esperando a ${url} (patrón: ${pattern})"
+  retry "${attempts}" "${delay}" http_matches "${url}" "${pattern}" \
+    || die "El endpoint no quedó listo: ${url}"
+  info "Endpoint listo: ${url}"
 }
