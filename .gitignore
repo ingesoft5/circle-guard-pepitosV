@@ -47,7 +47,7 @@ web-build/
 pgdata/
 neo4jdata/
 
-# Infrastructure secrets (keep templates only)
+# Secretos de infraestructura (solo se versionan las plantillas)
 infra/**/*.env
 !infra/**/*.env.example
 deploy/**/*.env

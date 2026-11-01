@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# Shared helpers for CircleGuard infrastructure bootstrap scripts.
-# This file is intended to be sourced, not executed directly:
+# Utilidades compartidas por los scripts de bootstrap de infraestructura de CircleGuard.
+# Este archivo está pensado para ser cargado, no ejecutado directamente:
 #   source "$(dirname "$0")/lib/common.sh"
 
 set -Eeuo pipefail
 
 readonly INFRA_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-readonly ENVS_DIR="${INFRA_ROOT}/envs"
+readonly REPO_ROOT="$(cd "${INFRA_ROOT}/.." && pwd)"
+readonly DEPLOY_DIR="${REPO_ROOT}/deploy"
+readonly ENVS_DIR="${DEPLOY_DIR}/compose"
 readonly COMPOSE_DIR="${INFRA_ROOT}/compose"
 readonly SECURITY_DIR="${INFRA_ROOT}/security"
 
@@ -25,13 +27,6 @@ else
   readonly C_YELLOW=""
   readonly C_BLUE=""
 fi
-
-log() {
-  local level="$1"
-  shift
-  printf '%s[%s]%s %s\n' "${C_DIM}" "$(date +%H:%M:%S)" "${C_RESET}" "$*" >&2
-  : "$level"
-}
 
 info() {
   printf '%s[%s] INFO %s %s\n' "${C_DIM}" "$(date +%H:%M:%S)" "${C_RESET}" "$*"
@@ -65,17 +60,17 @@ run_as_root() {
 require_cmd() {
   local cmd
   for cmd in "$@"; do
-    command -v "${cmd}" >/dev/null 2>&1 || die "Required command not found: ${cmd}"
+    command -v "${cmd}" >/dev/null 2>&1 || die "No se encontró el comando requerido: ${cmd}"
   done
 }
 
 require_ubuntu() {
-  [[ -f /etc/os-release ]] || die "Cannot detect the operating system (/etc/os-release is missing)"
+  [[ -f /etc/os-release ]] || die "No se pudo detectar el sistema operativo (falta /etc/os-release)"
   # shellcheck disable=SC1091
   . /etc/os-release
   case "${ID:-}" in
     ubuntu|debian) ;;
-    *) die "Unsupported OS: ${PRETTY_NAME:-unknown}. Use Ubuntu 24.04 LTS or Debian 12." ;;
+    *) die "Sistema operativo no soportado: ${PRETTY_NAME:-desconocido}. Use Ubuntu 24.04 LTS o Debian 12." ;;
   esac
 }
 
@@ -96,11 +91,11 @@ ensure_docker() {
     if command -v systemctl >/dev/null 2>&1; then
       run_as_root systemctl enable --now docker >/dev/null 2>&1 || true
     fi
-    info "Docker Engine and Compose plugin are already installed"
+    info "Docker Engine y el plugin de Compose ya están instalados"
     return 0
   fi
 
-  info "Installing Docker Engine and Compose plugin"
+  info "Instalando Docker Engine y el plugin de Compose"
   require_ubuntu
   require_cmd apt-get curl gpg
 
@@ -129,12 +124,12 @@ ensure_docker() {
   local target_user="${SUDO_USER:-${USER:-}}"
   if [[ -n "${target_user}" && "${target_user}" != "root" ]]; then
     run_as_root usermod -aG docker "${target_user}" || true
-    warn "User ${target_user} added to the docker group; re-login may be required (this session falls back to sudo)"
+    warn "Usuario ${target_user} agregado al grupo docker; puede requerirse reiniciar sesión (esta sesión usa sudo como respaldo)"
   fi
 
-  command -v docker >/dev/null 2>&1 || die "Docker installation failed"
-  docker_cli compose version >/dev/null 2>&1 || die "Docker Compose plugin installation failed"
-  info "Docker installed successfully"
+  command -v docker >/dev/null 2>&1 || die "La instalación de Docker falló"
+  docker_cli compose version >/dev/null 2>&1 || die "La instalación del plugin de Docker Compose falló"
+  info "Docker se instaló correctamente"
 }
 
 gen_password() {
@@ -163,20 +158,20 @@ ensure_env_file() {
   local target="$2"
 
   if [[ -f "${target}" ]]; then
-    info "Using existing env file: ${target}"
+    info "Usando archivo env existente: ${target}"
     return 0
   fi
 
-  [[ -f "${example}" ]] || die "Env template not found: ${example}"
+  [[ -f "${example}" ]] || die "No se encontró la plantilla de entorno: ${example}"
   cp "${example}" "${target}"
   chmod 600 "${target}"
   replace_placeholders "${target}"
-  info "Generated env file from template: ${target}"
+  info "Archivo env generado desde la plantilla: ${target}"
 }
 
 load_env() {
   local file="$1"
-  [[ -f "${file}" ]] || die "Env file not found: ${file}"
+  [[ -f "${file}" ]] || die "No se encontró el archivo env: ${file}"
   set -a
   # shellcheck disable=SC1090
   source "${file}"
@@ -187,7 +182,7 @@ acquire_lock() {
   local lock_file="${1:-/tmp/circleguard-bootstrap.lock}"
   exec 9>"${lock_file}"
   if ! flock -n 9; then
-    die "Another bootstrap process is already running (lock: ${lock_file})"
+    die "Ya hay otro proceso de bootstrap en ejecución (lock: ${lock_file})"
   fi
 }
 
@@ -201,7 +196,7 @@ retry() {
     if (( attempt >= attempts )); then
       return 1
     fi
-    warn "Attempt ${attempt}/${attempts} failed: $* — retrying in ${delay}s"
+    warn "Intento ${attempt}/${attempts} falló: $* — reintentando en ${delay}s"
     sleep "${delay}"
     attempt=$((attempt + 1))
   done
@@ -212,29 +207,29 @@ wait_http() {
   local attempts="${2:-60}"
   local delay="${3:-5}"
 
-  info "Waiting for ${url}"
+  info "Esperando a ${url}"
   retry "${attempts}" "${delay}" curl -fsS --max-time 10 -o /dev/null "${url}" \
-    || die "Endpoint did not become ready: ${url}"
-  info "Endpoint ready: ${url}"
+    || die "El endpoint no quedó listo: ${url}"
+  info "Endpoint listo: ${url}"
 }
 
 ensure_network() {
   local name="$1"
   if docker_cli network inspect "${name}" >/dev/null 2>&1; then
-    info "Network already exists: ${name}"
+    info "La red ya existe: ${name}"
   else
     docker_cli network create "${name}" >/dev/null
-    info "Created network: ${name}"
+    info "Red creada: ${name}"
   fi
 }
 
 ensure_volume() {
   local name="$1"
   if docker_cli volume inspect "${name}" >/dev/null 2>&1; then
-    info "Volume already exists: ${name}"
+    info "El volumen ya existe: ${name}"
   else
     docker_cli volume create "${name}" >/dev/null
-    info "Created volume: ${name}"
+    info "Volumen creado: ${name}"
   fi
 }
 
@@ -245,6 +240,14 @@ container_running() {
 validate_env_name() {
   case "${1:-}" in
     dev|stage|prod) ;;
-    *) die "Usage: $(basename "$0") <dev|stage|prod>" ;;
+    *) die "Uso: $(basename "$0") <dev|stage|prod>" ;;
   esac
+}
+
+env_file() {
+  printf '%s/%s/.env\n' "${ENVS_DIR}" "$1"
+}
+
+env_template() {
+  printf '%s/%s/.env.example\n' "${ENVS_DIR}" "$1"
 }
