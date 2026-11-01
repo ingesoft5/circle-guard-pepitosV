@@ -46,3 +46,11 @@ web-build/
 *_data/
 pgdata/
 neo4jdata/
+
+# Infrastructure secrets (keep templates only)
+infra/**/*.env
+!infra/**/*.env.example
+deploy/**/*.env
+!deploy/**/*.env.example
+*.pem
+*.key
