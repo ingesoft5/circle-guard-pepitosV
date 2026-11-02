@@ -11,7 +11,9 @@ readonly PROJECT_TAG="${PROJECT_TAG:-CircleGuard}"
 readonly CI_INSTANCE_NAME="${CI_INSTANCE_NAME:-circleguard-ci}"
 readonly CI_SG_NAME="${CI_SG_NAME:-circleguard-ci-sg}"
 readonly AWS_REGION="${AWS_REGION:-us-east-1}"
-readonly CI_INSTANCE_TYPE="${CI_INSTANCE_TYPE:-t3.medium}"
+readonly CI_INSTANCE_TYPE="${CI_INSTANCE_TYPE:-t3.large}"
+readonly CI_ROOT_VOLUME_GB="${CI_ROOT_VOLUME_GB:-30}"
+readonly CI_ROOT_VOLUME_TYPE="${CI_ROOT_VOLUME_TYPE:-gp3}"
 readonly ADMIN_CIDR="${ADMIN_CIDR:?Define ADMIN_CIDR, por ejemplo 203.0.113.0/24}"
 readonly CI_SUBNET_ID="${CI_SUBNET_ID:?Define CI_SUBNET_ID}"
 readonly CI_KEY_NAME="${CI_KEY_NAME:?Define CI_KEY_NAME}"
@@ -19,6 +21,14 @@ readonly CI_KEY_NAME="${CI_KEY_NAME:?Define CI_KEY_NAME}"
 export AWS_DEFAULT_REGION="${AWS_REGION}"
 
 ci_ports=(22 8080 9000 8081 5000)
+
+resolve_root_device_name() {
+  local ami="$1"
+  aws ec2 describe-images \
+    --image-ids "${ami}" \
+    --query 'Images[0].RootDeviceName' \
+    --output text
+}
 
 resolve_ami() {
   if [[ -n "${CI_AMI_ID:-}" ]]; then
@@ -70,7 +80,7 @@ ensure_security_group() {
 
 ensure_instance() {
   local ami="$1" sg_id="$2"
-  local instance_id state
+  local instance_id state root_device
 
   instance_id="$(aws ec2 describe-instances \
     --filters \
@@ -80,7 +90,11 @@ ensure_instance() {
     --query 'Reservations[0].Instances[0].InstanceId' --output text 2>/dev/null || true)"
 
   if [[ -z "${instance_id}" || "${instance_id}" == "None" ]]; then
-    info "Creando instancia EC2 ${CI_INSTANCE_NAME} (${CI_INSTANCE_TYPE})"
+    root_device="$(resolve_root_device_name "${ami}" 2>/dev/null || true)"
+    [[ -n "${root_device}" && "${root_device}" != "None" ]] \
+      || die "No se pudo resolver el dispositivo raíz de la AMI ${ami}"
+
+    info "Creando instancia EC2 ${CI_INSTANCE_NAME} (${CI_INSTANCE_TYPE}, ${CI_ROOT_VOLUME_GB} GB ${CI_ROOT_VOLUME_TYPE})"
     instance_id="$(aws ec2 run-instances \
       --image-id "${ami}" \
       --instance-type "${CI_INSTANCE_TYPE}" \
@@ -88,10 +102,12 @@ ensure_instance() {
       --subnet-id "${CI_SUBNET_ID}" \
       --security-group-ids "${sg_id}" \
       --associate-public-ip-address \
+      --block-device-mappings "DeviceName=${root_device},Ebs={VolumeSize=${CI_ROOT_VOLUME_GB},VolumeType=${CI_ROOT_VOLUME_TYPE},DeleteOnTermination=true}" \
       --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=${CI_INSTANCE_NAME}},{Key=Project,Value=${PROJECT_TAG}}]" \
       --query 'Instances[0].InstanceId' --output text)"
   else
     info "Instancia ya existe: ${instance_id}"
+    warn "Los cambios de CI_INSTANCE_TYPE o CI_ROOT_VOLUME_GB solo aplican a instancias nuevas"
     state="$(aws ec2 describe-instances --instance-ids "${instance_id}" \
       --query 'Reservations[0].Instances[0].State.Name' --output text)"
     if [[ "${state}" == "stopped" ]]; then
@@ -121,6 +137,9 @@ main() {
   require_cmd aws
   local ami sg_id instance_id public_ip
 
+  [[ "${CI_ROOT_VOLUME_GB}" =~ ^[0-9]+$ ]] \
+    || die "CI_ROOT_VOLUME_GB debe ser un número entero (valor actual: ${CI_ROOT_VOLUME_GB})"
+
   ami="$(resolve_ami)"
   [[ -n "${ami}" && "${ami}" != "None" ]] || die "No se pudo resolver la AMI de Ubuntu 24.04"
 
@@ -131,6 +150,7 @@ main() {
 
   info "Host CI listo: ${instance_id} (${public_ip})"
   info "SSH: ssh -i <clave>.pem ubuntu@${public_ip}"
+  info "Recursos: ${CI_INSTANCE_TYPE}, disco ${CI_ROOT_VOLUME_GB} GB ${CI_ROOT_VOLUME_TYPE}"
   info "Puertos expuestos a ${ADMIN_CIDR}: ${ci_ports[*]}"
 }
 
