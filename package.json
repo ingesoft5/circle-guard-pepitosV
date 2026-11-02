@@ -1,0 +1,15 @@
+{
+  "name": "circleguard-repo-tooling",
+  "private": true,
+  "description": "Commit message tooling for the repository. The mobile client has its own package.json.",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "prepare": "git config core.hooksPath .githooks"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "21.2.4",
+    "@commitlint/config-conventional": "21.2.4"
+  }
+}
