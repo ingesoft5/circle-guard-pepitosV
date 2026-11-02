@@ -1,0 +1,11 @@
+#!/bin/sh
+# Rejects commit messages that do not follow Conventional Commits.
+
+commitlint_bin="node_modules/.bin/commitlint"
+
+if [ ! -x "$commitlint_bin" ]; then
+  echo "commit-msg: commitlint is not installed. Run 'npm install' from the repository root." >&2
+  exit 1
+fi
+
+exec "$commitlint_bin" --edit "$1"
