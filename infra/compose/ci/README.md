@@ -90,6 +90,8 @@ export CI_KEY_NAME="mi-key-pair"
 infra/cloud/aws/provision-ci-hosts.sh
 ```
 
+Para la Elastic IP, los ambientes y la operación diaria, ver [infra/cloud/aws/README.md](../../cloud/aws/README.md).
+
 El script no instala Docker ni levanta las herramientas; solo prepara la infraestructura. Los cambios de tipo de instancia o tamaño de disco aplican únicamente a instancias nuevas.
 
 ## Preparación del host

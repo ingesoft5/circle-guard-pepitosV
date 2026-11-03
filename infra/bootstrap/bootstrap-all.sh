@@ -19,7 +19,7 @@ wait_for_ci_stack() {
 
 main() {
   acquire_lock /tmp/circleguard-ci-bootstrap.lock
-  require_cmd docker curl
+  require_cmd curl
   ensure_docker
 
   ensure_env_file "${CI_ENV_EXAMPLE}" "${CI_ENV_FILE}"
