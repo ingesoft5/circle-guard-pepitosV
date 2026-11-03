@@ -13,7 +13,7 @@ readonly CI_ENV_FILE="${CI_DIR}/.env"
 
 main() {
   acquire_lock /tmp/circleguard-ci-jenkins.lock
-  require_cmd docker curl
+  require_cmd curl
   ensure_docker
 
   ensure_env_file "${CI_ENV_EXAMPLE}" "${CI_ENV_FILE}"
