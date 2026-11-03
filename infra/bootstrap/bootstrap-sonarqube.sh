@@ -18,7 +18,7 @@ sonar_url() {
 }
 
 sonar_auth_ok() {
-  curl -fsS -u "admin:$1" "$(sonar_url)/api/system/status" >/dev/null 2>&1
+  [[ "$(curl -fsS -u "admin:$1" "$(sonar_url)/api/authentication/validate" 2>/dev/null)" == *'"valid":true'* ]]
 }
 
 sonar_api() {
@@ -124,7 +124,7 @@ ensure_quality_gate() {
 
 main() {
   acquire_lock /tmp/circleguard-ci-sonarqube.lock
-  require_cmd docker curl python3
+  require_cmd curl python3
   ensure_docker
 
   ensure_env_file "${CI_ENV_EXAMPLE}" "${CI_ENV_FILE}"

@@ -26,9 +26,7 @@ nexus_api() {
 }
 
 nexus_repo_exists() {
-  local repositories
-  repositories="$(nexus_api GET "$(nexus_url)/service/rest/v1/repositories")" || return 1
-  [[ "${repositories}" == *"\"name\":\"$1\""* ]]
+  nexus_api GET "$(nexus_url)/service/rest/v1/repositories/$1" >/dev/null 2>&1
 }
 
 ensure_admin_password() {
@@ -77,7 +75,7 @@ ensure_repositories() {
 
 main() {
   acquire_lock /tmp/circleguard-ci-nexus.lock
-  require_cmd docker curl
+  require_cmd curl
   ensure_docker
 
   ensure_env_file "${CI_ENV_EXAMPLE}" "${CI_ENV_FILE}"
