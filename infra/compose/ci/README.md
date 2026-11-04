@@ -123,6 +123,9 @@ La primera ejecución genera `infra/compose/ci/.env` con contraseñas aleatorias
 | SonarQube | `admin` | `SONAR_ADMIN_PASSWORD` en `infra/compose/ci/.env` |
 | SonarQube (token) | `admin` | `SONAR_TOKEN` en `infra/compose/ci/.env` |
 | Nexus | `admin` | `NEXUS_ADMIN_PASSWORD` en `infra/compose/ci/.env` |
+| GitHub | `<usuario>` | `GITHUB_USER` y `GITHUB_TOKEN` en `infra/compose/ci/.env` |
+
+El job multibranch y el webhook de GitHub se documentan en [docs/operaciones/jenkins-pipeline.md](../../../docs/operaciones/jenkins-pipeline.md).
 
 ## Operación
 

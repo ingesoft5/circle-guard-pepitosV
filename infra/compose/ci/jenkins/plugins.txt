@@ -1,8 +1,13 @@
 configuration-as-code
 git
 workflow-aggregator
+workflow-multibranch
 credentials-binding
+plain-credentials
 pipeline-stage-view
+github
+github-branch-source
+job-dsl
 sonar
 ws-cleanup
 ssh-agent
