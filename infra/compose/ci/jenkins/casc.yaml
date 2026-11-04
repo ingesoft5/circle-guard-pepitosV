@@ -33,6 +33,19 @@ unclassified:
         credentialsId: "github-pat"
         manageHooks: true
         clientCacheSize: 20
+  globalLibraries:
+    libraries:
+      - name: "circleguard-shared-library"
+        defaultVersion: "8c024b8f2103fc1d582d4ceb5f3c3ff13c44006b"
+        implicit: false
+        allowVersionOverride: false
+        retriever:
+          modernSCM:
+            libraryPath: "jenkins"
+            scm:
+              git:
+                remote: "https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}.git"
+                credentialsId: "github-pat"
 
 jobs:
   - script: |
