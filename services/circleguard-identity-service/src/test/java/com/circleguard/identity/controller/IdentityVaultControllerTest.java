@@ -10,6 +10,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.UUID;
 import org.springframework.kafka.core.KafkaTemplate;
 import static org.mockito.Mockito.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 import org.springframework.http.HttpStatus;
@@ -17,7 +18,7 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.context.annotation.Import;
 import com.circleguard.identity.config.SecurityConfig;
 
-@WebMvcTest(IdentityVaultController.class)
+@WebMvcTest(controllers = IdentityVaultController.class, properties = "circleguard.cors.allowed-origins=https://web.example.edu")
 @Import(SecurityConfig.class)
 class IdentityVaultControllerTest {
 
@@ -78,5 +79,19 @@ class IdentityVaultControllerTest {
 
         // Verify Kafka event was emitted even on failure
         verify(kafkaTemplate).send(eq("audit.identity.accessed"), any());
+    }
+
+    @Test
+    void corsUsesTheConfiguredOrigins() throws Exception {
+        mockMvc.perform(options("/api/v1/identities/map")
+                        .header("Origin", "https://web.example.edu")
+                        .header("Access-Control-Request-Method", "POST"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "https://web.example.edu"));
+
+        mockMvc.perform(options("/api/v1/identities/map")
+                        .header("Origin", "http://localhost:8081")
+                        .header("Access-Control-Request-Method", "POST"))
+                .andExpect(status().isForbidden());
     }
 }
