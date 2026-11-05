@@ -67,10 +67,11 @@ tar czf - --exclude='*.env' infra deploy | ssh -i <clave>.pem ubuntu@<ip> \
 ssh -i <clave>.pem ubuntu@<ip> "cd /opt/circleguard && sudo env \
   DEPLOY_SSH_PUBLIC_KEY='$(cat ~/.ssh/circleguard-deploy-dev.pub)' \
   ADMIN_CIDR=<ip>/32 NEXUS_REGISTRY=<ip-privada-de-ci>:5000 \
+  NEXUS_PULL_USER=deploy-puller NEXUS_PULL_PASSWORD=<NEXUS_PULL_PASSWORD de infra/compose/ci/.env> \
   ./infra/bootstrap/bootstrap-env.sh dev"
 ```
 
-El script genera un `.env` propio con credenciales distintas, y crea el usuario `deploy`, la red y los volúmenes. Puede ejecutarse varias veces.
+El script genera un `.env` propio con credenciales distintas, y crea el usuario `deploy`, la red y los volúmenes. Además agrega el registro a `insecure-registries` de `/etc/docker/daemon.json` (sin borrar otras opciones) y deja al usuario `deploy` autenticado en el registro con la cuenta de solo lectura `deploy-puller`. Puede ejecutarse varias veces.
 
 **7. Cargar cada llave en Jenkins,** desde tu equipo. Queda con el ID `deploy-ssh-<ambiente>`:
 
@@ -80,6 +81,8 @@ ssh -i <clave>.pem ubuntu@<ip-de-ci> \
 ```
 
 Jenkins debe conectarse a los ambientes por su IP privada, que no cambia al apagarlos.
+
+Esa IP va en `DEPLOY_HOST_DEV`, `DEPLOY_HOST_STAGE` y `DEPLOY_HOST_PROD`, en `infra/compose/ci/.env` del host de CI. Después hay que volver a ejecutar `sudo ./infra/bootstrap/bootstrap-jenkins.sh`.
 
 ## Operación diaria
 

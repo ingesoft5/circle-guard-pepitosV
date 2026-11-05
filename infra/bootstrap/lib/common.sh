@@ -270,6 +270,36 @@ set_env_value() {
   chmod 600 "${file}"
 }
 
+# Agrega KEY=valor a un .env existente solo si la clave no está (no toca valores
+# ya configurados). "__GENERATE__" se reemplaza por una contraseña aleatoria.
+ensure_env_key() {
+  local file="$1"
+  local key="$2"
+  local value="$3"
+
+  [[ -f "${file}" ]] || die "No se encontró el archivo env: ${file}"
+  if grep -q "^${key}=" "${file}"; then
+    return 0
+  fi
+  if [[ "${value}" == "__GENERATE__" ]]; then
+    value="$(gen_password)"
+  fi
+  set_env_value "${file}" "${key}" "${value}"
+  info "Variable agregada a ${file}: ${key}"
+}
+
+# Variables del registro de imágenes (HU-07). Se agregan también a .env
+# generados antes de esta versión de los scripts.
+ensure_registry_env_keys() {
+  local file="$1"
+  ensure_env_key "${file}" NEXUS_REGISTRY "localhost:${NEXUS_REGISTRY_PORT:-5000}"
+  ensure_env_key "${file}" IMAGE_NAMESPACE circleguard
+  ensure_env_key "${file}" NEXUS_CI_USER ci-publisher
+  ensure_env_key "${file}" NEXUS_CI_PASSWORD __GENERATE__
+  ensure_env_key "${file}" NEXUS_PULL_USER deploy-puller
+  ensure_env_key "${file}" NEXUS_PULL_PASSWORD __GENERATE__
+}
+
 http_matches() {
   local body
   body="$(curl -fsS --max-time 10 "$1")" || return 1

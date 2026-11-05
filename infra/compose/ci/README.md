@@ -25,7 +25,7 @@ Todos los servicios se comunican por la red Docker `circleguard-ci-net`. Solo lo
 | Jenkins | `http://<host>:8080` | `8080` (UI) y `50000` (agentes) |
 | SonarQube | `http://<host>:9000` | `9000` |
 | Nexus | `http://<host>:8081` | `8081` |
-| Registro Docker de Nexus | `<host>:5000/docker-hosted` | `5000` |
+| Registro Docker de Nexus | `<host>:5000` (imágenes: `<host>:5000/circleguard/<nombre>:<versión>`) | `5000` |
 
 El Security Group del host expone únicamente estos puertos y el `22`, restringidos a `ADMIN_CIDR`. PostgreSQL no se publica.
 
@@ -111,7 +111,7 @@ sudo ./infra/bootstrap/bootstrap-all.sh
 
 1. `bootstrap-jenkins.sh`: instala y levanta Jenkins, aplica JCasC e instala los plugins declarados.
 2. `bootstrap-sonarqube.sh`: levanta SonarQube con PostgreSQL, cambia la contraseña inicial, genera el token de análisis y asegura el quality gate `CircleGuard Gate`.
-3. `bootstrap-nexus.sh`: levanta Nexus, cambia la contraseña inicial y crea los repositorios `docker-hosted` y `raw-hosted`.
+3. `bootstrap-nexus.sh`: levanta Nexus, cambia la contraseña inicial, crea los repositorios `docker-hosted` (con `writePolicy: allow_once`, un tag publicado no se sobrescribe) y `raw-hosted`, activa el realm `Docker Bearer Token` y crea los usuarios del registro.
 
 La primera ejecución genera `infra/compose/ci/.env` con contraseñas aleatorias. El archivo queda con permisos `600` y está excluido del repositorio.
 
@@ -123,6 +123,8 @@ La primera ejecución genera `infra/compose/ci/.env` con contraseñas aleatorias
 | SonarQube | `admin` | `SONAR_ADMIN_PASSWORD` en `infra/compose/ci/.env` |
 | SonarQube (token) | `admin` | `SONAR_TOKEN` en `infra/compose/ci/.env` |
 | Nexus | `admin` | `NEXUS_ADMIN_PASSWORD` en `infra/compose/ci/.env` |
+| Nexus (Jenkins, push) | `ci-publisher` | `NEXUS_CI_PASSWORD` en `infra/compose/ci/.env`; en Jenkins como credencial `nexus-ci` |
+| Nexus (ambientes, solo pull) | `deploy-puller` | `NEXUS_PULL_PASSWORD` en `infra/compose/ci/.env`; se pasa a `bootstrap-env.sh` |
 | GitHub | `<usuario>` | `GITHUB_USER` y `GITHUB_TOKEN` en `infra/compose/ci/.env` |
 
 El job multibranch y el webhook de GitHub se documentan en [docs/operaciones/jenkins-pipeline.md](../../../docs/operaciones/jenkins-pipeline.md).

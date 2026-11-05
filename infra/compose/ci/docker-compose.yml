@@ -2,7 +2,10 @@ name: ${CI_PROJECT:-circleguard-ci}
 
 services:
   jenkins:
-    image: jenkins/jenkins:lts-jdk21
+    # jenkins/jenkins:lts-jdk21 + Docker CLI y Buildx (ver jenkins/Dockerfile)
+    build:
+      context: ./jenkins
+    image: ${CI_PROJECT:-circleguard-ci}/jenkins:lts-jdk21-docker
     container_name: ${CI_PROJECT:-circleguard-ci}-jenkins
     restart: unless-stopped
     ports:
@@ -18,6 +21,13 @@ services:
       GITHUB_REPO: ${GITHUB_REPO:-circle-guard-pepitosV}
       GITHUB_USER: ${GITHUB_USER}
       GITHUB_TOKEN: ${GITHUB_TOKEN}
+      NEXUS_REGISTRY: ${NEXUS_REGISTRY:-localhost:5000}
+      IMAGE_NAMESPACE: ${IMAGE_NAMESPACE:-circleguard}
+      DEPLOY_HOST_DEV: ${DEPLOY_HOST_DEV:-}
+      DEPLOY_HOST_STAGE: ${DEPLOY_HOST_STAGE:-}
+      DEPLOY_HOST_PROD: ${DEPLOY_HOST_PROD:-}
+      NEXUS_CI_USER: ${NEXUS_CI_USER:-ci-publisher}
+      NEXUS_CI_PASSWORD: ${NEXUS_CI_PASSWORD}
     group_add:
       - "${DOCKER_GID:-0}"
     volumes:

@@ -11,6 +11,21 @@ jenkins:
   authorizationStrategy:
     loggedInUsersCanDoAnything:
       allowAnonymousRead: false
+  globalNodeProperties:
+    - envVars:
+        env:
+          # Registro y namespace que usa el paso dockerPublish (HU-07)
+          - key: "NEXUS_REGISTRY"
+            value: "${NEXUS_REGISTRY}"
+          - key: "IMAGE_NAMESPACE"
+            value: "${IMAGE_NAMESPACE}"
+          # Private IP of each environment host, used by the deployCompose step
+          - key: "DEPLOY_HOST_DEV"
+            value: "${DEPLOY_HOST_DEV:-}"
+          - key: "DEPLOY_HOST_STAGE"
+            value: "${DEPLOY_HOST_STAGE:-}"
+          - key: "DEPLOY_HOST_PROD"
+            value: "${DEPLOY_HOST_PROD:-}"
 
 credentials:
   system:
@@ -22,6 +37,12 @@ credentials:
               username: "${GITHUB_USER}"
               password: "${GITHUB_TOKEN}"
               description: "GitHub token for multibranch scanning and commit statuses"
+          - usernamePassword:
+              scope: GLOBAL
+              id: "nexus-ci"
+              username: "${NEXUS_CI_USER}"
+              password: "${NEXUS_CI_PASSWORD}"
+              description: "Nexus user that pushes images to docker-hosted"
 
 unclassified:
   location:
@@ -36,7 +57,7 @@ unclassified:
   globalLibraries:
     libraries:
       - name: "circleguard-shared-library"
-        defaultVersion: "8c024b8f2103fc1d582d4ceb5f3c3ff13c44006b"
+        defaultVersion: "beecf5b485be775529b916adc2e25c446dc8b2da"
         implicit: false
         allowVersionOverride: false
         retriever:
