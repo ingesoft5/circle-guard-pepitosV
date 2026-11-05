@@ -22,7 +22,8 @@ pipeline {
     }
 
     environment {
-        GRADLE_USER_HOME = "${WORKSPACE}/.gradle-ci"
+        // Shared by every branch: the workspaces are wiped after each build.
+        GRADLE_USER_HOME = "${JENKINS_HOME}/gradle-cache"
         GRADLE_OPTS = '-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx1g'
     }
 
@@ -64,6 +65,7 @@ pipeline {
                     }
                     dockerPublish(image: 'web-client', dockerfile: 'mobile/Dockerfile',
                             context: 'mobile', version: version)
+                    sh 'docker image prune -f && docker builder prune -f --filter until=24h'
                 }
             }
         }
@@ -72,6 +74,9 @@ pipeline {
     post {
         failure {
             echo 'Pipeline failed. Review the stage logs and published test results.'
+        }
+        cleanup {
+            cleanWs()
         }
     }
 }

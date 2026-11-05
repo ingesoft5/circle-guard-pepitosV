@@ -71,6 +71,8 @@ def call(Map config = [:]) {
             }
         } finally {
             sh 'docker logout "$REGISTRY" >/dev/null 2>&1 || true; rm -rf "$DOCKER_CONFIG"'
+            // The image is already in the registry; the local copy would only fill the CI disk.
+            sh 'docker image rm "$IMAGE_REF" >/dev/null 2>&1 || true'
         }
     }
     return ref
