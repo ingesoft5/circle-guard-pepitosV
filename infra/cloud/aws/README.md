@@ -87,9 +87,12 @@ Jenkins debe conectarse a los ambientes por su IP privada, que no cambia al apag
 infra/cloud/aws/hosts.sh status           # estado e IP
 infra/cloud/aws/hosts.sh start envs       # ci, envs o all
 infra/cloud/aws/hosts.sh stop envs        # ci, envs o all
-infra/cloud/aws/hosts.sh allow <ip>       # autoriza una IP de administración
+infra/cloud/aws/hosts.sh allow             # autoriza la IP actual de este equipo
+infra/cloud/aws/hosts.sh allow <ip> <dueño> # autoriza una IP a nombre de esa persona
 ```
 
 Cada comando, salvo `allow`, escribe las IP actuales en `infra/cloud/aws/hosts.env`, un archivo ignorado por Git. La IP pública de los ambientes cambia al encenderlos; la de CI, con Elastic IP, no.
+
+`allow` guarda el dueño en la descripción de cada regla. Por defecto, el dueño es el nombre del usuario IAM sin el prefijo `circleguard-`. Primero agrega la regla nueva y luego borra las anteriores de ese dueño, así que el acceso no se interrumpe y las reglas no se acumulan. No toca reglas de otros dueños ni reglas sin descripción. Para reemplazar reglas, el usuario necesita los permisos `ec2:DescribeSecurityGroupRules`, `ec2:UpdateSecurityGroupRuleDescriptionsIngress` y `ec2:RevokeSecurityGroupIngress`. Sin ellos, el comando igual agrega la regla nueva y avisa que no pudo borrar la anterior.
 
 Una máquina apagada no cobra cómputo, pero sí su disco. La Elastic IP se cobra aunque CI esté apagada.
