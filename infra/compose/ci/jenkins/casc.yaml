@@ -19,6 +19,13 @@ jenkins:
             value: "${NEXUS_REGISTRY}"
           - key: "IMAGE_NAMESPACE"
             value: "${IMAGE_NAMESPACE}"
+          # Private IP of each environment host, used by the deployCompose step
+          - key: "DEPLOY_HOST_DEV"
+            value: "${DEPLOY_HOST_DEV:-}"
+          - key: "DEPLOY_HOST_STAGE"
+            value: "${DEPLOY_HOST_STAGE:-}"
+          - key: "DEPLOY_HOST_PROD"
+            value: "${DEPLOY_HOST_PROD:-}"
 
 credentials:
   system:

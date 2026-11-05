@@ -117,6 +117,19 @@ Comportamiento:
 - Si el tag ya existe con el mismo commit (re-ejecución del build), lo omite; si existe con otro commit, falla porque las versiones publicadas son inmutables.
 - El `docker login` usa un `DOCKER_CONFIG` propio del build y se borra al terminar.
 
+## `deployCompose`
+
+Despliega una versión ya publicada en un ambiente, por SSH:
+
+```groovy
+deployCompose(environment: 'dev', version: '1.4.0')
+```
+
+- Copia `deploy/compose` al host, sin tocar su `.env`, y ejecuta `deploy/compose/deploy.sh`.
+- `deploy.sh` descarga las imágenes primero: si la versión no existe, el ambiente no cambia.
+- Después espera a que los servicios queden `healthy` y prueba su salud a través del cliente web.
+- Necesita la variable `DEPLOY_HOST_<AMBIENTE>` en `infra/compose/ci/.env` y la credencial `deploy-ssh-<ambiente>`.
+
 ## Actualizar la versión de la librería
 
 1. Hacer el cambio en `jenkins/vars/`.
