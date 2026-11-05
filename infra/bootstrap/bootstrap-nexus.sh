@@ -29,6 +29,13 @@ nexus_repo_exists() {
   nexus_api GET "$(nexus_url)/service/rest/v1/repositories/$1" >/dev/null 2>&1
 }
 
+# writePolicy allow_once: un tag publicado no se puede sobrescribir, así una
+# versión siempre apunta a la misma imagen (desplegar y revertir versiones exactas).
+docker_hosted_body() {
+  printf '{"name":"docker-hosted","online":true,"storage":{"blobStoreName":"default","strictContentTypeValidation":true,"writePolicy":"allow_once"},"docker":{"httpPort":%s,"httpsPort":null,"forceBasicAuth":true,"v1Enabled":false}}' \
+    "${NEXUS_REGISTRY_PORT}"
+}
+
 ensure_admin_password() {
   local initial_password
 
@@ -55,12 +62,15 @@ ensure_admin_password() {
 
 ensure_repositories() {
   if nexus_repo_exists "docker-hosted"; then
-    info "El repositorio Docker 'docker-hosted' ya existe"
+    info "El repositorio Docker 'docker-hosted' ya existe; aplicando su configuración"
+    nexus_api PUT "$(nexus_url)/service/rest/v1/repositories/docker/hosted/docker-hosted" \
+      -H "Content-Type: application/json" \
+      -d "$(docker_hosted_body)" >/dev/null
   else
     info "Creando repositorio Docker 'docker-hosted' con puerto ${NEXUS_REGISTRY_PORT}"
     nexus_api POST "$(nexus_url)/service/rest/v1/repositories/docker/hosted" \
       -H "Content-Type: application/json" \
-      -d "{\"name\":\"docker-hosted\",\"online\":true,\"storage\":{\"blobStoreName\":\"default\",\"strictContentTypeValidation\":true,\"writePolicy\":\"allow\"},\"docker\":{\"httpPort\":${NEXUS_REGISTRY_PORT},\"httpsPort\":null,\"forceBasicAuth\":true,\"v1Enabled\":false}}" >/dev/null
+      -d "$(docker_hosted_body)" >/dev/null
   fi
 
   if nexus_repo_exists "raw-hosted"; then
@@ -73,12 +83,80 @@ ensure_repositories() {
   fi
 }
 
+# El realm "Docker Bearer Token" es el que acepta el docker login contra el registro.
+ensure_docker_realm() {
+  local active updated
+  active="$(nexus_api GET "$(nexus_url)/service/rest/v1/security/realms/active")"
+  if [[ "${active}" == *'"DockerToken"'* ]]; then
+    info "El realm 'Docker Bearer Token' ya está activo"
+    return 0
+  fi
+
+  if [[ "${active}" =~ ^\[[[:space:]]*\]$ ]]; then
+    updated='["DockerToken"]'
+  else
+    updated="${active%]*}, \"DockerToken\"]"
+  fi
+  nexus_api PUT "$(nexus_url)/service/rest/v1/security/realms/active" \
+    -H "Content-Type: application/json" -d "${updated}" >/dev/null
+  info "Realm 'Docker Bearer Token' activado"
+}
+
+ensure_role() {
+  local id="$1" description="$2" privileges="$3" body
+  body="$(printf '{"id":"%s","name":"%s","description":"%s","privileges":%s,"roles":[]}' \
+    "${id}" "${id}" "${description}" "${privileges}")"
+
+  if nexus_api GET "$(nexus_url)/service/rest/v1/security/roles/${id}" >/dev/null 2>&1; then
+    nexus_api PUT "$(nexus_url)/service/rest/v1/security/roles/${id}" \
+      -H "Content-Type: application/json" -d "${body}" >/dev/null
+    info "Rol '${id}' actualizado"
+  else
+    nexus_api POST "$(nexus_url)/service/rest/v1/security/roles" \
+      -H "Content-Type: application/json" -d "${body}" >/dev/null
+    info "Rol '${id}' creado"
+  fi
+}
+
+# Crea el usuario o, si ya existe, sincroniza su rol y su contraseña con el .env.
+ensure_user() {
+  local user="$1" password="$2" role="$3" existing body
+  body="$(printf '{"userId":"%s","firstName":"%s","lastName":"CircleGuard","emailAddress":"%s@circleguard.local","source":"default","status":"active","readOnly":false,"roles":["%s"]' \
+    "${user}" "${user}" "${user}" "${role}")"
+
+  existing="$(nexus_api GET "$(nexus_url)/service/rest/v1/security/users?userId=${user}&source=default")"
+  if [[ "${existing}" =~ \"userId\"[[:space:]]*:[[:space:]]*\"${user}\" ]]; then
+    nexus_api PUT "$(nexus_url)/service/rest/v1/security/users/${user}" \
+      -H "Content-Type: application/json" -d "${body}}" >/dev/null
+    nexus_api PUT "$(nexus_url)/service/rest/v1/security/users/${user}/change-password" \
+      -H "Content-Type: text/plain" --data "${password}" >/dev/null
+    info "Usuario '${user}' actualizado (rol ${role})"
+  else
+    nexus_api POST "$(nexus_url)/service/rest/v1/security/users" \
+      -H "Content-Type: application/json" -d "${body},\"password\":\"${password}\"}" >/dev/null
+    info "Usuario '${user}' creado (rol ${role})"
+  fi
+}
+
+# Usuarios con privilegio mínimo: Jenkins publica, los ambientes solo descargan.
+ensure_registry_users() {
+  local prefix="nx-repository-view-docker-docker-hosted"
+  ensure_role "circleguard-docker-push" "Push y pull de imágenes en docker-hosted (Jenkins)" \
+    "[\"${prefix}-add\",\"${prefix}-edit\",\"${prefix}-read\",\"${prefix}-browse\"]"
+  ensure_role "circleguard-docker-pull" "Solo pull de imágenes en docker-hosted (ambientes)" \
+    "[\"${prefix}-read\",\"${prefix}-browse\"]"
+
+  ensure_user "${NEXUS_CI_USER}" "${NEXUS_CI_PASSWORD}" "circleguard-docker-push"
+  ensure_user "${NEXUS_PULL_USER}" "${NEXUS_PULL_PASSWORD}" "circleguard-docker-pull"
+}
+
 main() {
   acquire_lock /tmp/circleguard-ci-nexus.lock
   require_cmd curl
   ensure_docker
 
   ensure_env_file "${CI_ENV_EXAMPLE}" "${CI_ENV_FILE}"
+  ensure_registry_env_keys "${CI_ENV_FILE}"
   load_env "${CI_ENV_FILE}"
 
   export CI_PROJECT CI_NETWORK
@@ -93,9 +171,12 @@ main() {
 
   ensure_admin_password
   ensure_repositories
+  ensure_docker_realm
+  ensure_registry_users
 
   info "Nexus listo en $(nexus_url) (usuario: ${NEXUS_ADMIN_USER})"
-  info "Registro Docker interno: localhost:${NEXUS_REGISTRY_PORT}/docker-hosted"
+  info "Registro Docker: localhost:${NEXUS_REGISTRY_PORT} (imágenes: localhost:${NEXUS_REGISTRY_PORT}/${IMAGE_NAMESPACE}/<nombre>:<versión>)"
+  info "Usuarios del registro: ${NEXUS_CI_USER} (push, Jenkins) y ${NEXUS_PULL_USER} (pull, ambientes)"
 }
 
 main "$@"
