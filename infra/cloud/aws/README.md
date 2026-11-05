@@ -82,6 +82,8 @@ ssh -i <clave>.pem ubuntu@<ip-de-ci> \
 
 Jenkins debe conectarse a los ambientes por su IP privada, que no cambia al apagarlos.
 
+Esa IP va en `DEPLOY_HOST_DEV`, `DEPLOY_HOST_STAGE` y `DEPLOY_HOST_PROD`, en `infra/compose/ci/.env` del host de CI. Después hay que volver a ejecutar `sudo ./infra/bootstrap/bootstrap-jenkins.sh`.
+
 ## Operación diaria
 
 ```bash

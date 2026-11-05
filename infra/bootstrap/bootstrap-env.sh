@@ -133,7 +133,8 @@ ensure_env_settings() {
     set_env_value "${target}" IMAGE_REGISTRY "${NEXUS_REGISTRY}"
   fi
 
-  run_as_root chown -R "${DEPLOY_USER}:${DEPLOY_USER}" "$(dirname "${target}")"
+  # The pipeline copies deploy/compose as this user on every deployment.
+  run_as_root chown -R "${DEPLOY_USER}:${DEPLOY_USER}" "${DEPLOY_DIR}"
   run_as_root chmod 600 "${target}"
 }
 

@@ -19,6 +19,13 @@ jenkins:
             value: "${NEXUS_REGISTRY}"
           - key: "IMAGE_NAMESPACE"
             value: "${IMAGE_NAMESPACE}"
+          # Private IP of each environment host, used by the deployCompose step
+          - key: "DEPLOY_HOST_DEV"
+            value: "${DEPLOY_HOST_DEV:-}"
+          - key: "DEPLOY_HOST_STAGE"
+            value: "${DEPLOY_HOST_STAGE:-}"
+          - key: "DEPLOY_HOST_PROD"
+            value: "${DEPLOY_HOST_PROD:-}"
 
 credentials:
   system:
@@ -50,7 +57,7 @@ unclassified:
   globalLibraries:
     libraries:
       - name: "circleguard-shared-library"
-        defaultVersion: "2bfe4921b5b4a0047ffc779551a7a88134684f5f"
+        defaultVersion: "beecf5b485be775529b916adc2e25c446dc8b2da"
         implicit: false
         allowVersionOverride: false
         retriever:

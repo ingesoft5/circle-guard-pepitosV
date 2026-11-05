@@ -11,6 +11,9 @@ def SERVICES = [
     'circleguard-dashboard-service'
 ]
 
+// Set by the publish stage when HEAD has a release tag; the deploy stage needs it.
+def releaseVersion = null
+
 pipeline {
     agent any
 
@@ -22,7 +25,8 @@ pipeline {
     }
 
     environment {
-        GRADLE_USER_HOME = "${WORKSPACE}/.gradle-ci"
+        // Shared by every branch: the workspaces are wiped after each build.
+        GRADLE_USER_HOME = "${JENKINS_HOME}/gradle-cache"
         GRADLE_OPTS = '-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx1g'
     }
 
@@ -53,6 +57,7 @@ pipeline {
             steps {
                 script {
                     def version = resolveReleaseVersion()
+                    releaseVersion = version
                     if (!version) {
                         echo 'HEAD no tiene un tag de release vMAJOR.MINOR.PATCH: no se publican imágenes.'
                         return
@@ -64,7 +69,20 @@ pipeline {
                     }
                     dockerPublish(image: 'web-client', dockerfile: 'mobile/Dockerfile',
                             context: 'mobile', version: version)
+                    sh 'docker image prune -f && docker builder prune -f --filter until=24h'
                 }
+            }
+        }
+
+        stage('Deploy to dev') {
+            when {
+                allOf {
+                    branch 'main'
+                    expression { releaseVersion != null }
+                }
+            }
+            steps {
+                deployCompose(environment: 'dev', version: releaseVersion)
             }
         }
     }
@@ -72,6 +90,9 @@ pipeline {
     post {
         failure {
             echo 'Pipeline failed. Review the stage logs and published test results.'
+        }
+        cleanup {
+            cleanWs()
         }
     }
 }
