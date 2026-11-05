@@ -1,6 +1,6 @@
 jenkins:
   systemMessage: "CircleGuard CI — Jenkins"
-  numExecutors: 2
+  numExecutors: 1
   mode: NORMAL
   securityRealm:
     local:
