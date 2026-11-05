@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Starts, stops and lists the CircleGuard hosts, and keeps their current IPs in one file.
 # Usage: hosts.sh <status|refresh|start|stop> [ci|envs|all]
-#        hosts.sh allow <public-ip>   grants a team member the documented admin ports
+#        hosts.sh allow [public-ip] [owner]   grants the documented admin ports and replaces the
+#        rules that owner already had. Defaults: this machine's public IP and the IAM user's name.
 # Public IPs of the environments change on every start: read them from hosts.env (not versioned).
 set -Eeuo pipefail
 
@@ -15,7 +16,7 @@ export AWS_DEFAULT_REGION="${AWS_REGION:-us-east-1}"
 export AWS_PAGER=""
 
 usage() {
-  die "Usage: $(basename "$0") <status|refresh|start|stop> [ci|envs|all] | allow <public-ip>"
+  die "Usage: $(basename "$0") <status|refresh|start|stop> [ci|envs|all] | allow [public-ip] [owner]"
 }
 
 hosts_of() {
@@ -62,32 +63,76 @@ refresh() {
   info "IPs saved in ${HOSTS_FILE}"
 }
 
-add_rule() {
-  local sg_name="$1" from_port="$2" to_port="$3" cidr="$4" sg_id output
+sg_id_of() {
+  local sg_name="$1" sg_id
   sg_id="$(aws ec2 describe-security-groups --filters "Name=group-name,Values=${sg_name}" \
     --query 'SecurityGroups[0].GroupId' --output text)"
   [[ "${sg_id}" == sg-* ]] || die "Security Group not found: ${sg_name}"
+  printf '%s\n' "${sg_id}"
+}
+
+# Rules named after the owner on this port, as "<rule-id> <cidr> <description>" lines.
+owner_rules() {
+  local sg_id="$1" from_port="$2" to_port="$3" owner="$4"
+  aws ec2 describe-security-group-rules --filters "Name=group-id,Values=${sg_id}" \
+    --query "SecurityGroupRules[?IsEgress==\`false\` && IpProtocol=='tcp' && FromPort==\`${from_port}\` && ToPort==\`${to_port}\` && Description!=null && CidrIpv4!=null].[SecurityGroupRuleId,CidrIpv4,Description]" \
+    --output text \
+    | awk -v o="${owner}" 'tolower($3) == tolower(o) && NF == 3'
+}
+
+# Adds the new rule first and only then removes the owner's previous ones, so access never drops.
+# Rules without the owner's name are never touched.
+replace_owner_rule() {
+  local sg_name="$1" from_port="$2" to_port="$3" cidr="$4" owner="$5" sg_id output rule_id old_cidr
+  sg_id="$(sg_id_of "${sg_name}")"
   if output="$(aws ec2 authorize-security-group-ingress --group-id "${sg_id}" \
-    --ip-permissions "IpProtocol=tcp,FromPort=${from_port},ToPort=${to_port},IpRanges=[{CidrIp=${cidr}}]" 2>&1)"; then
-    info "${sg_name}: rule added ${from_port}-${to_port}/tcp from ${cidr}"
+    --ip-permissions "IpProtocol=tcp,FromPort=${from_port},ToPort=${to_port},IpRanges=[{CidrIp=${cidr},Description=${owner}}]" 2>&1)"; then
+    info "${sg_name}: rule added ${from_port}-${to_port}/tcp from ${cidr} (${owner})"
   elif grep -q "InvalidPermission.Duplicate" <<<"${output}"; then
-    info "${sg_name}: rule already exists ${from_port}-${to_port}/tcp from ${cidr}"
+    aws ec2 update-security-group-rule-descriptions-ingress --group-id "${sg_id}" \
+      --ip-permissions "IpProtocol=tcp,FromPort=${from_port},ToPort=${to_port},IpRanges=[{CidrIp=${cidr},Description=${owner}}]" >/dev/null \
+      || warn "${sg_name}: could not name the existing rule ${from_port}-${to_port}/tcp"
+    info "${sg_name}: rule already exists ${from_port}-${to_port}/tcp from ${cidr} (${owner})"
   else
     die "Could not add the rule to ${sg_name}: ${output}"
   fi
+  while read -r rule_id old_cidr _; do
+    [[ -n "${rule_id}" && "${old_cidr}" != "${cidr}" ]] || continue
+    if aws ec2 revoke-security-group-ingress --group-id "${sg_id}" --security-group-rule-ids "${rule_id}" >/dev/null; then
+      info "${sg_name}: previous rule removed ${from_port}-${to_port}/tcp from ${old_cidr} (${owner})"
+    else
+      warn "${sg_name}: could not remove the previous rule ${from_port}-${to_port}/tcp from ${old_cidr}"
+    fi
+  done < <(owner_rules "${sg_id}" "${from_port}" "${to_port}" "${owner}")
+}
+
+current_public_ip() {
+  require_cmd curl
+  curl -fsS --max-time 10 https://checkip.amazonaws.com | tr -d '[:space:]'
+}
+
+# The default owner comes from the IAM user: circleguard-johan owns the rules named "johan".
+current_owner() {
+  local user
+  user="$(aws sts get-caller-identity --query Arn --output text)"
+  user="${user##*/}"
+  printf '%s\n' "${user#circleguard-}"
 }
 
 allow_admin_ip() {
-  local ip="${1:-}" cidr port env_name
+  local ip="${1:-}" owner="${2:-}" cidr port env_name
+  [[ -n "${ip}" ]] || ip="$(current_public_ip)"
+  [[ -n "${owner}" ]] || owner="$(current_owner)"
   [[ "${ip}" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || usage
+  [[ "${owner}" =~ ^[A-Za-z0-9_-]+$ ]] || usage
   cidr="${ip}/32"
   for port in 22 8080 9000 8081 5000; do
-    add_rule circleguard-ci-sg "${port}" "${port}" "${cidr}"
+    replace_owner_rule circleguard-ci-sg "${port}" "${port}" "${cidr}" "${owner}"
   done
   for env_name in dev stage prod; do
-    add_rule "circleguard-${env_name}-sg" 22 22 "${cidr}"
-    add_rule "circleguard-${env_name}-sg" 8180 8180 "${cidr}"
-    add_rule "circleguard-${env_name}-sg" 8082 8088 "${cidr}"
+    replace_owner_rule "circleguard-${env_name}-sg" 22 22 "${cidr}" "${owner}"
+    replace_owner_rule "circleguard-${env_name}-sg" 8180 8180 "${cidr}" "${owner}"
+    replace_owner_rule "circleguard-${env_name}-sg" 8082 8088 "${cidr}" "${owner}"
   done
 }
 
@@ -99,7 +144,7 @@ main() {
       refresh
       ;;
     allow)
-      allow_admin_ip "${2:-}"
+      allow_admin_ip "${2:-}" "${3:-}"
       ;;
     start)
       # shellcheck disable=SC2046
