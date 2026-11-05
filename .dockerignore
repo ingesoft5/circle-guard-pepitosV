@@ -1,0 +1,40 @@
+# Contexto de build = raíz del repo (los Dockerfiles de services/* lo requieren).
+# Solo deben viajar al daemon los build.gradle.kts y el src de cada servicio.
+
+# VCS y metadatos
+.git
+.github
+.githooks
+.agent
+
+# Salidas de build / IDE (services/*/bin son salidas de Eclipse/VS Code)
+.gradle
+**/.gradle
+**/build
+**/bin
+**/out
+.idea
+.vscode
+*.iml
+
+# Cliente móvil: dependencias y artefactos locales (su propio Dockerfile usa mobile/ como contexto)
+**/node_modules
+mobile/.expo
+mobile/dist
+mobile/web-build
+
+# Documentación y archivos pesados que no forman parte de ninguna imagen
+docs
+design-assets
+scratch
+*.pdf
+*.tex
+*.png
+dashboard_test_output.txt
+
+# Secretos: nunca dentro de una imagen
+**/.env
+**/*.env
+!**/*.env.example
+*.pem
+*.key

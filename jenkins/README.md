@@ -1,0 +1,92 @@
+# Shared Library de Jenkins
+
+La librería compartida de CircleGuard encapsula las etapas reutilizables del pipeline. Vive en este mismo repositorio, bajo `jenkins/vars/`, y se registra en Jenkins mediante JCasC.
+
+## Estructura
+
+```text
+jenkins/
+├── README.md
+└── vars/
+    ├── gradleBuild.groovy
+    ├── runTests.groovy
+    └── sonarScan.groovy
+```
+
+Cada paso está en su propio archivo para que las historias de empaquetado y despliegue agreguen `dockerPublish` y `deployK8s` sin modificar los pasos existentes.
+
+## Registro
+
+`infra/compose/ci/jenkins/casc.yaml` registra la librería como `circleguard-shared-library` con:
+
+- `libraryPath: "jenkins"`: indica que la raíz de la librería es la carpeta `jenkins/`, no la raíz del repositorio.
+- `defaultVersion`: SHA completo del commit que contiene la versión estable de `jenkins/vars/`.
+- `allowVersionOverride: false`: fija la versión y evita que un Jenkinsfile use otra.
+
+El `Jenkinsfile` raíz la importa con:
+
+```groovy
+@Library('circleguard-shared-library') _
+```
+
+## Pasos disponibles
+
+### `gradleBuild`
+
+Ejecuta una tarea de Gradle para todos los servicios o para uno solo.
+
+| Parámetro | Obligatorio | Valor por defecto | Descripción |
+|:---|:---|:---|:---|
+| `service` | No | Todos | Nombre del módulo, por ejemplo `circleguard-form-service`. |
+| `tasks` | No | `assemble` | Tarea de Gradle que se ejecuta. |
+| `gradleArgs` | No | Vacío | Argumentos adicionales para Gradle. |
+
+```groovy
+gradleBuild()
+gradleBuild(service: 'circleguard-form-service', tasks: 'assemble')
+```
+
+### `runTests`
+
+Ejecuta las pruebas y publica los resultados JUnit incluso cuando la tarea falla.
+
+| Parámetro | Obligatorio | Valor por defecto | Descripción |
+|:---|:---|:---|:---|
+| `service` | No | Todos | Nombre del módulo que se quiere probar. |
+| `testResults` | No | `**/build/test-results/test/*.xml` | Patrón de los reportes JUnit. |
+
+```groovy
+runTests()
+runTests(service: 'circleguard-form-service')
+```
+
+### `sonarScan`
+
+Ejecuta el análisis de SonarQube dentro de `withSonarQubeEnv`. La etapa se activa en la HU-12, cuando el plugin de Sonar en Gradle, el servidor de Jenkins y el quality gate estén configurados.
+
+| Parámetro | Obligatorio | Valor por defecto | Descripción |
+|:---|:---|:---|:---|
+| `server` | No | `SonarQube` | Nombre del servidor configurado en Jenkins. |
+| `projectKey` | No | `env.JOB_NAME` | Clave del proyecto en SonarQube. |
+| `projectName` | No | `projectKey` | Nombre visible del proyecto. |
+| `extraArgs` | No | Vacío | Argumentos adicionales para Gradle o Sonar. |
+
+```groovy
+sonarScan(projectKey: 'circleguard', projectName: 'CircleGuard')
+```
+
+## Actualizar la versión de la librería
+
+1. Hacer el cambio en `jenkins/vars/`.
+2. Crear el commit correspondiente.
+3. Copiar el SHA completo del nuevo commit.
+4. Actualizar `defaultVersion` en `infra/compose/ci/jenkins/casc.yaml`.
+5. Re-ejecutar `sudo ./infra/bootstrap/bootstrap-jenkins.sh`.
+
+No se usa una rama móvil como versión: así un build antiguo siempre carga la misma versión de la librería.
+
+## Probar la librería
+
+- Un pipeline que importe `@Library('circleguard-shared-library') _` debe resolver los tres pasos sin errores.
+- Un cambio en `jenkins/vars/` no altera los builds que usan un SHA anterior hasta que se actualice `defaultVersion`.
+- La documentación operativa completa está en [docs/operaciones/jenkins-pipeline.md](../docs/operaciones/jenkins-pipeline.md).
