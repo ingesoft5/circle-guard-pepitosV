@@ -2,13 +2,14 @@
 
 ## Alcance
 
-Esta guía cubre la HU-09 (`CGR-32`): job multibranch, webhook de GitHub, etapas iniciales del `Jenkinsfile` y check obligatorio en `dev` y `main`. La Shared Library reutilizable se implementa en la HU-10 (`CGR-33`) y vivirá en este mismo repositorio, bajo `jenkins/vars/`.
+Esta guía cubre la HU-09 (`CGR-32`) y la HU-10 (`CGR-33`): job multibranch, webhook de GitHub, etapas iniciales del `Jenkinsfile`, check obligatorio en `dev` y `main`, y Shared Library reutilizable en `jenkins/vars/`.
 
 ## Cómo funciona
 
-- `infra/compose/ci/jenkins/casc.yaml` declara por JCasC el job multibranch `circleguard`, la credencial `github-pat` y la integración con GitHub.
+- `infra/compose/ci/jenkins/casc.yaml` declara por JCasC el job multibranch `circleguard`, la credencial `github-pat`, la integración con GitHub y la Global Pipeline Library.
 - GitHub Branch Source escanea las ramas y los pull requests del repositorio y crea un build por rama o PR.
-- El `Jenkinsfile` de la raíz ejecuta las etapas `Checkout`, `Compile` y `Unit tests`; el resto de etapas se agrega en las HU de empaquetado, SonarQube e integración.
+- El `Jenkinsfile` de la raíz importa la Shared Library con `@Library` y delega `Compile` y `Unit tests` en los pasos `gradleBuild` y `runTests`.
+- La librería se carga desde `jenkins/vars/` usando `libraryPath: "jenkins"` y una versión fija por SHA.
 - Jenkins publica el resultado como estado de commit en GitHub. Para builds de PR el contexto es `continuous-integration/jenkins/pr-merge`.
 - El contenedor de Jenkins monta `/var/run/docker.sock` para que las pruebas con Testcontainers puedan iniciar contenedores y para el empaquetado posterior.
 
@@ -16,12 +17,43 @@ Esta guía cubre la HU-09 (`CGR-32`): job multibranch, webhook de GitHub, etapas
 
 | Archivo | Propósito |
 |:---|:---|
-| `Jenkinsfile` | Etapas iniciales del pipeline. |
+| `Jenkinsfile` | Etapas iniciales del pipeline, usando la librería compartida. |
+| `jenkins/vars/gradleBuild.groovy` | Paso reutilizable de compilación Gradle. |
+| `jenkins/vars/runTests.groovy` | Paso reutilizable de pruebas y publicación JUnit. |
+| `jenkins/vars/sonarScan.groovy` | Paso reutilizable de análisis SonarQube para HU-12. |
+| `jenkins/README.md` | Contrato y ejemplos de uso de la librería. |
 | `infra/compose/ci/jenkins/plugins.txt` | Plugins de multibranch, GitHub y Job DSL. |
-| `infra/compose/ci/jenkins/casc.yaml` | Credencial, servidor GitHub y job multibranch. |
+| `infra/compose/ci/jenkins/casc.yaml` | Credencial, servidor GitHub, job multibranch y Global Pipeline Library. |
 | `infra/compose/ci/docker-compose.yml` | Variables de GitHub y acceso a Docker. |
 | `infra/compose/ci/.env.example` | Plantilla de las variables de GitHub. |
 | `infra/bootstrap/bootstrap-jenkins.sh` | Exporta las variables y el GID del socket de Docker. |
+
+## Shared Library
+
+La librería se declara en JCasC como `circleguard-shared-library`:
+
+```yaml
+globalLibraries:
+  libraries:
+    - name: "circleguard-shared-library"
+      defaultVersion: "<SHA del commit de jenkins/vars>"
+      implicit: false
+      allowVersionOverride: false
+      retriever:
+        modernSCM:
+          libraryPath: "jenkins"
+          scm:
+            git:
+              remote: "https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}.git"
+              credentialsId: "github-pat"
+```
+
+Puntos importantes:
+
+- `libraryPath: "jenkins"` hace que Jenkins busque `vars/` dentro de `jenkins/`; sin ese campo buscaría `vars/` en la raíz del repositorio.
+- `defaultVersion` es un SHA completo, no una rama móvil.
+- El `Jenkinsfile` usa `@Library('circleguard-shared-library') _` sin versión explícita porque la versión ya está fijada en JCasC.
+- Para actualizar la librería se cambia `jenkins/vars/`, se toma el nuevo SHA y se actualiza `defaultVersion`; ver [jenkins/README.md](../../jenkins/README.md).
 
 ## Configuración manual en GitHub y Jenkins
 
@@ -89,6 +121,16 @@ En la regla de cada rama:
 3. Agregar `continuous-integration/jenkins/pr-merge` en `Require status checks to pass before merging`.
 4. Marcar el check como obligatorio y guardar.
 5. Hacer que el job multibranch reporte al menos una vez para que GitHub muestre el contexto.
+
+### 5. Aplicar la Shared Library
+
+No se crea a mano: JCasC la registra al re-ejecutar el bootstrap.
+
+```bash
+sudo ./infra/bootstrap/bootstrap-jenkins.sh
+```
+
+Verificar en **Manage Jenkins → System → Global Pipeline Libraries** que existe `circleguard-shared-library`, con la versión fija y sin errores de carga. El commit usado como `defaultVersion` debe estar publicado en GitHub; si solo existe en local, el primer build fallará al resolver la librería.
 
 ## Verificación
 

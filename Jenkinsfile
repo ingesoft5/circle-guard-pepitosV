@@ -1,3 +1,5 @@
+@Library('circleguard-shared-library') _
+
 pipeline {
     agent any
 
@@ -23,21 +25,18 @@ pipeline {
 
         stage('Compile') {
             steps {
-                sh './gradlew --no-daemon assemble'
+                gradleBuild()
             }
         }
 
         stage('Unit tests') {
             steps {
-                sh './gradlew --no-daemon test'
+                runTests()
             }
         }
     }
 
     post {
-        always {
-            junit allowEmptyResults: true, testResults: '**/build/test-results/test/*.xml'
-        }
         failure {
             echo 'Pipeline failed. Review the stage logs and published test results.'
         }
