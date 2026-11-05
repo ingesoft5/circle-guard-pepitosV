@@ -26,6 +26,8 @@ main() {
   export NEXUS_REGISTRY IMAGE_NAMESPACE NEXUS_CI_USER NEXUS_CI_PASSWORD
   DOCKER_GID="$(stat -c '%g' /var/run/docker.sock 2>/dev/null || echo 0)"
   export DOCKER_GID
+  # Saved in .env so a direct "docker compose up" also keeps Jenkins' access to Docker.
+  set_env_value "${CI_ENV_FILE}" DOCKER_GID "${DOCKER_GID}"
 
   if [[ "${GITHUB_TOKEN:-}" == "" || "${GITHUB_TOKEN}" == "__SET_ME__" ]]; then
     warn "GITHUB_TOKEN no está configurado; el job multibranch no podrá escanear GitHub"
