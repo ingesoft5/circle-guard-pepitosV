@@ -1,9 +1,11 @@
 package com.circleguard.form.controller;
 
+import com.circleguard.form.service.StorageService;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -11,12 +13,14 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
-@AutoConfigureMockMvc
+@WebMvcTest(AttachmentController.class)
 class AttachmentControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @MockBean
+    private StorageService storageService;
 
     @Test
     void shouldUploadFile() throws Exception {
@@ -27,8 +31,12 @@ class AttachmentControllerTest {
                 "test data".getBytes()
         );
 
+        Mockito.when(storageService.store(file)).thenReturn("stored-test.pdf");
+
         mockMvc.perform(multipart("/api/v1/attachments").file(file))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.filename").exists());
+                .andExpect(jsonPath("$.filename").value("stored-test.pdf"));
+
+        Mockito.verify(storageService).store(file);
     }
 }
