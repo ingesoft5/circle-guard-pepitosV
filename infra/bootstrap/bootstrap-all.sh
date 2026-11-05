@@ -40,7 +40,7 @@ main() {
   info "  Jenkins:   http://localhost:${JENKINS_PORT}"
   info "  SonarQube: http://localhost:${SONAR_PORT}"
   info "  Nexus:     http://localhost:${NEXUS_PORT}"
-  info "  Registry:  localhost:${NEXUS_REGISTRY_PORT}/docker-hosted"
+  info "  Registry:  localhost:${NEXUS_REGISTRY_PORT} (imágenes: <registro>/${IMAGE_NAMESPACE:-circleguard}/<nombre>:<versión>)"
 }
 
 main "$@"
