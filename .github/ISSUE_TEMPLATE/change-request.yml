@@ -1,0 +1,56 @@
+name: Change request
+description: Request a change that will reach production.
+title: "change: "
+labels: ["change-request"]
+body:
+  - type: markdown
+    attributes:
+      value: "Categories and approvers are defined in `docs/release-notes/politica-cambios.md`."
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What changes and why.
+    validations:
+      required: true
+  - type: dropdown
+    id: category
+    attributes:
+      label: Change category
+      options:
+        - Standard
+        - Normal
+        - Emergency
+    validations:
+      required: true
+  - type: dropdown
+    id: risk
+    attributes:
+      label: Risk
+      options:
+        - Low
+        - Medium
+        - High
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: Affected services and environments, and what can fail.
+    validations:
+      required: true
+  - type: textarea
+    id: test-plan
+    attributes:
+      label: Test plan
+      description: How the change will be verified before and after the release.
+    validations:
+      required: true
+  - type: textarea
+    id: rollback-plan
+    attributes:
+      label: Rollback plan
+      description: Version to redeploy, revert to apply, and data or configuration to restore.
+    validations:
+      required: true
