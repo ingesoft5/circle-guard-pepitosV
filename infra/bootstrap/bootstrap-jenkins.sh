@@ -17,11 +17,13 @@ main() {
   ensure_docker
 
   ensure_env_file "${CI_ENV_EXAMPLE}" "${CI_ENV_FILE}"
+  ensure_registry_env_keys "${CI_ENV_FILE}"
   load_env "${CI_ENV_FILE}"
 
   export CI_PROJECT CI_NETWORK
   export JENKINS_PORT JENKINS_ADMIN_USER JENKINS_ADMIN_PASSWORD
   export GITHUB_OWNER GITHUB_REPO GITHUB_USER GITHUB_TOKEN
+  export NEXUS_REGISTRY IMAGE_NAMESPACE NEXUS_CI_USER NEXUS_CI_PASSWORD
   DOCKER_GID="$(stat -c '%g' /var/run/docker.sock 2>/dev/null || echo 0)"
   export DOCKER_GID
 
@@ -33,7 +35,9 @@ main() {
   ensure_network "${CI_NETWORK}"
   ensure_volume "${CI_PROJECT}-jenkins-home"
 
-  compose --env-file "${CI_ENV_FILE}" -f "${CI_COMPOSE_FILE}" up -d jenkins
+  # --build: la imagen de Jenkins agrega el Docker CLI; Docker reutiliza la caché
+  # si jenkins/Dockerfile no cambió.
+  compose --env-file "${CI_ENV_FILE}" -f "${CI_COMPOSE_FILE}" up -d --build jenkins
   wait_http "http://localhost:${JENKINS_PORT}/login" 60 5
 
   info "Instalando/actualizando los plugins declarados"

@@ -8,7 +8,9 @@ La librería compartida de CircleGuard encapsula las etapas reutilizables del pi
 jenkins/
 ├── README.md
 └── vars/
+    ├── dockerPublish.groovy
     ├── gradleBuild.groovy
+    ├── resolveReleaseVersion.groovy
     ├── runTests.groovy
     └── sonarScan.groovy
 ```
@@ -74,6 +76,46 @@ Ejecuta el análisis de SonarQube dentro de `withSonarQubeEnv`. La etapa se acti
 ```groovy
 sonarScan(projectKey: 'circleguard', projectName: 'CircleGuard')
 ```
+
+### `resolveReleaseVersion`
+
+Devuelve la versión de release del commit actual a partir del tag de Git `vMAJOR.MINOR.PATCH` que apunta a `HEAD`, sin la `v` (por ejemplo `1.4.0`). Devuelve `null` si `HEAD` no tiene tag de release. Si un commit tiene varios, usa el mayor.
+
+| Parámetro | Obligatorio | Valor por defecto | Descripción |
+|:---|:---|:---|:---|
+| `credentialsId` | No | `github-pat` | Credencial para traer los tags de GitHub. |
+
+```groovy
+def version = resolveReleaseVersion()
+```
+
+Hasta la HU-15 el tag se crea a mano (`git tag v1.0.0 && git push origin v1.0.0`); después lo crea el versionado automático.
+
+### `dockerPublish`
+
+Construye la imagen de un componente y la publica en el registro de Nexus con un único tag: la versión `MAJOR.MINOR.PATCH` (HU-07).
+
+| Parámetro | Obligatorio | Valor por defecto | Descripción |
+|:---|:---|:---|:---|
+| `version` | Sí | | Versión `MAJOR.MINOR.PATCH`. `latest` u otro formato hace fallar la etapa. |
+| `service` | Sí, si no se usa `image` | | Módulo de `services/`, por ejemplo `circleguard-auth-service`. |
+| `image` | No | `service` sin el prefijo `circleguard-` | Nombre de la imagen en el registro. |
+| `dockerfile` | No | `services/<service>/Dockerfile` | Dockerfile a construir. |
+| `context` | No | `.` | Contexto de build. |
+| `registry` | No | `env.NEXUS_REGISTRY` | Registro destino (variable global definida en JCasC). |
+| `namespace` | No | `env.IMAGE_NAMESPACE` o `circleguard` | Prefijo de las imágenes. |
+| `credentialsId` | No | `nexus-ci` | Credencial de Jenkins con permiso de push. |
+
+```groovy
+dockerPublish(service: 'circleguard-auth-service', version: '1.4.0')
+dockerPublish(image: 'web-client', dockerfile: 'mobile/Dockerfile', context: 'mobile', version: '1.4.0')
+```
+
+Comportamiento:
+
+- Publica `<registro>/<namespace>/<imagen>:<versión>` con las etiquetas OCI de versión y commit.
+- Si el tag ya existe con el mismo commit (re-ejecución del build), lo omite; si existe con otro commit, falla porque las versiones publicadas son inmutables.
+- El `docker login` usa un `DOCKER_CONFIG` propio del build y se borra al terminar.
 
 ## Actualizar la versión de la librería
 
