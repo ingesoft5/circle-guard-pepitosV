@@ -10,6 +10,22 @@ readonly CI_DIR="${COMPOSE_DIR}/ci"
 readonly CI_COMPOSE_FILE="${CI_DIR}/docker-compose.yml"
 readonly CI_ENV_EXAMPLE="${CI_DIR}/.env.example"
 readonly CI_ENV_FILE="${CI_DIR}/.env"
+readonly SECRETS_DIR="${CI_DIR}/secrets"
+readonly JENKINS_UID=1000
+
+# casc.yaml reads one file per deploy key. A missing file would become a broken credential, so
+# each one must exist: an empty file means the key is pending, and deployments will fail.
+ensure_deploy_key_files() {
+  local env_name key_file
+  run_as_root install -d -m 700 -o "${JENKINS_UID}" -g "${JENKINS_UID}" "${SECRETS_DIR}"
+  for env_name in dev stage prod; do
+    key_file="${SECRETS_DIR}/deploy-ssh-${env_name}"
+    if ! run_as_root test -s "${key_file}"; then
+      run_as_root install -m 400 -o "${JENKINS_UID}" -g "${JENKINS_UID}" /dev/null "${key_file}"
+      warn "No deploy key for ${env_name}: run load-deploy-credential.sh ${env_name} before deploying"
+    fi
+  done
+}
 
 main() {
   acquire_lock /tmp/circleguard-ci-jenkins.lock
@@ -36,6 +52,7 @@ main() {
   info "Aprovisionando Jenkins en el proyecto ${CI_PROJECT}"
   ensure_network "${CI_NETWORK}"
   ensure_volume "${CI_PROJECT}-jenkins-home"
+  ensure_deploy_key_files
 
   # --build: la imagen de Jenkins agrega el Docker CLI; Docker reutiliza la caché
   # si jenkins/Dockerfile no cambió.

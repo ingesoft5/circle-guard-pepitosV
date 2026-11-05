@@ -43,6 +43,32 @@ credentials:
               username: "${NEXUS_CI_USER}"
               password: "${NEXUS_CI_PASSWORD}"
               description: "Nexus user that pushes images to docker-hosted"
+          # Declared here because JCasC removes any credential it does not list. The keys
+          # are files on the CI host, written by infra/bootstrap/load-deploy-credential.sh.
+          - basicSSHUserPrivateKey:
+              scope: GLOBAL
+              id: "deploy-ssh-dev"
+              username: "deploy"
+              description: "Deploy key for dev"
+              privateKeySource:
+                directEntry:
+                  privateKey: "${readFile:/run/secrets/deploy/deploy-ssh-dev}"
+          - basicSSHUserPrivateKey:
+              scope: GLOBAL
+              id: "deploy-ssh-stage"
+              username: "deploy"
+              description: "Deploy key for stage"
+              privateKeySource:
+                directEntry:
+                  privateKey: "${readFile:/run/secrets/deploy/deploy-ssh-stage}"
+          - basicSSHUserPrivateKey:
+              scope: GLOBAL
+              id: "deploy-ssh-prod"
+              username: "deploy"
+              description: "Deploy key for prod"
+              privateKeySource:
+                directEntry:
+                  privateKey: "${readFile:/run/secrets/deploy/deploy-ssh-prod}"
 
 unclassified:
   location:
