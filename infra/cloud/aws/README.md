@@ -73,7 +73,7 @@ ssh -i <clave>.pem ubuntu@<ip> "cd /opt/circleguard && sudo env \
 
 El script genera un `.env` propio con credenciales distintas, y crea el usuario `deploy`, la red y los volúmenes. Además agrega el registro a `insecure-registries` de `/etc/docker/daemon.json` (sin borrar otras opciones) y deja al usuario `deploy` autenticado en el registro con la cuenta de solo lectura `deploy-puller`. Puede ejecutarse varias veces.
 
-**7. Cargar cada llave en Jenkins,** desde tu equipo. Queda con el ID `deploy-ssh-<ambiente>`:
+**7. Cargar cada llave en Jenkins,** desde tu equipo. Queda con el ID `deploy-ssh-<ambiente>` y se guarda en `infra/compose/ci/secrets/` del host de CI, fuera del repositorio, para que sobreviva a reinicios y a nuevos bootstrap:
 
 ```bash
 ssh -i <clave>.pem ubuntu@<ip-de-ci> \

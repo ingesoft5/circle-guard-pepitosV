@@ -56,3 +56,4 @@ deploy/**/*.env
 !deploy/**/*.env.example
 *.pem
 *.key
+infra/compose/ci/secrets/

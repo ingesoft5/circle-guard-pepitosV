@@ -21,3 +21,7 @@ vault:
 
 jwt:
   secret: "test-only-signing-key-that-is-at-least-32-bytes"
+
+circleguard:
+  cors:
+    allowed-origins: http://localhost:8081

@@ -35,6 +35,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./jenkins/casc.yaml:/var/jenkins_home/casc.yaml:ro
       - ./jenkins/plugins.txt:/usr/share/jenkins/ref/plugins.txt:ro
+      - ./secrets:/run/secrets/deploy:ro
     networks:
       - ci
     healthcheck:
