@@ -200,6 +200,24 @@ pipeline {
                 deployCompose(environment: 'dev', version: releaseVersion)
             }
         }
+
+        // HU-22: GitHub Release with the notes, and CHANGELOG.md through a PR to dev
+        // (main and dev are protected, so the pipeline never pushes to them directly).
+        stage('Release notes') {
+            when {
+                allOf {
+                    branch 'main'
+                    expression { releaseVersion != null }
+                }
+            }
+            steps {
+                script {
+                    String notes = releaseNotes(version: releaseVersion)
+                    publishGithubRelease(version: releaseVersion, notes: notes)
+                    openChangelogPr(version: releaseVersion, changelog: releaseNotes.changelog())
+                }
+            }
+        }
     }
 
     post {

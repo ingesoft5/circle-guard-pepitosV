@@ -66,6 +66,31 @@ String highest(List<String> versions) {
     return best
 }
 
+/** La mayor versión de la lista que es menor que "version", o null si no hay. */
+@NonCPS
+String highestBelow(List<String> versions, String version) {
+    List<String> lower = []
+    for (String candidate : versions) {
+        if (isVersion(candidate) && compare(candidate, version) < 0) {
+            lower.add(candidate)
+        }
+    }
+    return highest(lower)
+}
+
+/** Las versiones de la lista ordenadas de mayor a menor. */
+@NonCPS
+List<String> sortDesc(List<String> versions) {
+    List<String> sorted = []
+    for (String version : versions) {
+        if (isVersion(version)) {
+            sorted.add(version)
+        }
+    }
+    sorted.sort { String a, String b -> compare(b, a) }
+    return sorted
+}
+
 /** Versiones a partir de una lista de tags de Git: 'v1.2.3' -> '1.2.3'; ignora el resto. */
 @NonCPS
 List<String> fromTags(String tagsOutput) {
