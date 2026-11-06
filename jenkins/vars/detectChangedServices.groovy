@@ -36,7 +36,8 @@ def call(Map config = [:]) {
             def previous = currentBuild.previousSuccessfulBuild
             if (previous) {
                 def buildData = previous.rawBuild?.getAction(hudson.plugins.git.util.BuildData.class)
-                base = (buildData?.lastBuiltRevision?.sha1 ?: '').toString().trim()
+                def revision = buildData?.lastBuiltRevision?.sha1
+                base = (revision?.name() ?: '').toString().trim()
             }
         } catch (Exception ignored) {
             base = ''
