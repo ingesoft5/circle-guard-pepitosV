@@ -31,6 +31,18 @@ def call(Map config = [:]) {
         }
     }
 
+    if (!base && !env.CHANGE_ID) {
+        try {
+            def previous = currentBuild.previousSuccessfulBuild
+            if (previous) {
+                def buildData = previous.rawBuild?.getAction(hudson.plugins.git.util.BuildData.class)
+                base = (buildData?.lastBuiltRevision?.sha1 ?: '').toString().trim()
+            }
+        } catch (Exception ignored) {
+            base = ''
+        }
+    }
+
     if (!base) {
         base = (env.GIT_PREVIOUS_SUCCESSFUL_COMMIT ?: '').toString().trim()
     }
