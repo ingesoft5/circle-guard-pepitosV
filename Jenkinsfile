@@ -200,6 +200,40 @@ pipeline {
                 deployCompose(environment: 'dev', version: releaseVersion)
             }
         }
+
+        stage('E2E tests on dev') {
+            when {
+                allOf {
+                    branch 'main'
+                    expression { releaseVersion != null }
+                }
+            }
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'e2e-user',
+                    usernameVariable: 'E2E_USERNAME',
+                    passwordVariable: 'E2E_PASSWORD'
+                )]) {
+                    withEnv(["E2E_BASE_URL=http://${env.DEPLOY_HOST_DEV}"]) {
+                        sh 'bash tests/e2e-playwright/run-e2e.sh'
+                    }
+                }
+            }
+            post {
+                always {
+                    junit allowEmptyResults: true,
+                        testResults: 'tests/e2e-playwright/results/junit.xml'
+                    archiveArtifacts allowEmptyArchive: true,
+                        artifacts: 'tests/e2e-playwright/results/**'
+                }
+                failure {
+                    script {
+                        failedService = failedService ?: 'web-client'
+                        failedStage = failedStage ?: 'E2E tests on dev'
+                    }
+                }
+            }
+        }
     }
 
     post {

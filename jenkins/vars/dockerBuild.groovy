@@ -16,6 +16,9 @@ def call(Map config = [:]) {
     String revision = env.GIT_COMMIT ?: sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
     String imageRef = "${namespace}/${image}:${version}"
     String pullFlag = (config.pull == false) ? '' : '--pull'
+    // The build only proves that the image builds: dockerPublish rebuilds it on main.
+    // Keeping it would leave one image per service and build on the CI disk.
+    boolean keep = config.keep == true
 
     withEnv([
         "IMAGE_REF=${imageRef}",
@@ -34,6 +37,10 @@ def call(Map config = [:]) {
               "$BUILD_CONTEXT"
         '''
         echo "dockerBuild: imagen construida ${imageRef}"
+        if (!keep) {
+            sh 'docker image rm "$IMAGE_REF" >/dev/null'
+            echo "dockerBuild: removed ${imageRef} from the CI host"
+        }
     }
 
     return imageRef
