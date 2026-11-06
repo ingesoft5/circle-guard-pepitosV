@@ -35,9 +35,14 @@ def call(Map config = [:]) {
         try {
             def previous = currentBuild.previousSuccessfulBuild
             if (previous) {
-                def buildData = previous.rawBuild?.getAction(hudson.plugins.git.util.BuildData.class)
-                def revision = buildData?.lastBuiltRevision?.sha1
-                base = (revision?.name() ?: '').toString().trim()
+                def scmAction = previous.rawBuild?.getAction(jenkins.scm.api.SCMRevisionAction.class)
+                base = (scmAction?.revision?.hash ?: '').toString().trim()
+                if (!base) {
+                    def actions = previous.rawBuild?.getActions(hudson.plugins.git.util.BuildData.class)
+                    def buildData = actions ? actions[-1] : null
+                    def revision = buildData?.lastBuiltRevision?.sha1
+                    base = (revision?.name() ?: '').toString().trim()
+                }
             }
         } catch (Exception ignored) {
             base = ''
