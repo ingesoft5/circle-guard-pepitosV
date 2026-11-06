@@ -14,6 +14,8 @@ def SERVICES = [
 // Set by the publish stage when HEAD has a release tag; the deploy stage needs it.
 def releaseVersion = null
 
+def changed = [services: [], web: false, all: false, base: '']
+
 pipeline {
     agent any
 
@@ -24,10 +26,19 @@ pipeline {
         skipDefaultCheckout(true)
     }
 
+    parameters {
+        booleanParam(
+            name: 'BUILD_ALL',
+            defaultValue: false,
+            description: 'Compila, prueba y empaqueta los 8 servicios y el cliente web'
+        )
+    }
+
     environment {
         // Shared by every branch: the workspaces are wiped after each build.
         GRADLE_USER_HOME = "${JENKINS_HOME}/gradle-cache"
         GRADLE_OPTS = '-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx1g'
+        MAX_PARALLEL_SERVICES = '3'
     }
 
     stages {
@@ -35,18 +46,73 @@ pipeline {
             steps {
                 checkout scm
                 sh 'chmod +x gradlew'
+                sh 'find services -path "*/build/test-results" -type d -prune -exec rm -rf {} +'
             }
         }
 
-        stage('Compile') {
+        stage('Detect changes') {
             steps {
-                gradleBuild()
+                script {
+                    changed = detectChangedServices(
+                        buildAll: params.BUILD_ALL ?: false,
+                        services: SERVICES
+                    )
+                    echo "Base del diff: ${changed.base ?: 'sin base'}"
+                    echo "Servicios seleccionados: ${changed.services ?: 'ninguno'}"
+                    echo "Cliente web: ${changed.web}"
+                }
             }
         }
 
-        stage('Unit tests') {
+        stage('Build, test and package') {
             steps {
-                runTests()
+                script {
+                    int maxParallel = (env.MAX_PARALLEL_SERVICES ?: '3') as int
+                    if (maxParallel < 1) {
+                        maxParallel = 1
+                    }
+
+                    if (!changed.services && !changed.web) {
+                        echo 'No hay servicios ni cliente web modificados.'
+                    }
+
+                    def services = changed.services
+                    for (int i = 0; i < services.size(); i += maxParallel) {
+                        int end = i + maxParallel
+                        if (end > services.size()) {
+                            end = services.size()
+                        }
+                        def batch = []
+                        for (int j = i; j < end; j++) {
+                            batch.add(services[j])
+                        }
+                        def branches = [:]
+                        batch.each { service ->
+                            branches[service] = {
+                                stage("Compile ${service}") {
+                                    gradleBuild(service: service)
+                                }
+                                stage("Test ${service}") {
+                                    runTests(service: service, publish: false)
+                                }
+                                stage("Package ${service}") {
+                                    dockerBuild(service: service)
+                                }
+                            }
+                        }
+                        parallel branches
+                    }
+
+                    if (changed.web) {
+                        stage('Package web client') {
+                            dockerBuild(
+                                image: 'web-client',
+                                dockerfile: 'mobile/Dockerfile',
+                                context: 'mobile'
+                            )
+                        }
+                    }
+                }
             }
         }
 
@@ -88,6 +154,16 @@ pipeline {
     }
 
     post {
+        always {
+            script {
+                if (changed.services) {
+                    def patterns = changed.services.collect {
+                        "services/${it}/build/test-results/test/*.xml"
+                    }.join(',')
+                    junit allowEmptyResults: true, testResults: patterns
+                }
+            }
+        }
         failure {
             echo 'Pipeline failed. Review the stage logs and published test results.'
         }

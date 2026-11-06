@@ -2,13 +2,16 @@
 
 ## Alcance
 
-Esta guía cubre la HU-09 (`CGR-32`) y la HU-10 (`CGR-33`): job multibranch, webhook de GitHub, etapas iniciales del `Jenkinsfile`, check obligatorio en `dev` y `main`, y Shared Library reutilizable en `jenkins/vars/`.
+Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`) y la HU-11 (`CGR-34`): job multibranch, webhook de GitHub, etapas del `Jenkinsfile`, check obligatorio en `dev` y `main`, Shared Library reutilizable en `jenkins/vars/` y ejecución selectiva por servicio.
 
 ## Cómo funciona
 
 - `infra/compose/ci/jenkins/casc.yaml` declara por JCasC el job multibranch `circleguard`, la credencial `github-pat`, la integración con GitHub y la Global Pipeline Library.
 - GitHub Branch Source escanea las ramas y los pull requests del repositorio y crea un build por rama o PR.
-- El `Jenkinsfile` de la raíz importa la Shared Library con `@Library` y delega `Compile` y `Unit tests` en los pasos `gradleBuild` y `runTests`.
+- El `Jenkinsfile` de la raíz importa la Shared Library con `@Library` y usa `detectChangedServices` para calcular qué servicios y si el web client deben procesarse.
+- Cada servicio seleccionado se compila, prueba y empaqueta con `gradleBuild`, `runTests` y `dockerBuild` dentro de un `parallel` dinámico, en lotes de 3.
+- El web client se empaqueta solo si cambió `mobile/` o si se ejecuta con `BUILD_ALL=true`.
+- `Publish images` sigue publicando en `main` las imágenes de los 8 servicios y del web client con la versión semver del tag.
 - La librería se carga desde `jenkins/vars/` usando `libraryPath: "jenkins"` y una versión fija por SHA.
 - Jenkins publica el resultado como estado de commit en GitHub. Para builds de PR el contexto es `continuous-integration/jenkins/pr-merge`.
 - El contenedor de Jenkins monta `/var/run/docker.sock` para que las pruebas con Testcontainers puedan iniciar contenedores y para el empaquetado posterior.
@@ -17,9 +20,13 @@ Esta guía cubre la HU-09 (`CGR-32`) y la HU-10 (`CGR-33`): job multibranch, web
 
 | Archivo | Propósito |
 |:---|:---|
-| `Jenkinsfile` | Etapas iniciales del pipeline, usando la librería compartida. |
+| `Jenkinsfile` | Detección de cambios, ejecución selectiva y publicación. |
+| `jenkins/vars/detectChangedServices.groovy` | Calcula servicios y web client modificados. |
 | `jenkins/vars/gradleBuild.groovy` | Paso reutilizable de compilación Gradle. |
-| `jenkins/vars/runTests.groovy` | Paso reutilizable de pruebas y publicación JUnit. |
+| `jenkins/vars/runTests.groovy` | Paso reutilizable de pruebas y publicación JUnit opcional. |
+| `jenkins/vars/dockerBuild.groovy` | Construye imágenes sin publicarlas. |
+| `jenkins/vars/dockerPublish.groovy` | Construye y publica imágenes semver en Nexus. |
+| `jenkins/vars/resolveReleaseVersion.groovy` | Lee el tag de release de `HEAD`. |
 | `jenkins/vars/sonarScan.groovy` | Paso reutilizable de análisis SonarQube para HU-12. |
 | `jenkins/README.md` | Contrato y ejemplos de uso de la librería. |
 | `infra/compose/ci/jenkins/plugins.txt` | Plugins de multibranch, GitHub y Job DSL. |
@@ -54,6 +61,38 @@ Puntos importantes:
 - `defaultVersion` es un SHA completo, no una rama móvil.
 - El `Jenkinsfile` usa `@Library('circleguard-shared-library') _` sin versión explícita porque la versión ya está fijada en JCasC.
 - Para actualizar la librería se cambia `jenkins/vars/`, se toma el nuevo SHA y se actualiza `defaultVersion`; ver [jenkins/README.md](../../jenkins/README.md).
+
+## Ejecución selectiva (HU-11)
+
+`detectChangedServices` calcula la lista de servicios y si el web client debe procesarse:
+
+- PR: compara `HEAD` contra `HEAD^1` del merge commit.
+- Rama: compara contra `GIT_PREVIOUS_SUCCESSFUL_COMMIT`.
+- Sin base, base no encontrada o no ancestro de `HEAD`: procesa los 8 servicios y el web client.
+- `BUILD_ALL=true` en un build manual: procesa los 8 servicios y el web client.
+
+Reglas de archivos:
+
+| Cambio | Resultado |
+|:---|:---|
+| `services/<servicio>/**` | Solo ese servicio |
+| `mobile/**` | Solo web client |
+| `build.gradle.kts`, `settings.gradle.kts`, `gradle/`, `gradlew`, `buildSrc/`, `libs/` | Los 8 servicios |
+| `Jenkinsfile`, `jenkins/`, `infra/compose/ci/jenkins/` | Los 8 servicios y web client |
+| Solo `docs/` o `*.md` | Nada |
+| Ruta desconocida | Los 8 servicios y web client |
+
+El `Jenkinsfile` ejecuta los servicios seleccionados en lotes de 3 (`MAX_PARALLEL_SERVICES`) para no agotar la memoria del host. Cada servicio ejecuta:
+
+```text
+Compile <servicio> -> gradleBuild
+Test <servicio>    -> runTests(publish: false)
+Package <servicio> -> dockerBuild
+```
+
+Los resultados JUnit se publican una sola vez al final. El web client se empaqueta después de los servicios si aplica.
+
+En `main` con tag de release, `Publish images` sigue publicando los 8 servicios y el web client con la versión semver. La ejecución selectiva aplica a los builds de PR y ramas; no reduce la publicación de un release.
 
 ## Configuración manual en GitHub y Jenkins
 
@@ -147,6 +186,9 @@ git push origin <rama-de-prueba>
 # Los checks obligatorios quedaron configurados
 gh api repos/ingesoft5/circle-guard-pepitosV/branches/dev/protection
 gh api repos/ingesoft5/circle-guard-pepitosV/branches/main/protection
+
+# Build selectivo: un cambio solo en form-service debe mostrar solo ese servicio
+# Build con BUILD_ALL=true debe mostrar los 8 servicios y el web client
 ```
 
 ## Diagnóstico

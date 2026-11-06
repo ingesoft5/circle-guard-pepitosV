@@ -8,6 +8,9 @@ La librería compartida de CircleGuard encapsula las etapas reutilizables del pi
 jenkins/
 ├── README.md
 └── vars/
+    ├── deployCompose.groovy
+    ├── detectChangedServices.groovy
+    ├── dockerBuild.groovy
     ├── dockerPublish.groovy
     ├── gradleBuild.groovy
     ├── resolveReleaseVersion.groovy
@@ -15,7 +18,7 @@ jenkins/
     └── sonarScan.groovy
 ```
 
-Cada paso está en su propio archivo para que las historias de empaquetado y despliegue agreguen `dockerPublish` y `deployK8s` sin modificar los pasos existentes.
+Cada paso está en su propio archivo para que las historias de despliegue agreguen `deployK8s` y otros pasos sin modificar los existentes.
 
 ## Registro
 
@@ -48,18 +51,52 @@ gradleBuild()
 gradleBuild(service: 'circleguard-form-service', tasks: 'assemble')
 ```
 
+### `detectChangedServices`
+
+Calcula qué servicios y si el cliente web deben procesarse en el build actual. Compara `HEAD` contra el último build exitoso o contra la base del PR.
+
+| Parámetro | Obligatorio | Valor por defecto | Descripción |
+|:---|:---|:---|:---|
+| `buildAll` | No | `false` | Fuerza los 8 servicios y el cliente web. |
+| `services` | No | Los 8 módulos | Lista de servicios conocidos. |
+| `baseCommit` | No | Automático | Commit base para el `git diff`. |
+
+Devuelve:
+
+```groovy
+[services: ['circleguard-form-service'], web: false, all: false, base: 'abc123...']
+```
+
+Reglas:
+
+- PR: usa `HEAD^1` del merge commit.
+- Rama: usa `GIT_PREVIOUS_SUCCESSFUL_COMMIT`.
+- Sin base, base no encontrada o no ancestro: procesa todo.
+- `services/<servicio>/...`: solo ese servicio.
+- `mobile/...`: cliente web.
+- `build.gradle.kts`, `settings.gradle.kts`, `gradle/`, `gradlew`, `buildSrc/`, `libs/`: los 8 servicios.
+- `Jenkinsfile`, `jenkins/`, `infra/compose/ci/jenkins/` o rutas desconocidas: los 8 servicios y el web client.
+- Solo `docs/` o `*.md`: no procesa nada.
+- `BUILD_ALL=true` o primer build: los 8 servicios y el web client.
+
+```groovy
+def changed = detectChangedServices(buildAll: params.BUILD_ALL ?: false, services: SERVICES)
+```
+
 ### `runTests`
 
-Ejecuta las pruebas y publica los resultados JUnit incluso cuando la tarea falla.
+Ejecuta las pruebas y, por defecto, publica los resultados JUnit incluso cuando la tarea falla.
 
 | Parámetro | Obligatorio | Valor por defecto | Descripción |
 |:---|:---|:---|:---|
 | `service` | No | Todos | Nombre del módulo que se quiere probar. |
 | `testResults` | No | `**/build/test-results/test/*.xml` | Patrón de los reportes JUnit. |
+| `publish` | No | `true` | Si es `false`, no publica JUnit; útil cuando se publica una sola vez tras ejecutar servicios en paralelo. |
 
 ```groovy
 runTests()
 runTests(service: 'circleguard-form-service')
+runTests(service: 'circleguard-form-service', publish: false)
 ```
 
 ### `sonarScan`
@@ -117,7 +154,32 @@ Comportamiento:
 - Si el tag ya existe con el mismo commit (re-ejecución del build), lo omite; si existe con otro commit, falla porque las versiones publicadas son inmutables.
 - El `docker login` usa un `DOCKER_CONFIG` propio del build y se borra al terminar.
 
-## `deployCompose`
+### `dockerBuild`
+
+Construye la imagen de un componente sin publicarla. Se usa en builds selectivos de PRs y ramas.
+
+| Parámetro | Obligatorio | Valor por defecto | Descripción |
+|:---|:---|:---|:---|
+| `version` | No | `ci-<BUILD_NUMBER>` | Tag local de la imagen. |
+| `service` | Sí, si no se usa `image` | | Módulo de `services/`, por ejemplo `circleguard-form-service`. |
+| `image` | No | `service` sin el prefijo `circleguard-` | Nombre de la imagen local. |
+| `dockerfile` | No | `services/<service>/Dockerfile` | Dockerfile a construir. |
+| `context` | No | `.` | Contexto de build. |
+| `namespace` | No | `env.IMAGE_NAMESPACE` o `circleguard` | Prefijo de la imagen local. |
+| `pull` | No | `true` | Ejecuta `docker build --pull`. |
+
+```groovy
+dockerBuild(service: 'circleguard-form-service')
+dockerBuild(image: 'web-client', dockerfile: 'mobile/Dockerfile', context: 'mobile')
+```
+
+Comportamiento:
+
+- Construye `<namespace>/<imagen>:<version>` y no hace `docker push`.
+- Pasa la versión como build arg `VERSION` y etiqueta OCI de revisión.
+- La publicación con semver sigue a cargo de `dockerPublish` en `main`.
+
+### `deployCompose`
 
 Despliega una versión ya publicada en un ambiente, por SSH:
 
@@ -142,6 +204,9 @@ No se usa una rama móvil como versión: así un build antiguo siempre carga la 
 
 ## Probar la librería
 
-- Un pipeline que importe `@Library('circleguard-shared-library') _` debe resolver los tres pasos sin errores.
+- Un pipeline que importe `@Library('circleguard-shared-library') _` debe resolver todos los pasos sin errores.
 - Un cambio en `jenkins/vars/` no altera los builds que usan un SHA anterior hasta que se actualice `defaultVersion`.
+- Un commit que solo toca `services/circleguard-form-service/**` debe procesar únicamente ese servicio.
+- Un cambio en `build.gradle.kts` o `settings.gradle.kts` debe procesar los 8 servicios.
+- `BUILD_ALL=true` debe procesar los 8 servicios y el web client.
 - La documentación operativa completa está en [docs/operaciones/jenkins-pipeline.md](../docs/operaciones/jenkins-pipeline.md).
