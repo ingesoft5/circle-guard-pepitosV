@@ -213,7 +213,7 @@ notifyDiscord(status: 'FAILED', service: 'circleguard-form-service',
               stage: 'Test circleguard-form-service')
 ```
 
-- La Webhook URL se lee de la credencial `discord-webhook`; nunca se versiona.
+- La Webhook URL se lee de la credencial `discord-webhook`, declarada por JCasC desde `DISCORD_WEBHOOK_URL` en el `.env`; nunca se versiona.
 - El mensaje incluye rama, servicio, etapa, autor y enlace al build.
 - Si Discord no responde, el pipeline no falla por la notificación.
 

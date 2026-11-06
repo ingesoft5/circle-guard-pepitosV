@@ -106,20 +106,20 @@ En Discord:
 2. **Editar canal → Integraciones → Webhooks → Nuevo webhook**.
 3. Copiar la Webhook URL.
 
-### 2. Guardar la credencial en Jenkins
+### 2. Configurar la credencial por JCasC
 
-En Jenkins:
+JCasC administra las credenciales y elimina las que no están declaradas. No crees `discord-webhook` a mano: se recrea en cada bootstrap a partir del `.env` del host.
 
-```text
-Manage Jenkins → Credentials → System → Global credentials → Add Credentials
+1. Agregar la Webhook URL al `.env` del host:
+
+```bash
+DISCORD_WEBHOOK_URL=<webhook-real>
 ```
 
-- Kind: **Secret text**
-- ID: `discord-webhook`
-- Secret: la Webhook URL
-- Description: `Discord webhook for CircleGuard CI notifications`
+2. `infra/compose/ci/jenkins/casc.yaml` declara la credencial `string` con ID `discord-webhook`.
+3. Re-ejecutar `sudo ./infra/bootstrap/bootstrap-jenkins.sh`.
 
-La URL no se guarda en el repositorio ni en `.env`. Jenkins la enmascara en los logs.
+La URL no se versiona: vive en el `.env` del host y en la credencial de Jenkins. Jenkins la enmascara en los logs.
 
 ### 3. Comportamiento
 
