@@ -8,14 +8,17 @@ La librería compartida de CircleGuard encapsula las etapas reutilizables del pi
 jenkins/
 ├── README.md
 └── vars/
+    ├── calculateVersion.groovy
     ├── deployCompose.groovy
     ├── detectChangedServices.groovy
     ├── dockerBuild.groovy
     ├── dockerPublish.groovy
     ├── gradleBuild.groovy
     ├── notifyDiscord.groovy
+    ├── pushReleaseTag.groovy
     ├── resolveReleaseVersion.groovy
     ├── runTests.groovy
+    ├── semver.groovy
     └── sonarScan.groovy
 ```
 
@@ -127,7 +130,56 @@ Devuelve la versión de release del commit actual a partir del tag de Git `vMAJO
 def version = resolveReleaseVersion()
 ```
 
-Hasta la HU-15 el tag se crea a mano (`git tag v1.0.0 && git push origin v1.0.0`); después lo crea el versionado automático.
+`calculateVersion` la usa para que re-ejecutar el build de un commit ya etiquetado devuelva la misma versión.
+
+### `calculateVersion`
+
+Calcula la siguiente versión a partir de los Conventional Commits desde el último tag `vMAJOR.MINOR.PATCH` del historial de `HEAD` (HU-15). Solo calcula; el tag lo crea `pushReleaseTag`.
+
+| Situación | Resultado |
+|:---|:---|
+| No hay ningún tag de versión | `1.0.0` |
+| Algún commit con `!` (`feat(auth)!: ...`) o pie `BREAKING CHANGE:` | Sube `MAJOR` (`1.2.3` → `2.0.0`) |
+| Algún `feat` | Sube `MINOR` (`1.2.3` → `1.3.0`) |
+| Algún `fix` o `perf` | Sube `PATCH` (`1.2.3` → `1.2.4`) |
+| Solo otros tipos (`docs`, `chore`, `ci`, `build`, `refactor`, `test`...) | `null`: no hay release |
+| `HEAD` ya tiene un tag de release | Esa versión, con `alreadyTagged: true` |
+
+| Parámetro | Obligatorio | Valor por defecto | Descripción |
+|:---|:---|:---|:---|
+| `initialVersion` | No | `1.0.0` | Versión cuando aún no existe ningún tag. |
+| `credentialsId` | No | `github-pat` | Credencial para traer los tags de GitHub. |
+
+```groovy
+def release = calculateVersion()
+// [version: '1.3.0', previous: '1.2.3', bump: 'minor', alreadyTagged: false] o null
+```
+
+Los commits de merge se ignoran; cuentan los commits que trae cada PR (o el commit único de un squash merge, cuyo mensaje es el título del PR validado por commitlint).
+
+### `pushReleaseTag`
+
+Crea el tag anotado `vMAJOR.MINOR.PATCH` sobre `HEAD` y lo publica en GitHub con la credencial `github-pat`, que necesita permiso de escritura sobre el repositorio.
+
+| Parámetro | Obligatorio | Valor por defecto | Descripción |
+|:---|:---|:---|:---|
+| `version` | Sí | | Versión `MAJOR.MINOR.PATCH`, sin `v`. |
+| `credentialsId` | No | `github-pat` | Credencial con permiso de push. |
+
+```groovy
+pushReleaseTag(version: '1.3.0')
+```
+
+- Si el tag ya existe en `HEAD` (re-ejecución), solo lo vuelve a publicar.
+- Si existe sobre otro commit, falla: una versión publicada no se mueve.
+
+### `semver`
+
+Funciones puras (`@NonCPS`) que usan los pasos anteriores: `releaseType(mensajes)`, `bump(versión, tipo)`, `highest(versiones)`, `fromTags(salidaDeGitTag)`, `isVersion(texto)`.
+
+```groovy
+semver.bump('1.2.3', semver.releaseType(['feat(promotion): ...']))  // '1.3.0'
+```
 
 ### `dockerPublish`
 
@@ -239,4 +291,5 @@ No se usa una rama móvil como versión: así un build antiguo siempre carga la 
 - `BUILD_ALL=true` debe procesar los 8 servicios y el web client.
 - Un build fallido debe enviar el mensaje `Pipeline FAILED` al canal de Discord.
 - Un build exitoso después de uno fallido debe enviar `Pipeline RECOVERED`.
+- Un merge a `main` con un `feat` crea el tag con `MINOR` incrementado y publica las imágenes con esa versión; un merge con solo `docs` o `chore` no crea release.
 - La documentación operativa completa está en [docs/operaciones/jenkins-pipeline.md](../docs/operaciones/jenkins-pipeline.md).

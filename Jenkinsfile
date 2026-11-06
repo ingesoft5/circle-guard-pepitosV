@@ -11,7 +11,7 @@ def SERVICES = [
     'circleguard-dashboard-service'
 ]
 
-// Set by the publish stage when HEAD has a release tag; the deploy stage needs it.
+// Set by 'Release version' (HU-15) on main; publish, tag and deploy stages need it.
 def releaseVersion = null
 
 def changed = [services: [], web: false, all: false, base: '']
@@ -139,27 +139,53 @@ pipeline {
             }
         }
 
-        stage('Publish images') {
+        stage('Release version') {
             when {
                 branch 'main'
             }
             steps {
                 script {
-                    def version = resolveReleaseVersion()
-                    releaseVersion = version
-                    if (!version) {
-                        echo 'HEAD no tiene un tag de release vMAJOR.MINOR.PATCH: no se publican imágenes.'
+                    def release = calculateVersion()
+                    if (!release) {
+                        echo 'Sin commits feat, fix, perf ni cambios incompatibles desde el último release: ' +
+                                'no se publica una versión nueva.'
                         return
                     }
-                    currentBuild.description = "v${version}"
+                    releaseVersion = release.version
+                    currentBuild.description = "v${releaseVersion}"
+                }
+            }
+        }
 
+        stage('Publish images') {
+            when {
+                allOf {
+                    branch 'main'
+                    expression { releaseVersion != null }
+                }
+            }
+            steps {
+                script {
                     for (String service : SERVICES) {
-                        dockerPublish(service: service, version: version)
+                        dockerPublish(service: service, version: releaseVersion)
                     }
                     dockerPublish(image: 'web-client', dockerfile: 'mobile/Dockerfile',
-                            context: 'mobile', version: version)
+                            context: 'mobile', version: releaseVersion)
                     sh 'docker image prune -f && docker builder prune -f --filter until=24h'
                 }
+            }
+        }
+
+        // After the images: a vX.Y.Z tag on GitHub always means its images exist.
+        stage('Tag release') {
+            when {
+                allOf {
+                    branch 'main'
+                    expression { releaseVersion != null }
+                }
+            }
+            steps {
+                pushReleaseTag(version: releaseVersion)
             }
         }
 

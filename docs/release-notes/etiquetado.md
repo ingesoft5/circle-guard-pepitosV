@@ -16,6 +16,20 @@ El pipeline analiza los mensajes de commit en la rama `main` para determinar el 
     *   *Detonante:* Commits de tipo `fix`.
     *   *Ejemplo:* `fix(gateway): corregir desbordamiento de memoria en peticiones proxy`
 
+*   **Sin release:** commits solo de otros tipos (`docs`, `chore`, `ci`, `build`, `refactor`, `test`, `style`) no generan versión nueva. `perf` cuenta como `PATCH`.
+*   **Versión inicial:** si el repositorio no tiene ningún tag `vMAJOR.MINOR.PATCH`, el primer pipeline en `main` crea `v1.0.0`.
+*   Si varios commits llegan juntos, se aplica el incremento mayor (por ejemplo, un `fix` y un `feat` dan `MINOR`).
+
+## Cómo lo aplica el pipeline (HU-15)
+
+En cada build de `main`:
+
+1.  **`Release version`** (`calculateVersion`): busca el último tag `vX.Y.Z` del historial, lee los commits posteriores y calcula la versión. Si `HEAD` ya tenía tag (re-ejecución del build), reutiliza esa versión.
+2.  **`Publish images`** (`dockerPublish`): publica las 9 imágenes con esa versión.
+3.  **`Tag release`** (`pushReleaseTag`): crea el tag anotado `vX.Y.Z` sobre el commit y lo publica en GitHub.
+
+El tag se publica después de las imágenes: si un tag existe en GitHub, sus imágenes existen en el registro. No hace falta crear tags a mano.
+
 ## Relación con los Tags de Imágenes Docker
 
 Cada vez que el proceso genera un tag de release en GitHub (por ejemplo, `v1.3.4`), el pipeline publica las imágenes de los 8 servicios y del cliente web con **un único tag: la misma versión sin la `v`** (`1.3.4`).
