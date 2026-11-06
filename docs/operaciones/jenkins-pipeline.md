@@ -2,7 +2,7 @@
 
 ## Alcance
 
-Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`) y la HU-16 (`CGR-39`): job multibranch, webhook de GitHub, etapas del `Jenkinsfile`, check obligatorio en `dev` y `main`, Shared Library reutilizable en `jenkins/vars/`, ejecución selectiva por servicio y notificaciones de Discord.
+Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`), la HU-15 (`CGR-38`) y la HU-16 (`CGR-39`): job multibranch, webhook de GitHub, etapas del `Jenkinsfile`, check obligatorio en `dev` y `main`, Shared Library reutilizable en `jenkins/vars/`, ejecución selectiva por servicio, versionado semántico automático y notificaciones de Discord.
 
 ## Cómo funciona
 
@@ -11,7 +11,8 @@ Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`) y
 - El `Jenkinsfile` de la raíz importa la Shared Library con `@Library` y usa `detectChangedServices` para calcular qué servicios y si el web client deben procesarse.
 - Cada servicio seleccionado se compila, prueba y empaqueta con `gradleBuild`, `runTests` y `dockerBuild` dentro de un `parallel` dinámico, en lotes de 3.
 - El web client se empaqueta solo si cambió `mobile/` o si se ejecuta con `BUILD_ALL=true`.
-- `Publish images` sigue publicando en `main` las imágenes de los 8 servicios y del web client con la versión semver del tag.
+- En `main`, `Release version` calcula la versión con `calculateVersion` a partir de los Conventional Commits desde el último tag (sin tags: `1.0.0`). Si no hay commits `feat`, `fix`, `perf` ni incompatibles, no hay release y las etapas siguientes se omiten.
+- `Publish images` publica las imágenes de los 8 servicios y del web client con esa versión, y después `Tag release` crea y publica el tag `vX.Y.Z` en GitHub con `pushReleaseTag`. El orden garantiza que un tag en GitHub siempre tiene sus imágenes.
 - Cuando un build falla o queda inestable, `notifyDiscord` envía un mensaje al canal de Discord con rama, servicio, etapa, autor y enlace al build. Si el build siguiente se recupera, envía un mensaje de recuperación.
 - La librería se carga desde `jenkins/vars/` usando `libraryPath: "jenkins"` y una versión fija por SHA.
 - Jenkins publica el resultado como estado de commit en GitHub. Para builds de PR el contexto es `continuous-integration/jenkins/pr-merge`.
@@ -28,6 +29,9 @@ Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`) y
 | `jenkins/vars/dockerBuild.groovy` | Construye imágenes sin publicarlas. |
 | `jenkins/vars/dockerPublish.groovy` | Construye y publica imágenes semver en Nexus. |
 | `jenkins/vars/resolveReleaseVersion.groovy` | Lee el tag de release de `HEAD`. |
+| `jenkins/vars/calculateVersion.groovy` | Calcula la siguiente versión desde los Conventional Commits. |
+| `jenkins/vars/pushReleaseTag.groovy` | Crea y publica el tag `vX.Y.Z` en GitHub. |
+| `jenkins/vars/semver.groovy` | Funciones puras de versionado semántico. |
 | `jenkins/vars/sonarScan.groovy` | Paso reutilizable de análisis SonarQube para HU-12. |
 | `jenkins/vars/notifyDiscord.groovy` | Notificaciones de fallo, inestabilidad y recuperación en Discord. |
 | `jenkins/README.md` | Contrato y ejemplos de uso de la librería. |
@@ -153,7 +157,7 @@ Estos pasos no se pueden dejar solo en código porque dependen de credenciales y
 
 ### 1. Token de GitHub
 
-1. Crear un token con permisos de lectura sobre el repositorio y `admin:repo_hook` para registrar el webhook.
+1. Crear un token con permiso de **escritura** sobre el repositorio (classic: `repo`; fine-grained: *Contents: Read and write*) y `admin:repo_hook` para registrar el webhook. La escritura la necesita `pushReleaseTag` para publicar los tags de release (HU-15).
 2. En el host CI, editar `infra/compose/ci/.env`:
 
 ```bash
