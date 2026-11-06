@@ -2,7 +2,7 @@
 
 ## Alcance
 
-Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`) y la HU-16 (`CGR-39`): job multibranch, webhook de GitHub, etapas del `Jenkinsfile`, check obligatorio en `dev` y `main`, Shared Library reutilizable en `jenkins/vars/`, ejecución selectiva por servicio y notificaciones de Discord.
+Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`), la HU-16 (`CGR-39`) y la etapa E2E de la HU-20 (`CGR-43`): job multibranch, webhook de GitHub, etapas del `Jenkinsfile`, check obligatorio en `dev` y `main`, Shared Library reutilizable en `jenkins/vars/`, ejecución selectiva por servicio y notificaciones de Discord.
 
 ## Cómo funciona
 
@@ -12,9 +12,11 @@ Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`) y
 - Cada servicio seleccionado se compila, prueba y empaqueta con `gradleBuild`, `runTests` y `dockerBuild` dentro de un `parallel` dinámico, en lotes de 3.
 - El web client se empaqueta solo si cambió `mobile/` o si se ejecuta con `BUILD_ALL=true`.
 - `Publish images` sigue publicando en `main` las imágenes de los 8 servicios y del web client con la versión semver del tag.
+- En `main`, después de desplegar en dev, la etapa `E2E tests on dev` corre las pruebas de Playwright contra dev y publica sus resultados (HU-20).
 - Cuando un build falla o queda inestable, `notifyDiscord` envía un mensaje al canal de Discord con rama, servicio, etapa, autor y enlace al build. Si el build siguiente se recupera, envía un mensaje de recuperación.
 - La librería se carga desde `jenkins/vars/` usando `libraryPath: "jenkins"` y una versión fija por SHA.
 - Jenkins publica el resultado como estado de commit en GitHub. Para builds de PR el contexto es `continuous-integration/jenkins/pr-merge`.
+- Una rama con un PR abierto se construye solo como `PR-<n>` (fusionada con su base) y no también como rama (`buildOriginBranchWithPR(false)`), porque Jenkins tiene un solo ejecutor. Las ramas sin PR, `dev` y `main` se siguen construyendo en cada push.
 - El contenedor de Jenkins monta `/var/run/docker.sock` para que las pruebas con Testcontainers puedan iniciar contenedores y para el empaquetado posterior.
 
 ## Configuración que vive en el repositorio
@@ -36,6 +38,7 @@ Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`) y
 | `infra/compose/ci/docker-compose.yml` | Variables de GitHub y acceso a Docker. |
 | `infra/compose/ci/.env.example` | Plantilla de las variables de GitHub. |
 | `infra/bootstrap/bootstrap-jenkins.sh` | Exporta las variables y el GID del socket de Docker. |
+| `tests/e2e-playwright/` | Pruebas E2E con Playwright, su imagen y el script que las corre en un contenedor. |
 
 ## Shared Library
 
@@ -146,6 +149,25 @@ Si Discord no responde, el pipeline no falla por la notificación.
 3. Verificar que llega `Pipeline FAILED` con el servicio y la etapa correctos.
 4. Corregir el fallo y verificar `Pipeline RECOVERED`.
 5. Guardar capturas y enlaces de los builds como evidencia.
+
+## Pruebas E2E (HU-20)
+
+La etapa `E2E tests on dev` corre `tests/e2e-playwright/run-e2e.sh` en `main` después de `Deploy to dev`. Los escenarios, las variables y cómo leer los resultados están en [`tests/e2e-playwright/README.md`](../../tests/e2e-playwright/README.md).
+
+### Credencial `e2e-user`
+
+Como `discord-webhook`, la declara JCasC a partir del `.env` del host de CI:
+
+1. Agregar al `.env` del host el usuario de prueba y su contraseña:
+
+```bash
+E2E_USERNAME=health_user
+E2E_PASSWORD=<contraseña-del-usuario-de-prueba>
+```
+
+2. Re-ejecutar `sudo ./infra/bootstrap/bootstrap-jenkins.sh`.
+
+Sin esta credencial la etapa falla con `Set E2E_USERNAME`.
 
 ## Configuración manual en GitHub y Jenkins
 

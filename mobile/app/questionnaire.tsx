@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, Platform } from 'react-native';
 import { MeshBackground } from '@/components/MeshBackground';
 import { DynamicForm } from '@/components/DynamicForm';
 import { ChevronLeft, ArrowRight, ClipboardCheck, Paperclip, FileCheck } from 'lucide-react-native';
@@ -116,7 +116,13 @@ export default function QuestionnaireScreen() {
 
       if (response.ok) {
         router.replace('/(tabs)');
-        Alert.alert('Submitted', 'Thank you for your report. Your status has been updated.');
+        const confirmation = 'Thank you for your report. Your status has been updated.';
+        // Alert.alert does nothing on react-native-web, so the web client uses the browser dialog.
+        if (Platform.OS === 'web') {
+          alert(confirmation);
+        } else {
+          Alert.alert('Submitted', confirmation);
+        }
       } else {
         throw new Error('Submission failed');
       }
