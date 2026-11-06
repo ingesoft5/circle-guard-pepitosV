@@ -48,6 +48,12 @@ credentials:
               id: "discord-webhook"
               secret: "${DISCORD_WEBHOOK_URL}"
               description: "Discord webhook for CircleGuard CI notifications"
+          - usernamePassword:
+              scope: GLOBAL
+              id: "e2e-user"
+              username: "${E2E_USERNAME:-}"
+              password: "${E2E_PASSWORD:-}"
+              description: "Web client user that the Playwright suite signs in with"
           # Declared here because JCasC removes any credential it does not list. The keys
           # are files on the CI host, written by infra/bootstrap/load-deploy-credential.sh.
           - basicSSHUserPrivateKey:
