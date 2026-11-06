@@ -43,6 +43,11 @@ credentials:
               username: "${NEXUS_CI_USER}"
               password: "${NEXUS_CI_PASSWORD}"
               description: "Nexus user that pushes images to docker-hosted"
+          - string:
+              scope: GLOBAL
+              id: "discord-webhook"
+              secret: "${DISCORD_WEBHOOK_URL}"
+              description: "Discord webhook for CircleGuard CI notifications"
           # Declared here because JCasC removes any credential it does not list. The keys
           # are files on the CI host, written by infra/bootstrap/load-deploy-credential.sh.
           - basicSSHUserPrivateKey:
@@ -83,7 +88,7 @@ unclassified:
   globalLibraries:
     libraries:
       - name: "circleguard-shared-library"
-        defaultVersion: "da54351b82377d2b499100db40d7f5defe419fd5"
+        defaultVersion: "d8bbc6e8c9b6b321a03cc1e891f3f30fc0ecc558"
         implicit: false
         allowVersionOverride: false
         retriever:

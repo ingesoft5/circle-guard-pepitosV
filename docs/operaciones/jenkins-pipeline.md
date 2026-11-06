@@ -2,7 +2,7 @@
 
 ## Alcance
 
-Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`) y la HU-11 (`CGR-34`): job multibranch, webhook de GitHub, etapas del `Jenkinsfile`, check obligatorio en `dev` y `main`, Shared Library reutilizable en `jenkins/vars/` y ejecución selectiva por servicio.
+Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`) y la HU-16 (`CGR-39`): job multibranch, webhook de GitHub, etapas del `Jenkinsfile`, check obligatorio en `dev` y `main`, Shared Library reutilizable en `jenkins/vars/`, ejecución selectiva por servicio y notificaciones de Discord.
 
 ## Cómo funciona
 
@@ -12,6 +12,7 @@ Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`) y la HU-11 (`CGR-34`):
 - Cada servicio seleccionado se compila, prueba y empaqueta con `gradleBuild`, `runTests` y `dockerBuild` dentro de un `parallel` dinámico, en lotes de 3.
 - El web client se empaqueta solo si cambió `mobile/` o si se ejecuta con `BUILD_ALL=true`.
 - `Publish images` sigue publicando en `main` las imágenes de los 8 servicios y del web client con la versión semver del tag.
+- Cuando un build falla o queda inestable, `notifyDiscord` envía un mensaje al canal de Discord con rama, servicio, etapa, autor y enlace al build. Si el build siguiente se recupera, envía un mensaje de recuperación.
 - La librería se carga desde `jenkins/vars/` usando `libraryPath: "jenkins"` y una versión fija por SHA.
 - Jenkins publica el resultado como estado de commit en GitHub. Para builds de PR el contexto es `continuous-integration/jenkins/pr-merge`.
 - El contenedor de Jenkins monta `/var/run/docker.sock` para que las pruebas con Testcontainers puedan iniciar contenedores y para el empaquetado posterior.
@@ -28,6 +29,7 @@ Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`) y la HU-11 (`CGR-34`):
 | `jenkins/vars/dockerPublish.groovy` | Construye y publica imágenes semver en Nexus. |
 | `jenkins/vars/resolveReleaseVersion.groovy` | Lee el tag de release de `HEAD`. |
 | `jenkins/vars/sonarScan.groovy` | Paso reutilizable de análisis SonarQube para HU-12. |
+| `jenkins/vars/notifyDiscord.groovy` | Notificaciones de fallo, inestabilidad y recuperación en Discord. |
 | `jenkins/README.md` | Contrato y ejemplos de uso de la librería. |
 | `infra/compose/ci/jenkins/plugins.txt` | Plugins de multibranch, GitHub y Job DSL. |
 | `infra/compose/ci/jenkins/casc.yaml` | Credencial, servidor GitHub, job multibranch y Global Pipeline Library. |
@@ -93,6 +95,57 @@ Package <servicio> -> dockerBuild
 Los resultados JUnit se publican una sola vez al final. El web client se empaqueta después de los servicios si aplica.
 
 En `main` con tag de release, `Publish images` sigue publicando los 8 servicios y el web client con la versión semver. La ejecución selectiva aplica a los builds de PR y ramas; no reduce la publicación de un release.
+
+## Notificaciones de Discord (HU-16)
+
+### 1. Crear el webhook
+
+En Discord:
+
+1. Abrir el canal de alertas, por ejemplo `#circle-guard-ci`.
+2. **Editar canal → Integraciones → Webhooks → Nuevo webhook**.
+3. Copiar la Webhook URL.
+
+### 2. Configurar la credencial por JCasC
+
+JCasC administra las credenciales y elimina las que no están declaradas. No crees `discord-webhook` a mano: se recrea en cada bootstrap a partir del `.env` del host.
+
+1. Agregar la Webhook URL al `.env` del host:
+
+```bash
+DISCORD_WEBHOOK_URL=<webhook-real>
+```
+
+2. `infra/compose/ci/jenkins/casc.yaml` declara la credencial `string` con ID `discord-webhook`.
+3. Re-ejecutar `sudo ./infra/bootstrap/bootstrap-jenkins.sh`.
+
+La URL no se versiona: vive en el `.env` del host y en la credencial de Jenkins. Jenkins la enmascara en los logs.
+
+### 3. Comportamiento
+
+`notifyDiscord` se llama desde el `post` del `Jenkinsfile`:
+
+- `failure`: mensaje `Pipeline FAILED`.
+- `unstable`: mensaje `Pipeline UNSTABLE`.
+- `success` después de un build `FAILURE` o `UNSTABLE` en el mismo job: mensaje `Pipeline RECOVERED`.
+
+El mensaje incluye:
+
+- Rama o PR.
+- Servicio afectado.
+- Etapa fallida.
+- Autor del último commit.
+- Enlace al build.
+
+Si Discord no responde, el pipeline no falla por la notificación.
+
+### 4. Probar
+
+1. Probar la Webhook URL con `curl` desde un equipo autorizado.
+2. Crear una rama o PR temporal con un fallo controlado en un servicio.
+3. Verificar que llega `Pipeline FAILED` con el servicio y la etapa correctos.
+4. Corregir el fallo y verificar `Pipeline RECOVERED`.
+5. Guardar capturas y enlaces de los builds como evidencia.
 
 ## Configuración manual en GitHub y Jenkins
 

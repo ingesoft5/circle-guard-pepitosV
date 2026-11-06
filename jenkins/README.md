@@ -13,6 +13,7 @@ jenkins/
     ├── dockerBuild.groovy
     ├── dockerPublish.groovy
     ├── gradleBuild.groovy
+    ├── notifyDiscord.groovy
     ├── resolveReleaseVersion.groovy
     ├── runTests.groovy
     └── sonarScan.groovy
@@ -192,6 +193,30 @@ deployCompose(environment: 'dev', version: '1.4.0')
 - Después espera a que los servicios queden `healthy` y prueba su salud a través del cliente web.
 - Necesita la variable `DEPLOY_HOST_<AMBIENTE>` en `infra/compose/ci/.env` y la credencial `deploy-ssh-<ambiente>`.
 
+### `notifyDiscord`
+
+Envía un mensaje informativo a un canal de Discord cuando el pipeline falla, queda inestable o se recupera.
+
+| Parámetro | Obligatorio | Valor por defecto | Descripción |
+|:---|:---|:---|:---|
+| `status` | No | `FAILED` | `FAILED`, `UNSTABLE` o `RECOVERED`. |
+| `service` | No | `N/A` | Servicio afectado. |
+| `stage` | No | `unknown` | Etapa donde falló el pipeline. |
+| `branch` | No | Rama del build | Rama o PR. |
+| `author` | No | Autor del commit | Autor del último commit. |
+| `buildUrl` | No | `env.BUILD_URL` | Enlace al build de Jenkins. |
+| `buildNumber` | No | `env.BUILD_NUMBER` | Número del build. |
+| `credentialsId` | No | `discord-webhook` | Credencial Secret text con la Webhook URL. |
+
+```groovy
+notifyDiscord(status: 'FAILED', service: 'circleguard-form-service',
+              stage: 'Test circleguard-form-service')
+```
+
+- La Webhook URL se lee de la credencial `discord-webhook`, declarada por JCasC desde `DISCORD_WEBHOOK_URL` en el `.env`; nunca se versiona.
+- El mensaje incluye rama, servicio, etapa, autor y enlace al build.
+- Si Discord no responde, el pipeline no falla por la notificación.
+
 ## Actualizar la versión de la librería
 
 1. Hacer el cambio en `jenkins/vars/`.
@@ -209,4 +234,6 @@ No se usa una rama móvil como versión: así un build antiguo siempre carga la 
 - Un commit que solo toca `services/circleguard-form-service/**` debe procesar únicamente ese servicio.
 - Un cambio en `build.gradle.kts` o `settings.gradle.kts` debe procesar los 8 servicios.
 - `BUILD_ALL=true` debe procesar los 8 servicios y el web client.
+- Un build fallido debe enviar el mensaje `Pipeline FAILED` al canal de Discord.
+- Un build exitoso después de uno fallido debe enviar `Pipeline RECOVERED`.
 - La documentación operativa completa está en [docs/operaciones/jenkins-pipeline.md](../docs/operaciones/jenkins-pipeline.md).

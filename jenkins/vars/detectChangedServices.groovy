@@ -31,6 +31,24 @@ def call(Map config = [:]) {
         }
     }
 
+    if (!base && !env.CHANGE_ID) {
+        try {
+            def previous = currentBuild.previousSuccessfulBuild
+            if (previous) {
+                def scmAction = previous.rawBuild?.getAction(jenkins.scm.api.SCMRevisionAction.class)
+                base = (scmAction?.revision?.hash ?: '').toString().trim()
+                if (!base) {
+                    def actions = previous.rawBuild?.getActions(hudson.plugins.git.util.BuildData.class)
+                    def buildData = actions ? actions[-1] : null
+                    def revision = buildData?.lastBuiltRevision?.sha1
+                    base = (revision?.name() ?: '').toString().trim()
+                }
+            }
+        } catch (Exception ignored) {
+            base = ''
+        }
+    }
+
     if (!base) {
         base = (env.GIT_PREVIOUS_SUCCESSFUL_COMMIT ?: '').toString().trim()
     }

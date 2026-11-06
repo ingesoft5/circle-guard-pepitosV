@@ -39,6 +39,7 @@ main() {
   export CI_PROJECT CI_NETWORK
   export JENKINS_PORT JENKINS_ADMIN_USER JENKINS_ADMIN_PASSWORD
   export GITHUB_OWNER GITHUB_REPO GITHUB_USER GITHUB_TOKEN
+  export DISCORD_WEBHOOK_URL
   export NEXUS_REGISTRY IMAGE_NAMESPACE NEXUS_CI_USER NEXUS_CI_PASSWORD
   DOCKER_GID="$(stat -c '%g' /var/run/docker.sock 2>/dev/null || echo 0)"
   export DOCKER_GID
@@ -47,6 +48,10 @@ main() {
 
   if [[ "${GITHUB_TOKEN:-}" == "" || "${GITHUB_TOKEN}" == "__SET_ME__" ]]; then
     warn "GITHUB_TOKEN no está configurado; el job multibranch no podrá escanear GitHub"
+  fi
+
+  if [[ "${DISCORD_WEBHOOK_URL:-}" == "" || "${DISCORD_WEBHOOK_URL}" == "__SET_ME__" ]]; then
+    warn "DISCORD_WEBHOOK_URL no está configurado; las notificaciones de Discord no se enviarán"
   fi
 
   info "Aprovisionando Jenkins en el proyecto ${CI_PROJECT}"

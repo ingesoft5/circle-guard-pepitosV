@@ -16,6 +16,10 @@ def releaseVersion = null
 
 def changed = [services: [], web: false, all: false, base: '']
 
+// Set when a service or the web client fails; used by the Discord notification.
+def failedService = null
+def failedStage = null
+
 pipeline {
     agent any
 
@@ -89,14 +93,25 @@ pipeline {
                         def branches = [:]
                         batch.each { service ->
                             branches[service] = {
-                                stage("Compile ${service}") {
-                                    gradleBuild(service: service)
-                                }
-                                stage("Test ${service}") {
-                                    runTests(service: service, publish: false)
-                                }
-                                stage("Package ${service}") {
-                                    dockerBuild(service: service)
+                                def currentStage = "Compile ${service}"
+                                try {
+                                    stage(currentStage) {
+                                        gradleBuild(service: service)
+                                    }
+                                    currentStage = "Test ${service}"
+                                    stage(currentStage) {
+                                        runTests(service: service, publish: false)
+                                    }
+                                    currentStage = "Package ${service}"
+                                    stage(currentStage) {
+                                        dockerBuild(service: service)
+                                    }
+                                } catch (Exception e) {
+                                    if (!failedService) {
+                                        failedService = service
+                                        failedStage = currentStage
+                                    }
+                                    throw e
                                 }
                             }
                         }
@@ -104,12 +119,20 @@ pipeline {
                     }
 
                     if (changed.web) {
-                        stage('Package web client') {
-                            dockerBuild(
-                                image: 'web-client',
-                                dockerfile: 'mobile/Dockerfile',
-                                context: 'mobile'
-                            )
+                        try {
+                            stage('Package web client') {
+                                dockerBuild(
+                                    image: 'web-client',
+                                    dockerfile: 'mobile/Dockerfile',
+                                    context: 'mobile'
+                                )
+                            }
+                        } catch (Exception e) {
+                            if (!failedService) {
+                                failedService = 'web-client'
+                                failedStage = 'Package web client'
+                            }
+                            throw e
                         }
                     }
                 }
@@ -165,7 +188,30 @@ pipeline {
             }
         }
         failure {
+            notifyDiscord(
+                status: 'FAILED',
+                service: failedService ?: 'N/A',
+                stage: failedStage ?: env.STAGE_NAME ?: 'unknown'
+            )
             echo 'Pipeline failed. Review the stage logs and published test results.'
+        }
+        unstable {
+            notifyDiscord(
+                status: 'UNSTABLE',
+                service: failedService ?: 'N/A',
+                stage: failedStage ?: env.STAGE_NAME ?: 'unknown'
+            )
+        }
+        success {
+            script {
+                if (currentBuild.previousBuild?.result in ['FAILURE', 'UNSTABLE']) {
+                    notifyDiscord(
+                        status: 'RECOVERED',
+                        service: 'N/A',
+                        stage: 'N/A'
+                    )
+                }
+            }
         }
         cleanup {
             cleanWs()
