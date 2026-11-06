@@ -116,7 +116,9 @@ jobs:
             repoOwner("${GITHUB_OWNER}")
             repository("${GITHUB_REPO}")
             buildOriginBranch(true)
-            buildOriginBranchWithPR(true)
+            // A branch with an open pull request is built only as PR-<n> (merged with its
+            // base), so each push runs one build instead of two on the single executor.
+            buildOriginBranchWithPR(false)
             buildOriginPRMerge(true)
             buildOriginPRHead(false)
             buildForkPRMerge(false)
