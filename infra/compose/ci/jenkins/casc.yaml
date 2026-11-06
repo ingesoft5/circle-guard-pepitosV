@@ -88,7 +88,7 @@ unclassified:
   globalLibraries:
     libraries:
       - name: "circleguard-shared-library"
-        defaultVersion: "c4ad26830975aa40827ae0b3932755aaa970133f"
+        defaultVersion: "b824f63334d90c8e63c3b9eeafdb4710fa0c44a7"
         implicit: false
         allowVersionOverride: false
         retriever:
