@@ -34,7 +34,21 @@ Si hay duda entre dos tipos, se usa el más estricto. Una emergencia se limita a
 | Suplente | Johan Suarez | `Jo-Ssua` |
 
 - Nadie aprueba en producción un cambio del que es autor. En ese caso aprueba el otro aprobador.
-- Si cambia un aprobador, se actualiza esta tabla y el `submitter` del paso `input` del `Jenkinsfile` en el mismo pull request.
+- Si cambia un aprobador, se actualiza esta tabla, `.github/CODEOWNERS` y el `submitter` del paso `input` del `Jenkinsfile` en el mismo pull request.
+
+### Responsables de código
+
+`.github/CODEOWNERS` asigna a los aprobadores de producción las rutas que deciden qué llega a producción. GitHub les pide revisión automáticamente en cada pull request que las toca:
+
+| Ruta | Qué contiene |
+|:---|:---|
+| `Jenkinsfile` y `jenkins/` | Pipeline y Shared Library |
+| `deploy/` | Compose y script de despliegue de cada ambiente |
+| `infra/` | Scripts de aprovisionamiento, stack de CI y Security Groups |
+| `.github/` | Plantillas, workflows y este mismo reparto |
+| `docs/release-notes/politica-cambios.md` | Esta política |
+
+El resto del repositorio sigue la regla general: lo aprueba otro integrante.
 
 ## Ambientes
 
