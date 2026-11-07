@@ -14,12 +14,14 @@ Este documento define la exposición de red de cada ambiente.
 | Puerto | Protocolo | Origen | Propósito | dev | stage | prod |
 |:---|:---|:---|:---|:---:|:---:|:---:|
 | 22 | TCP | `ADMIN_CIDR` | Administración por SSH | sí | sí | sí |
+| 22 | TCP | IP privada del host CI (`JENKINS_CIDR`) | Despliegue desde Jenkins con el usuario `deploy` | sí | sí | sí |
 | 80 | TCP | `0.0.0.0/0` | HTTP (redirección a HTTPS) | sí | sí | sí |
 | 443 | TCP | `0.0.0.0/0` | Entrada pública HTTPS | sí | sí | sí |
-| 8080 | TCP | `ADMIN_CIDR` | UI de Jenkins / webhooks | host CI | host CI | host CI |
+| 8080 | TCP | `ADMIN_CIDR` | UI de Jenkins | host CI | host CI | host CI |
+| 8080 | TCP | Rangos `hooks` de la API `meta` de GitHub | Webhooks de GitHub | host CI | host CI | host CI |
 | 9000 | TCP | `ADMIN_CIDR` | UI de SonarQube | host CI | host CI | host CI |
 | 8081 | TCP | `ADMIN_CIDR` | UI de Nexus | host CI | host CI | host CI |
-| 5000 | TCP | `ADMIN_CIDR` | Registro Docker de Nexus | host CI | host CI | host CI |
+| 5000 | TCP | `ADMIN_CIDR` e IP privada de cada ambiente | Registro Docker de Nexus | host CI | host CI | host CI |
 | 8180, 8082-8088 | TCP | `ADMIN_CIDR` | APIs de los servicios (acceso directo solo para diagnóstico) | sí | sí | sí |
 
 ## Nunca expuestos públicamente
@@ -33,11 +35,7 @@ Este documento define la exposición de red de cada ambiente.
 
 ## Reglas de salida
 
-| Puerto | Protocolo | Destino | Propósito |
-|:---|:---|:---|:---|
-| 443 | TCP | `0.0.0.0/0` | Repositorios de paquetes, Docker Hub, GitHub |
-| 80 | TCP | `0.0.0.0/0` | Espejos de paquetes del sistema operativo |
-| 9418/22 | TCP | GitHub | Git por HTTPS/SSH (solo si es necesario) |
+Se conserva la salida por defecto de AWS, que permite todo el tráfico. Limitarla a unos puertos bloquearía, por ejemplo, el acceso al registro de Nexus (`5000`) desde los ambientes.
 
 ## Defensa en profundidad
 

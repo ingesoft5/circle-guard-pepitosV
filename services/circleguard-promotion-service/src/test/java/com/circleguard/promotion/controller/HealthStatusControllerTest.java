@@ -12,10 +12,12 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(HealthStatusController.class)
+@WebMvcTest(controllers = HealthStatusController.class, properties = "circleguard.cors.allowed-origins=https://web.example.edu")
 @Import(SecurityConfig.class)
 class HealthStatusControllerTest {
 
@@ -26,7 +28,7 @@ class HealthStatusControllerTest {
     private HealthStatusService statusService;
 
     @Test
-    @WithMockUser(authorities = "HEALTH_CENTER")
+    @WithMockUser(roles = "HEALTH_CENTER")
     void confirmPositive_WithPermission_CallsUpdateStatus() throws Exception {
         String json = "{\"anonymousId\": \"user-1\"}";
 
@@ -39,7 +41,7 @@ class HealthStatusControllerTest {
     }
 
     @Test
-    @WithMockUser(authorities = "HEALTH_CENTER")
+    @WithMockUser(roles = "HEALTH_CENTER")
     void resolve_WithPermission_CallsResolveStatus() throws Exception {
         String json = "{\"anonymousId\": \"user-1\"}";
 
@@ -69,6 +71,20 @@ class HealthStatusControllerTest {
         mockMvc.perform(post("/api/v1/health/resolve")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void corsUsesTheConfiguredOrigins() throws Exception {
+        mockMvc.perform(options("/api/v1/health/confirmed")
+                        .header("Origin", "https://web.example.edu")
+                        .header("Access-Control-Request-Method", "POST"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "https://web.example.edu"));
+
+        mockMvc.perform(options("/api/v1/health/confirmed")
+                        .header("Origin", "http://localhost:8081")
+                        .header("Access-Control-Request-Method", "POST"))
                 .andExpect(status().isForbidden());
     }
 }

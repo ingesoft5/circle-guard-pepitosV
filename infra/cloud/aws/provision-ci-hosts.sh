@@ -144,7 +144,9 @@ main() {
   [[ -n "${ami}" && "${ami}" != "None" ]] || die "No se pudo resolver la AMI de Ubuntu 24.04"
 
   sg_id="$(ensure_security_group)"
+  [[ "${sg_id}" == sg-* ]] || die "No se pudo preparar el Security Group ${CI_SG_NAME}"
   instance_id="$(ensure_instance "${ami}" "${sg_id}")"
+  [[ "${instance_id}" == i-* ]] || die "No se pudo crear la instancia ${CI_INSTANCE_NAME}"
   public_ip="$(public_ip_of "${instance_id}")" \
     || die "La instancia ${instance_id} no tiene IP pública todavía"
 

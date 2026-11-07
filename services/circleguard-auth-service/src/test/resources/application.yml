@@ -3,6 +3,11 @@ jwt:
   expiration: 3600000
 
 spring:
+  ldap:
+    urls: ldap://localhost:389
+    base: dc=circleguard,dc=edu
+    username: cn=admin,dc=circleguard,dc=edu
+    password: test
   main:
     allow-bean-definition-overriding: true
   datasource:
@@ -14,3 +19,7 @@ spring:
     database-platform: org.hibernate.dialect.H2Dialect
     hibernate:
       ddl-auto: create-drop
+
+circleguard:
+  cors:
+    allowed-origins: http://localhost:8081

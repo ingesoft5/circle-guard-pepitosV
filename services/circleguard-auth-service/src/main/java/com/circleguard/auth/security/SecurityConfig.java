@@ -1,6 +1,7 @@
 package com.circleguard.auth.security;
 
 import com.circleguard.auth.service.CustomUserDetailsService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.ldap.core.support.LdapContextSource;
@@ -35,9 +36,10 @@ public class SecurityConfig {
     }
 
     @Bean
-    public org.springframework.web.cors.CorsConfigurationSource corsConfigurationSource() {
+    public org.springframework.web.cors.CorsConfigurationSource corsConfigurationSource(
+            @Value("${circleguard.cors.allowed-origins}") java.util.List<String> allowedOrigins) {
         org.springframework.web.cors.CorsConfiguration configuration = new org.springframework.web.cors.CorsConfiguration();
-        configuration.setAllowedOrigins(java.util.List.of("http://localhost:8081", "http://localhost:8080"));
+        configuration.setAllowedOrigins(allowedOrigins);
         configuration.setAllowedMethods(java.util.List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(java.util.List.of("*"));
         configuration.setAllowCredentials(true);
@@ -54,12 +56,16 @@ public class SecurityConfig {
     }
 
     @Bean
-    public LdapContextSource contextSource() {
+    public LdapContextSource contextSource(
+            @Value("${spring.ldap.urls}") String url,
+            @Value("${spring.ldap.base}") String base,
+            @Value("${spring.ldap.username}") String userDn,
+            @Value("${spring.ldap.password}") String password) {
         LdapContextSource contextSource = new LdapContextSource();
-        contextSource.setUrl("ldap://localhost:389");
-        contextSource.setBase("dc=circleguard,dc=edu");
-        contextSource.setUserDn("cn=admin,dc=circleguard,dc=edu");
-        contextSource.setPassword("admin");
+        contextSource.setUrl(url);
+        contextSource.setBase(base);
+        contextSource.setUserDn(userDn);
+        contextSource.setPassword(password);
         return contextSource;
     }
 

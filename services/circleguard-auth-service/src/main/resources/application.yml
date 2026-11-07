@@ -24,7 +24,22 @@ jwt:
 
 qr:
   secret: "my-qr-secret-key-for-dev-1234567890"
-  expiration: 300
+  # Milliseconds. Matches the 60 s that QrTokenController reports and the client rotation.
+  expiration: 60000
 
 server:
   port: 8180
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+identity:
+  url: http://localhost:8083
+
+circleguard:
+  cors:
+    # Comma separated browser origins allowed to call this service from another domain.
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:8081,http://localhost:8080}

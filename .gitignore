@@ -12,6 +12,8 @@ build/
 *.zip
 *.tar.gz
 *.rar
+# The Gradle wrapper jar must be versioned so a clean clone can build.
+!gradle/wrapper/gradle-wrapper.jar
 
 # Maven
 target/
@@ -54,3 +56,4 @@ deploy/**/*.env
 !deploy/**/*.env.example
 *.pem
 *.key
+infra/compose/ci/secrets/

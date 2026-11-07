@@ -1,0 +1,293 @@
+# Services shared by the dev, stage and prod environments. Each environment includes this file
+# from deploy/compose/<env>/docker-compose.yml and differs only in its .env file.
+# Only the web client and the microservice ports are published; middleware stays on the private network.
+# Service names match the *_UPSTREAM values of the web client image.
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
+x-middleware: &middleware
+  restart: unless-stopped
+  logging: *logging
+  networks: [env]
+
+x-spring-service: &spring-service
+  restart: unless-stopped
+  logging: *logging
+  networks: [env]
+  mem_limit: 768m
+
+x-spring-healthcheck: &spring-healthcheck
+  interval: 10s
+  timeout: 5s
+  retries: 12
+  start_period: 180s
+
+services:
+  postgres:
+    <<: *middleware
+    image: postgres:16
+    mem_limit: 512m
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: circleguard
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ../postgres/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      # TCP on purpose: during init the server only listens on the Unix socket.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d circleguard"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  neo4j:
+    <<: *middleware
+    image: neo4j:5.26
+    mem_limit: 1g
+    environment:
+      NEO4J_AUTH: ${NEO4J_USER:?}/${NEO4J_PASSWORD:?}
+      NEO4J_server_memory_heap_initial__size: 256m
+      NEO4J_server_memory_heap_max__size: 512m
+      NEO4J_server_memory_pagecache_size: 128m
+    volumes:
+      - neo4j-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 40s
+
+  zookeeper:
+    <<: *middleware
+    image: confluentinc/cp-zookeeper:7.6.0
+    mem_limit: 256m
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      KAFKA_HEAP_OPTS: -Xms64m -Xmx128m
+    healthcheck:
+      test: ["CMD-SHELL", "cub zk-ready localhost:2181 5"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 15s
+
+  kafka:
+    <<: *middleware
+    image: confluentinc/cp-kafka:7.6.0
+    mem_limit: 768m
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_HEAP_OPTS: -Xms256m -Xmx512m
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 >/dev/null"]
+      interval: 15s
+      timeout: 15s
+      retries: 12
+      start_period: 30s
+
+  redis:
+    <<: *middleware
+    image: redis:7.2
+    mem_limit: 128m
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?}
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDISCLI_AUTH\" --save '' --appendonly no"]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  openldap:
+    <<: *middleware
+    image: osixia/openldap:1.5.0
+    mem_limit: 128m
+    # slapd reserves memory per file descriptor: the Docker default limit exhausts mem_limit.
+    ulimits:
+      nofile: 1024
+    environment:
+      LDAP_ORGANISATION: CircleGuard
+      LDAP_DOMAIN: circleguard.edu
+      LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD:?}
+      LDAP_TLS: "false"
+    healthcheck:
+      test: ["CMD-SHELL", "ldapsearch -x -H ldap://localhost -D cn=admin,dc=circleguard,dc=edu -w \"$$LDAP_ADMIN_PASSWORD\" -b dc=circleguard,dc=edu -s base >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+  identity:
+    <<: *spring-service
+    image: ${IMAGE_REGISTRY:?}/circleguard/identity-service:${IMAGE_TAG:?}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${IDENTITY_PORT:?}:8083"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/circleguard_identity
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:?}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?}
+      VAULT_SECRET: ${VAULT_SECRET:?}
+      VAULT_SALT: ${VAULT_SALT:?}
+      VAULT_HASHSALT: ${VAULT_HASH_SALT:?}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:8081,http://localhost:8080}
+      JWT_SECRET: ${JWT_SECRET:?}
+    healthcheck:
+      <<: *spring-healthcheck
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8083/actuator/health | grep -q '\"status\":\"UP\"'"]
+
+  auth:
+    <<: *spring-service
+    image: ${IMAGE_REGISTRY:?}/circleguard/auth-service:${IMAGE_TAG:?}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      openldap:
+        condition: service_healthy
+      identity:
+        condition: service_healthy
+    ports:
+      - "${AUTH_PORT:?}:8180"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/circleguard_auth
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:?}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?}
+      SPRING_LDAP_URLS: ldap://openldap:389
+      SPRING_LDAP_PASSWORD: ${LDAP_ADMIN_PASSWORD:?}
+      IDENTITY_URL: http://identity:8083
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:8081,http://localhost:8080}
+      JWT_SECRET: ${JWT_SECRET:?}
+      QR_SECRET: ${QR_SECRET:?}
+    healthcheck:
+      <<: *spring-healthcheck
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8180/actuator/health | grep -q '\"status\":\"UP\"'"]
+
+  promotion:
+    <<: *spring-service
+    image: ${IMAGE_REGISTRY:?}/circleguard/promotion-service:${IMAGE_TAG:?}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "${PROMOTION_PORT:?}:8088"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/circleguard_promotion
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:?}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?}
+      SPRING_NEO4J_URI: bolt://neo4j:7687
+      SPRING_NEO4J_AUTHENTICATION_USERNAME: ${NEO4J_USER:?}
+      SPRING_NEO4J_AUTHENTICATION_PASSWORD: ${NEO4J_PASSWORD:?}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:?}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:8081,http://localhost:8080}
+      JWT_SECRET: ${JWT_SECRET:?}
+    healthcheck:
+      <<: *spring-healthcheck
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8088/actuator/health | grep -q '\"status\":\"UP\"'"]
+
+  form:
+    <<: *spring-service
+    image: ${IMAGE_REGISTRY:?}/circleguard/form-service:${IMAGE_TAG:?}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    ports:
+      - "${FORM_PORT:?}:8086"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/circleguard_form
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:?}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    healthcheck:
+      <<: *spring-healthcheck
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8086/actuator/health | grep -q '\"status\":\"UP\"'"]
+
+  gateway:
+    <<: *spring-service
+    image: ${IMAGE_REGISTRY:?}/circleguard/gateway-service:${IMAGE_TAG:?}
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "${GATEWAY_PORT:?}:8087"
+    environment:
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:?}
+      JWT_SECRET: ${JWT_SECRET:?}
+      QR_SECRET: ${QR_SECRET:?}
+    healthcheck:
+      <<: *spring-healthcheck
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8087/actuator/health | grep -q '\"status\":\"UP\"'"]
+
+  web:
+    restart: unless-stopped
+    logging: *logging
+    networks: [env]
+    image: ${IMAGE_REGISTRY:?}/circleguard/web-client:${IMAGE_TAG:?}
+    mem_limit: 128m
+    # The browser calls /svc/<service>/ on this origin and nginx forwards it to these hosts.
+    environment:
+      AUTH_UPSTREAM: auth:8180
+      IDENTITY_UPSTREAM: identity:8083
+      PROMOTION_UPSTREAM: promotion:8088
+      FORM_UPSTREAM: form:8086
+      GATEWAY_UPSTREAM: gateway:8087
+    depends_on:
+      auth:
+        condition: service_healthy
+      form:
+        condition: service_healthy
+      gateway:
+        condition: service_healthy
+      identity:
+        condition: service_healthy
+      promotion:
+        condition: service_healthy
+    ports:
+      - "${HTTP_PORT:?}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+networks:
+  env:
+    name: ${ENV_NETWORK:?}
+    external: true
+
+volumes:
+  postgres-data:
+    name: ${VOLUME_PREFIX:?}-postgres
+    external: true
+  neo4j-data:
+    name: ${VOLUME_PREFIX:?}-neo4j
+    external: true

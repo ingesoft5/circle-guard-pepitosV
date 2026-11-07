@@ -1,0 +1,4 @@
+# Shell scripts must keep LF line endings on every platform, including Windows clones.
+*.sh text eol=lf
+.githooks/* text eol=lf
+gradlew text eol=lf

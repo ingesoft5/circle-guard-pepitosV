@@ -2,7 +2,10 @@ name: ${CI_PROJECT:-circleguard-ci}
 
 services:
   jenkins:
-    image: jenkins/jenkins:lts-jdk21
+    # jenkins/jenkins:lts-jdk21 + Docker CLI y Buildx (ver jenkins/Dockerfile)
+    build:
+      context: ./jenkins
+    image: ${CI_PROJECT:-circleguard-ci}/jenkins:lts-jdk21-docker
     container_name: ${CI_PROJECT:-circleguard-ci}-jenkins
     restart: unless-stopped
     ports:
@@ -14,10 +17,28 @@ services:
       JENKINS_URL: "http://${CI_DOMAIN:-localhost}:${JENKINS_PORT:-8080}"
       JENKINS_ADMIN_ID: ${JENKINS_ADMIN_USER:-admin}
       JENKINS_ADMIN_PASSWORD: ${JENKINS_ADMIN_PASSWORD}
+      GITHUB_OWNER: ${GITHUB_OWNER:-ingesoft5}
+      GITHUB_REPO: ${GITHUB_REPO:-circle-guard-pepitosV}
+      GITHUB_USER: ${GITHUB_USER}
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      E2E_USERNAME: ${E2E_USERNAME:-}
+      E2E_PASSWORD: ${E2E_PASSWORD:-}
+      NEXUS_REGISTRY: ${NEXUS_REGISTRY:-localhost:5000}
+      IMAGE_NAMESPACE: ${IMAGE_NAMESPACE:-circleguard}
+      DEPLOY_HOST_DEV: ${DEPLOY_HOST_DEV:-}
+      DEPLOY_HOST_STAGE: ${DEPLOY_HOST_STAGE:-}
+      DEPLOY_HOST_PROD: ${DEPLOY_HOST_PROD:-}
+      NEXUS_CI_USER: ${NEXUS_CI_USER:-ci-publisher}
+      NEXUS_CI_PASSWORD: ${NEXUS_CI_PASSWORD}
+    group_add:
+      - "${DOCKER_GID:-0}"
     volumes:
       - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
       - ./jenkins/casc.yaml:/var/jenkins_home/casc.yaml:ro
       - ./jenkins/plugins.txt:/usr/share/jenkins/ref/plugins.txt:ro
+      - ./secrets:/run/secrets/deploy:ro
     networks:
       - ci
     healthcheck:
@@ -68,7 +89,7 @@ services:
         soft: 65536
         hard: 65536
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/api/system/status | grep -q '\"status\":\"UP\"'"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9000/api/system/status | grep -q '\"status\":\"UP\"'"]
       interval: 15s
       timeout: 5s
       retries: 30
