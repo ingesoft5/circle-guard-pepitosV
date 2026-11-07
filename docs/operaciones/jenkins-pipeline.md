@@ -13,7 +13,8 @@ Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`), 
 - El web client se empaqueta solo si cambió `mobile/` o si se ejecuta con `BUILD_ALL=true`.
 - En `main`, `Release version` calcula la versión con `calculateVersion` a partir de los Conventional Commits desde el último tag (sin tags: `1.0.0`). Si no hay commits `feat`, `fix`, `perf` ni incompatibles, no hay release y las etapas siguientes se omiten.
 - `Publish images` publica las imágenes de los 8 servicios y del web client con esa versión, y después `Tag release` crea y publica el tag `vX.Y.Z` en GitHub con `pushReleaseTag`. El orden garantiza que un tag en GitHub siempre tiene sus imágenes.
-- En `main`, después de desplegar en dev, la etapa `E2E tests on dev` corre las pruebas de Playwright contra dev y publica sus resultados (HU-20).
+- En `main`, después de `Deploy to dev`, `Release notes` (HU-22) crea el GitHub Release con las notas generadas por `releaseNotes` y abre o actualiza el PR `chore(release): update changelog for vX.Y.Z` hacia `dev` con el `CHANGELOG.md` regenerado. No hace push directo porque `main` y `dev` están protegidas. Va antes de las E2E: el tag y las imágenes ya existen, así que el release queda documentado aunque fallen las pruebas.
+- Después, la etapa `E2E tests on dev` corre las pruebas de Playwright contra dev y publica sus resultados (HU-20).
 - Cuando un build falla o queda inestable, `notifyDiscord` envía un mensaje al canal de Discord con rama, servicio, etapa, autor y enlace al build. Si el build siguiente se recupera, envía un mensaje de recuperación.
 - La librería se carga desde `jenkins/vars/` usando `libraryPath: "jenkins"` y una versión fija por SHA.
 - Jenkins publica el resultado como estado de commit en GitHub. Para builds de PR el contexto es `continuous-integration/jenkins/pr-merge`.
@@ -34,6 +35,9 @@ Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`), 
 | `jenkins/vars/calculateVersion.groovy` | Calcula la siguiente versión desde los Conventional Commits. |
 | `jenkins/vars/pushReleaseTag.groovy` | Crea y publica el tag `vX.Y.Z` en GitHub. |
 | `jenkins/vars/semver.groovy` | Funciones puras de versionado semántico. |
+| `jenkins/vars/releaseNotes.groovy` | Genera las release notes y el `CHANGELOG.md` desde los commits y PR. |
+| `jenkins/vars/publishGithubRelease.groovy` | Crea o actualiza el GitHub Release de cada versión. |
+| `jenkins/vars/openChangelogPr.groovy` | Abre o actualiza el PR del `CHANGELOG.md` hacia `dev`. |
 | `jenkins/vars/sonarScan.groovy` | Paso reutilizable de análisis SonarQube para HU-12. |
 | `jenkins/vars/notifyDiscord.groovy` | Notificaciones de fallo, inestabilidad y recuperación en Discord. |
 | `jenkins/README.md` | Contrato y ejemplos de uso de la librería. |
@@ -156,7 +160,7 @@ Si Discord no responde, el pipeline no falla por la notificación.
 
 ## Pruebas E2E (HU-20)
 
-La etapa `E2E tests on dev` corre `tests/e2e-playwright/run-e2e.sh` en `main` después de `Deploy to dev`. Los escenarios, las variables y cómo leer los resultados están en [`tests/e2e-playwright/README.md`](../../tests/e2e-playwright/README.md).
+La etapa `E2E tests on dev` corre `tests/e2e-playwright/run-e2e.sh` en `main` después de `Deploy to dev` y `Release notes`. Los escenarios, las variables y cómo leer los resultados están en [`tests/e2e-playwright/README.md`](../../tests/e2e-playwright/README.md).
 
 ### Credencial `e2e-user`
 
@@ -179,7 +183,7 @@ Estos pasos no se pueden dejar solo en código porque dependen de credenciales y
 
 ### 1. Token de GitHub
 
-1. Crear un token con permiso de **escritura** sobre el repositorio (classic: `repo`; fine-grained: *Contents: Read and write*) y `admin:repo_hook` para registrar el webhook. La escritura la necesita `pushReleaseTag` para publicar los tags de release (HU-15).
+1. Crear un token con permiso de **escritura** sobre el repositorio (classic: `repo`; fine-grained: *Contents: Read and write*) y `admin:repo_hook` para registrar el webhook. La escritura la necesitan `pushReleaseTag` para publicar los tags (HU-15) y `publishGithubRelease` y `openChangelogPr` para crear releases, la rama `chore/changelog` y su PR (HU-22). Con un token fine-grained, agregar también *Pull requests: Read and write*.
 2. En el host CI, editar `infra/compose/ci/.env`:
 
 ```bash

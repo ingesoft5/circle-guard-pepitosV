@@ -15,7 +15,10 @@ jenkins/
     ├── dockerPublish.groovy
     ├── gradleBuild.groovy
     ├── notifyDiscord.groovy
+    ├── openChangelogPr.groovy
+    ├── publishGithubRelease.groovy
     ├── pushReleaseTag.groovy
+    ├── releaseNotes.groovy
     ├── resolveReleaseVersion.groovy
     ├── runTests.groovy
     ├── semver.groovy
@@ -173,9 +176,59 @@ pushReleaseTag(version: '1.3.0')
 - Si el tag ya existe en `HEAD` (re-ejecución), solo lo vuelve a publicar.
 - Si existe sobre otro commit, falla: una versión publicada no se mueve.
 
+### `releaseNotes`
+
+Genera las release notes de una versión a partir de los Conventional Commits entre su tag y el tag anterior (HU-22).
+
+- Agrupa en **Breaking changes**, **Features**, **Fixes** y **Performance**; `docs`, `chore`, `ci` y demás tipos no se listan.
+- Cada entrada enlaza a su commit y, si llegó por un pull request, al PR. El PR se detecta por el merge commit `Merge pull request #N` (se usa el PR de la rama de trabajo, no el de `dev` → `main`) o por el sufijo `(#N)` de un squash merge.
+- En los cambios incompatibles muestra el texto del pie `BREAKING CHANGE:` si existe.
+
+```groovy
+String notes = releaseNotes(version: '1.3.0')   // sección "## [1.3.0](compare...) (fecha)"
+String changelog = releaseNotes.changelog()      // CHANGELOG.md completo, de la versión más nueva a la más antigua
+String repo = releaseNotes.repository()          // owner/repo del remoto origin
+```
+
+### `publishGithubRelease`
+
+Crea el GitHub Release del tag `vX.Y.Z` con las notas, o las actualiza si el release ya existe (re-ejecución). Usa la credencial `github-pat`.
+
+| Parámetro | Obligatorio | Valor por defecto | Descripción |
+|:---|:---|:---|:---|
+| `version` | Sí | | Versión `MAJOR.MINOR.PATCH`; el tag debe existir en GitHub. |
+| `notes` | Sí | | Notas de `releaseNotes`; el título `## ...` se omite porque el release ya lo muestra. |
+| `repository` | No | `releaseNotes.repository()` | `owner/repo`. |
+| `credentialsId` | No | `github-pat` | Credencial con permiso de escritura. |
+
+```groovy
+publishGithubRelease(version: '1.3.0', notes: releaseNotes(version: '1.3.0'))
+```
+
+### `openChangelogPr`
+
+Actualiza `CHANGELOG.md` mediante un pull request, porque `main` y `dev` están protegidas y el pipeline no puede hacer push directo.
+
+1. Crea un worktree aparte sobre `origin/dev` (no toca el checkout del build).
+2. Escribe el `CHANGELOG.md` completo y, si cambió, lo publica con force push en la rama `chore/changelog`.
+3. Abre el PR `chore(release): update changelog for vX.Y.Z` hacia `dev`, o actualiza el que ya esté abierto.
+
+Como el archivo se regenera completo, un PR anterior sin fusionar no pierde versiones. Si `dev` ya tiene ese contenido, no hace nada. Al fusionar el PR, el cambio llega a `main` con la siguiente promoción; como es `chore`, no genera release.
+
+| Parámetro | Obligatorio | Valor por defecto | Descripción |
+|:---|:---|:---|:---|
+| `version` | Sí | | Versión del release, para el título del PR. |
+| `changelog` | Sí | | Contenido de `releaseNotes.changelog()`. |
+| `base` | No | `dev` | Rama destino del PR. |
+| `branch` | No | `chore/changelog` | Rama del PR. |
+
+```groovy
+openChangelogPr(version: '1.3.0', changelog: releaseNotes.changelog())
+```
+
 ### `semver`
 
-Funciones puras (`@NonCPS`) que usan los pasos anteriores: `releaseType(mensajes)`, `bump(versión, tipo)`, `highest(versiones)`, `fromTags(salidaDeGitTag)`, `isVersion(texto)`.
+Funciones puras (`@NonCPS`) que usan los pasos anteriores: `releaseType(mensajes)`, `bump(versión, tipo)`, `highest(versiones)`, `highestBelow(versiones, versión)`, `sortDesc(versiones)`, `fromTags(salidaDeGitTag)`, `isVersion(texto)`.
 
 ```groovy
 semver.bump('1.2.3', semver.releaseType(['feat(promotion): ...']))  // '1.3.0'
@@ -292,4 +345,5 @@ No se usa una rama móvil como versión: así un build antiguo siempre carga la 
 - Un build fallido debe enviar el mensaje `Pipeline FAILED` al canal de Discord.
 - Un build exitoso después de uno fallido debe enviar `Pipeline RECOVERED`.
 - Un merge a `main` con un `feat` crea el tag con `MINOR` incrementado y publica las imágenes con esa versión; un merge con solo `docs` o `chore` no crea release.
+- Cada release crea su GitHub Release con las notas agrupadas y abre o actualiza el PR `chore(release): update changelog for vX.Y.Z` hacia `dev`.
 - La documentación operativa completa está en [docs/operaciones/jenkins-pipeline.md](../docs/operaciones/jenkins-pipeline.md).

@@ -29,6 +29,8 @@ En cada build de `main`:
 3.  **`Tag release`** (`pushReleaseTag`): crea el tag anotado `vX.Y.Z` sobre el commit y lo publica en GitHub.
 
 El tag se publica después de las imágenes: si un tag existe en GitHub, sus imágenes existen en el registro. No hace falta crear tags a mano.
+4.  **`Deploy to dev`**: despliega esa versión en el ambiente dev.
+5.  **`Release notes`** (HU-22): crea el **GitHub Release** del tag con las notas agrupadas en *Breaking changes*, *Features*, *Fixes* y *Performance*, donde cada entrada enlaza a su commit y a su PR. Además abre o actualiza el PR `chore(release): update changelog for vX.Y.Z` hacia `dev` con el [`CHANGELOG.md`](../../CHANGELOG.md) regenerado; al fusionarlo, el archivo llega a `main` con la siguiente promoción.
 
 ## Relación con los Tags de Imágenes Docker
 

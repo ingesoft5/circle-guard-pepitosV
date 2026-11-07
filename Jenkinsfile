@@ -201,6 +201,26 @@ pipeline {
             }
         }
 
+        // HU-22: GitHub Release with the notes, and CHANGELOG.md through a PR to dev
+        // (main and dev are protected, so the pipeline never pushes to them directly).
+        // Before the E2E tests: the tag and the images already exist, so the release
+        // is documented even if the E2E tests fail.
+        stage('Release notes') {
+            when {
+                allOf {
+                    branch 'main'
+                    expression { releaseVersion != null }
+                }
+            }
+            steps {
+                script {
+                    String notes = releaseNotes(version: releaseVersion)
+                    publishGithubRelease(version: releaseVersion, notes: notes)
+                    openChangelogPr(version: releaseVersion, changelog: releaseNotes.changelog())
+                }
+            }
+        }
+
         stage('E2E tests on dev') {
             when {
                 allOf {
