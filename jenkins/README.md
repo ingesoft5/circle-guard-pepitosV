@@ -7,6 +7,7 @@ La librería compartida de CircleGuard encapsula las etapas reutilizables del pi
 ```text
 jenkins/
 ├── README.md
+├── rollback.Jenkinsfile
 └── vars/
     ├── calculateVersion.groovy
     ├── deployCompose.groovy

@@ -32,7 +32,9 @@ def call(Map config = [:]) {
         "GH_REPO_API=${api}/repos/${repo}", "GH_OWNER=${repo.tokenize('/')[0]}"
     ]) {
         withCredentials([gitUsernamePassword(credentialsId: credentialsId)]) {
-            sh 'git fetch --quiet origin "$BASE_BRANCH"'
+            // Explicit refspec: the main build clones only main, so a plain fetch leaves
+            // origin/<base> undefined and the worktree below fails.
+            sh 'git fetch --quiet origin "+refs/heads/$BASE_BRANCH:refs/remotes/origin/$BASE_BRANCH"'
         }
         // Un worktree aparte para no tocar el checkout del build (el commit del release).
         sh 'rm -rf "$WT" && git worktree prune && git worktree add --quiet -B "$PR_BRANCH" "$WT" "origin/$BASE_BRANCH"'
