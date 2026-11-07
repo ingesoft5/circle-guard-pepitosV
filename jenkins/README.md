@@ -29,13 +29,13 @@ Cada paso está en su propio archivo para que las historias de despliegue agregu
 `infra/compose/ci/jenkins/casc.yaml` registra la librería como `circleguard-shared-library` con:
 
 - `libraryPath: "jenkins"`: indica que la raíz de la librería es la carpeta `jenkins/`, no la raíz del repositorio.
-- `defaultVersion`: SHA completo del commit que contiene la versión estable de `jenkins/vars/`.
-- `allowVersionOverride: false`: fija la versión y evita que un Jenkinsfile use otra.
+- `allowVersionOverride: true`: permite que el `Jenkinsfile` elija la versión.
+- `defaultVersion`: SHA de respaldo, solo para un `Jenkinsfile` que todavía use `@Library` sin versión.
 
-El `Jenkinsfile` raíz la importa con:
+El `Jenkinsfile` raíz la carga desde la misma rama que se está construyendo (en un PR, la rama de origen):
 
 ```groovy
-@Library('circleguard-shared-library') _
+library "circleguard-shared-library@${env.CHANGE_BRANCH ?: env.BRANCH_NAME}"
 ```
 
 ## Pasos disponibles
@@ -272,20 +272,19 @@ notifyDiscord(status: 'FAILED', service: 'circleguard-form-service',
 - El mensaje incluye rama, servicio, etapa, autor y enlace al build.
 - Si Discord no responde, el pipeline no falla por la notificación.
 
-## Actualizar la versión de la librería
+## Actualizar la librería
 
-1. Hacer el cambio en `jenkins/vars/`.
-2. Crear el commit correspondiente.
-3. Copiar el SHA completo del nuevo commit.
-4. Actualizar `defaultVersion` en `infra/compose/ci/jenkins/casc.yaml`.
-5. Re-ejecutar `sudo ./infra/bootstrap/bootstrap-jenkins.sh`.
+Basta con cambiar `jenkins/vars/` en la rama de trabajo: el build de esa rama y el de su PR ya usan la versión nueva, y al fusionar pasa a `dev` y `main`. No hay que mover ningún SHA ni re-ejecutar `bootstrap-jenkins.sh`.
 
-No se usa una rama móvil como versión: así un build antiguo siempre carga la misma versión de la librería.
+Consideraciones:
+
+- Re-ejecutar un build antiguo carga la librería actual de su rama, no la que tenía cuando corrió.
+- La librería global corre fuera del sandbox de Groovy (la necesita, por ejemplo, `detectChangedServices`). Como cualquier rama la puede cambiar, solo se construyen ramas de este repositorio y nunca PR de forks (`buildForkPRMerge(false)`).
 
 ## Probar la librería
 
 - Un pipeline que importe `@Library('circleguard-shared-library') _` debe resolver todos los pasos sin errores.
-- Un cambio en `jenkins/vars/` no altera los builds que usan un SHA anterior hasta que se actualice `defaultVersion`.
+- Un cambio en `jenkins/vars/` se usa en el build de su propia rama y de su PR, sin tocar `casc.yaml`.
 - Un commit que solo toca `services/circleguard-form-service/**` debe procesar únicamente ese servicio.
 - Un cambio en `build.gradle.kts` o `settings.gradle.kts` debe procesar los 8 servicios.
 - `BUILD_ALL=true` debe procesar los 8 servicios y el web client.
