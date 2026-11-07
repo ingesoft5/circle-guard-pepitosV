@@ -15,7 +15,7 @@ Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`), 
 - `Publish images` publica las imágenes de los 8 servicios y del web client con esa versión, y después `Tag release` crea y publica el tag `vX.Y.Z` en GitHub con `pushReleaseTag`. El orden garantiza que un tag en GitHub siempre tiene sus imágenes.
 - En `main`, después de desplegar en dev, la etapa `E2E tests on dev` corre las pruebas de Playwright contra dev y publica sus resultados (HU-20).
 - Cuando un build falla o queda inestable, `notifyDiscord` envía un mensaje al canal de Discord con rama, servicio, etapa, autor y enlace al build. Si el build siguiente se recupera, envía un mensaje de recuperación.
-- La librería se carga desde `jenkins/vars/` usando `libraryPath: "jenkins"` y una versión fija por SHA.
+- La librería se carga desde `jenkins/vars/` usando `libraryPath: "jenkins"`, en la versión de la misma rama que se está construyendo.
 - Jenkins publica el resultado como estado de commit en GitHub. Para builds de PR el contexto es `continuous-integration/jenkins/pr-merge`.
 - Una rama con un PR abierto se construye solo como `PR-<n>` (fusionada con su base) y no también como rama (`buildOriginBranchWithPR(false)`), porque Jenkins tiene un solo ejecutor. Las ramas sin PR, `dev` y `main` se siguen construyendo en cada push.
 - El contenedor de Jenkins monta `/var/run/docker.sock` para que las pruebas con Testcontainers puedan iniciar contenedores y para el empaquetado posterior.
@@ -52,9 +52,9 @@ La librería se declara en JCasC como `circleguard-shared-library`:
 globalLibraries:
   libraries:
     - name: "circleguard-shared-library"
-      defaultVersion: "<SHA del commit de jenkins/vars>"
+      defaultVersion: "<SHA de respaldo>"
       implicit: false
-      allowVersionOverride: false
+      allowVersionOverride: true
       retriever:
         modernSCM:
           libraryPath: "jenkins"
@@ -67,9 +67,9 @@ globalLibraries:
 Puntos importantes:
 
 - `libraryPath: "jenkins"` hace que Jenkins busque `vars/` dentro de `jenkins/`; sin ese campo buscaría `vars/` en la raíz del repositorio.
-- `defaultVersion` es un SHA completo, no una rama móvil.
-- El `Jenkinsfile` usa `@Library('circleguard-shared-library') _` sin versión explícita porque la versión ya está fijada en JCasC.
-- Para actualizar la librería se cambia `jenkins/vars/`, se toma el nuevo SHA y se actualiza `defaultVersion`; ver [jenkins/README.md](../../jenkins/README.md).
+- El `Jenkinsfile` carga la librería con `library "circleguard-shared-library@${env.CHANGE_BRANCH ?: env.BRANCH_NAME}"`: la rama del build o, en un PR, su rama de origen. Un cambio en `jenkins/vars/` se prueba en su propio PR sin actualizar JCasC.
+- `defaultVersion` es solo un respaldo para un `Jenkinsfile` que todavía use `@Library` sin versión.
+- Detalles y consideraciones de seguridad en [jenkins/README.md](../../jenkins/README.md).
 
 ## Ejecución selectiva (HU-11)
 
@@ -248,7 +248,7 @@ No se crea a mano: JCasC la registra al re-ejecutar el bootstrap.
 sudo ./infra/bootstrap/bootstrap-jenkins.sh
 ```
 
-Verificar en **Manage Jenkins → System → Global Pipeline Libraries** que existe `circleguard-shared-library`, con la versión fija y sin errores de carga. El commit usado como `defaultVersion` debe estar publicado en GitHub; si solo existe en local, el primer build fallará al resolver la librería.
+Verificar en **Manage Jenkins → System → Global Pipeline Libraries** que existe `circleguard-shared-library`, con `Allow default version to be overridden` activo y sin errores de carga. La rama que se construye debe estar publicada en GitHub, porque de ahí se descarga la librería.
 
 ## Verificación
 

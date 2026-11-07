@@ -1,4 +1,7 @@
-@Library('circleguard-shared-library') _
+// The shared library lives in this repository, so each build loads it from the branch it
+// builds (the source branch for a PR). A change to jenkins/vars/ is used by its own PR, with
+// no pinned version to move in casc.yaml.
+library "circleguard-shared-library@${env.CHANGE_BRANCH ?: env.BRANCH_NAME}"
 
 def SERVICES = [
     'circleguard-auth-service',
