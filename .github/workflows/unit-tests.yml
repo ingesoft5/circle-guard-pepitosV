@@ -45,11 +45,11 @@ jobs:
 
       - name: Upload test and coverage reports
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: test-and-coverage-reports
           path: |
-            services/*/build/reports/tests/test/
-            services/*/build/reports/jacoco/test/
+            services/*/build/reports/jacoco/test/jacocoTestReport.xml
             services/*/build/test-results/test/*.xml
-          retention-days: 7
+          retention-days: 1
