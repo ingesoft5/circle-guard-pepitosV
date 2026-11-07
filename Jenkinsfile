@@ -203,6 +203,8 @@ pipeline {
 
         // HU-22: GitHub Release with the notes, and CHANGELOG.md through a PR to dev
         // (main and dev are protected, so the pipeline never pushes to them directly).
+        // Before the E2E tests: the tag and the images already exist, so the release
+        // is documented even if the E2E tests fail.
         stage('Release notes') {
             when {
                 allOf {
@@ -215,6 +217,40 @@ pipeline {
                     String notes = releaseNotes(version: releaseVersion)
                     publishGithubRelease(version: releaseVersion, notes: notes)
                     openChangelogPr(version: releaseVersion, changelog: releaseNotes.changelog())
+                }
+            }
+        }
+
+        stage('E2E tests on dev') {
+            when {
+                allOf {
+                    branch 'main'
+                    expression { releaseVersion != null }
+                }
+            }
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'e2e-user',
+                    usernameVariable: 'E2E_USERNAME',
+                    passwordVariable: 'E2E_PASSWORD'
+                )]) {
+                    withEnv(["E2E_BASE_URL=http://${env.DEPLOY_HOST_DEV}"]) {
+                        sh 'bash tests/e2e-playwright/run-e2e.sh'
+                    }
+                }
+            }
+            post {
+                always {
+                    junit allowEmptyResults: true,
+                        testResults: 'tests/e2e-playwright/results/junit.xml'
+                    archiveArtifacts allowEmptyArchive: true,
+                        artifacts: 'tests/e2e-playwright/results/**'
+                }
+                failure {
+                    script {
+                        failedService = failedService ?: 'web-client'
+                        failedStage = failedStage ?: 'E2E tests on dev'
+                    }
                 }
             }
         }

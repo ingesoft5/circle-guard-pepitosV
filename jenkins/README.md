@@ -273,6 +273,7 @@ Construye la imagen de un componente sin publicarla. Se usa en builds selectivos
 | `context` | No | `.` | Contexto de build. |
 | `namespace` | No | `env.IMAGE_NAMESPACE` o `circleguard` | Prefijo de la imagen local. |
 | `pull` | No | `true` | Ejecuta `docker build --pull`. |
+| `keep` | No | `false` | Conserva la imagen en el host de CI después de construirla. |
 
 ```groovy
 dockerBuild(service: 'circleguard-form-service')
@@ -284,6 +285,8 @@ Comportamiento:
 - Construye `<namespace>/<imagen>:<version>` y no hace `docker push`.
 - Pasa la versión como build arg `VERSION` y etiqueta OCI de revisión.
 - La publicación con semver sigue a cargo de `dockerPublish` en `main`.
+- Borra la imagen al terminar, porque solo comprueba que la imagen se construye. Sin esto cada build de PR dejaba una imagen por servicio (unos 3 GB) en el disco de CI. Un paso que necesite la imagen después, por ejemplo un escaneo, usa `keep: true` y la borra al terminar.
+- Las capas quedan en la caché de Docker, así que el siguiente build sigue siendo rápido. La caché de más de 24 horas se limpia en cada release de `main`.
 
 ### `deployCompose`
 
