@@ -267,6 +267,7 @@ pipeline {
                         "services/${it}/build/test-results/test/*.xml"
                     }.join(',')
                     junit allowEmptyResults: true, testResults: patterns
+                    publishCoverage(services: changed.services)
                 }
             }
         }

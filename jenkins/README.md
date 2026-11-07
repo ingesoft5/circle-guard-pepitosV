@@ -16,6 +16,7 @@ jenkins/
     ├── gradleBuild.groovy
     ├── notifyDiscord.groovy
     ├── openChangelogPr.groovy
+    ├── publishCoverage.groovy
     ├── publishGithubRelease.groovy
     ├── pushReleaseTag.groovy
     ├── releaseNotes.groovy
@@ -92,18 +93,31 @@ def changed = detectChangedServices(buildAll: params.BUILD_ALL ?: false, service
 
 ### `runTests`
 
-Ejecuta las pruebas y, por defecto, publica los resultados JUnit incluso cuando la tarea falla.
+Ejecuta las pruebas y, por defecto, genera el reporte de cobertura JaCoCo, verifica el mínimo de cobertura y publica los resultados JUnit incluso cuando la tarea falla.
 
 | Parámetro | Obligatorio | Valor por defecto | Descripción |
 |:---|:---|:---|:---|
 | `service` | No | Todos | Nombre del módulo que se quiere probar. |
 | `testResults` | No | `**/build/test-results/test/*.xml` | Patrón de los reportes JUnit. |
 | `publish` | No | `true` | Si es `false`, no publica JUnit; útil cuando se publica una sola vez tras ejecutar servicios en paralelo. |
+| `coverage` | No | `true` | Si es `true`, también ejecuta `jacocoTestReport` y `jacocoTestCoverageVerification`. La verificación falla si auth, identity, promotion, form o gateway quedan por debajo del 60 % de cobertura de líneas. |
 
 ```groovy
 runTests()
 runTests(service: 'circleguard-form-service')
 runTests(service: 'circleguard-form-service', publish: false)
+```
+
+### `publishCoverage`
+
+Publica el reporte JaCoCo de cada servicio como un resultado de cobertura independiente (`coverage-<servicio>`), de modo que Jenkins muestra la cobertura de líneas por servicio. Requiere el plugin `coverage`; si no está instalado, el paso lo informa en el log y no falla el build.
+
+| Parámetro | Obligatorio | Valor por defecto | Descripción |
+|:---|:---|:---|:---|
+| `services` | No | Ninguno | Lista de servicios cuyo reporte `build/reports/jacoco/test/jacocoTestReport.xml` se publica. |
+
+```groovy
+publishCoverage(services: ['circleguard-auth-service', 'circleguard-form-service'])
 ```
 
 ### `sonarScan`

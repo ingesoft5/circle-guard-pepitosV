@@ -6,6 +6,15 @@ plugins {
     kotlin("plugin.jpa") version "1.9.24" apply false
 }
 
+val coverageGatedServices = setOf(
+    "circleguard-auth-service",
+    "circleguard-identity-service",
+    "circleguard-promotion-service",
+    "circleguard-form-service",
+    "circleguard-gateway-service"
+)
+val minimumLineCoverage = "0.60".toBigDecimal()
+
 allprojects {
     group = "com.circleguard"
     version = "1.0.0-SNAPSHOT"
@@ -45,5 +54,50 @@ subprojects {
 
     tasks.withType<Test> {
         useJUnitPlatform()
+    }
+
+    // ---- Coverage
+    apply(plugin = "jacoco")
+    extensions.configure<JacocoPluginExtension> {
+        toolVersion = "0.8.12"
+    }
+
+    val coverageExclusions = listOf("**/*Application.class")
+    val coveredClasses = the<SourceSetContainer>()["main"].output.classesDirs.asFileTree.matching {
+        exclude(coverageExclusions)
+    }
+
+    val jacocoTestReport = tasks.named<JacocoReport>("jacocoTestReport") {
+        dependsOn(tasks.named("test"))
+        classDirectories.setFrom(coveredClasses)
+        reports {
+            xml.required.set(true)
+            html.required.set(true)
+            csv.required.set(false)
+        }
+    }
+
+    tasks.named<Test>("test") {
+        finalizedBy(jacocoTestReport)
+    }
+
+    val gated = name in coverageGatedServices
+    tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
+        dependsOn(tasks.named("test"))
+        classDirectories.setFrom(coveredClasses)
+        violationRules {
+            rule {
+                isEnabled = gated
+                limit {
+                    counter = "LINE"
+                    value = "COVEREDRATIO"
+                    minimum = minimumLineCoverage
+                }
+            }
+        }
+    }
+
+    tasks.named("check") {
+        dependsOn("jacocoTestCoverageVerification")
     }
 }

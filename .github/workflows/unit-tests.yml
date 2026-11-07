@@ -1,0 +1,55 @@
+name: unit-tests
+
+# HU-18 : runs the unit tests of the 8 services with JaCoCo and reports
+# line coverage per service. The 5 core services must reach 60 %.
+on:
+  push:
+    branches:
+      - 'tests/**'
+  pull_request:
+    branches:
+      - dev
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: unit-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit tests and JaCoCo reports
+        run: ./gradlew --no-daemon --continue test jacocoTestReport
+
+      - name: Coverage per service
+        if: always()
+        run: python3 .github/scripts/coverage_summary.py services >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Coverage gate (60 % in auth, identity, promotion, form, gateway)
+        run: ./gradlew --no-daemon --continue jacocoTestCoverageVerification
+
+      - name: Upload test and coverage reports
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-and-coverage-reports
+          path: |
+            services/*/build/reports/jacoco/test/jacocoTestReport.xml
+            services/*/build/test-results/test/*.xml
+          retention-days: 1
