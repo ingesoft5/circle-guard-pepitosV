@@ -41,6 +41,7 @@ Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`), 
 | `jenkins/vars/openChangelogPr.groovy` | Abre o actualiza el PR del `CHANGELOG.md` hacia `dev`. |
 | `jenkins/vars/sonarScan.groovy` | Paso reutilizable de análisis SonarQube para HU-12. |
 | `jenkins/vars/notifyDiscord.groovy` | Notificaciones de fallo, inestabilidad y recuperación en Discord. |
+| `jenkins/rollback.Jenkinsfile` | Job `circleguard-rollback`: redespliega una versión publicada (HU-17). |
 | `jenkins/README.md` | Contrato y ejemplos de uso de la librería. |
 | `infra/compose/ci/jenkins/plugins.txt` | Plugins de multibranch, GitHub y Job DSL. |
 | `infra/compose/ci/jenkins/casc.yaml` | Credencial, servidor GitHub, job multibranch y Global Pipeline Library. |
@@ -179,6 +180,26 @@ E2E_PASSWORD=<contraseña-del-usuario-de-prueba>
 2. Re-ejecutar `sudo ./infra/bootstrap/bootstrap-jenkins.sh`.
 
 Sin esta credencial la etapa falla con `Set E2E_USERNAME`.
+
+## Rollback (HU-17)
+
+El job `circleguard-rollback` (fuera del multibranch, declarado en `casc.yaml`) vuelve a desplegar en un ambiente una versión que ya está en Nexus. Se lanza desde Jenkins con **Build with Parameters**:
+
+| Parámetro | Valores |
+|:---|:---|
+| `ENVIRONMENT` | `stage`, `dev` o `prod` |
+| `VERSION` | Versión publicada, con o sin `v` (`0.1.0` o `v0.1.0`) |
+
+Etapas:
+
+1. **Validate version:** comprueba en el registro de Nexus que existen todas las imágenes de `deploy/compose/stack.yml` con esa versión. Si falta alguna, el job falla **antes de conectarse al ambiente**.
+2. **Read current version:** lee por SSH el `IMAGE_TAG` que corre el ambiente.
+3. **Approve production:** solo en `prod`, un paso `input` pide confirmación antes de tocar el ambiente.
+4. **Redeploy:** usa `deployCompose`, el mismo paso del despliegue normal. `deploy.sh` descarga primero las imágenes (si falla, no cambia nada), espera a que todos los servicios estén `healthy` y corre el smoke test por el cliente web.
+
+Evidencia: la descripción del build queda como `stage: 0.2.0 -> 0.1.0 by <usuario>` y el log termina con una línea `ROLLBACK OK` o `ROLLBACK FAILED` con ambiente, versión origen, versión destino y quién lo lanzó.
+
+El job toma su pipeline y la Shared Library de la rama `ROLLBACK_BRANCH` del `.env` de CI (por defecto `main`, la versión estable). Solo se cambia para probar el job desde otra rama, y se vuelve a `main` después.
 
 ## Configuración manual en GitHub y Jenkins
 
