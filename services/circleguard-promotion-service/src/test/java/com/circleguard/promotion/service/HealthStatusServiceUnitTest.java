@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -45,6 +46,9 @@ class HealthStatusServiceUnitTest {
     private SystemSettingsRepository settingsRepository;
     private CircleNodeRepository circleRepository;
     private HealthStatusService service;
+    // multiSet receives one HashMap that the service clears and refills for each
+    // batch, so every call is copied here instead of keeping the reference.
+    private final List<Map<String, String>> redisBatches = new ArrayList<>();
 
     @BeforeEach
     @SuppressWarnings("unchecked")
@@ -54,6 +58,10 @@ class HealthStatusServiceUnitTest {
         redis = mock(StringRedisTemplate.class);
         values = mock(ValueOperations.class);
         when(redis.opsForValue()).thenReturn(values);
+        doAnswer(invocation -> {
+            redisBatches.add(new HashMap<>(invocation.<Map<String, String>>getArgument(0)));
+            return null;
+        }).when(values).multiSet(anyMap());
         kafka = mock(KafkaTemplate.class);
         settingsRepository = mock(SystemSettingsRepository.class);
         circleRepository = mock(CircleNodeRepository.class);
@@ -77,12 +85,10 @@ class HealthStatusServiceUnitTest {
         return row;
     }
 
-    @SuppressWarnings("unchecked")
     private Map<String, String> redisWrites() {
-        ArgumentCaptor<Map<String, String>> writes = ArgumentCaptor.forClass(Map.class);
-        verify(values, org.mockito.Mockito.atLeastOnce()).multiSet(writes.capture());
+        assertThat(redisBatches).as("Redis multiSet calls").isNotEmpty();
         Map<String, String> all = new HashMap<>();
-        writes.getAllValues().forEach(all::putAll);
+        redisBatches.forEach(all::putAll);
         return all;
     }
 
@@ -181,6 +187,7 @@ class HealthStatusServiceUnitTest {
         service.updateStatus("source", "SUSPECT");
 
         verify(values, times(2)).multiSet(anyMap());
+        assertThat(redisBatches).extracting(Map::size).containsExactly(2000, 501);
         assertThat(redisWrites()).hasSize(2501);
     }
 
