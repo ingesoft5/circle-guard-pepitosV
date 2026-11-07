@@ -48,6 +48,13 @@ Si hay duda entre dos tipos, se usa el más estricto. Una emergencia se limita a
 | `.github/` | Plantillas, workflows y este mismo reparto |
 | `docs/release-notes/politica-cambios.md` | Esta política |
 
+Además, las imágenes de contenedor tienen su propio responsable, que conoce cómo se construyen:
+
+| Ruta | Responsable |
+|:---|:---|
+| Dockerfiles de `services/` y `mobile/`, y sus `.dockerignore` | David Chicué (`Davinerto9`) |
+| `jenkins/vars/dockerBuild.groovy` y `dockerPublish.groovy` | David Chicué y los aprobadores de producción |
+
 El resto del repositorio sigue la regla general: lo aprueba otro integrante.
 
 ## Ambientes

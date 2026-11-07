@@ -11,3 +11,12 @@
 /infra/                                    @DavidRamirez206 @Jo-Ssua
 /.github/                                  @DavidRamirez206 @Jo-Ssua
 /docs/release-notes/politica-cambios.md    @DavidRamirez206 @Jo-Ssua
+
+# Container images: owned by the image maintainer. These lines go last because the last
+# matching pattern wins; pipeline steps keep the production approvers as well.
+/.dockerignore                             @Davinerto9
+/services/*/Dockerfile                     @Davinerto9
+/mobile/Dockerfile                         @Davinerto9
+/mobile/.dockerignore                      @Davinerto9
+/jenkins/vars/dockerBuild.groovy           @DavidRamirez206 @Jo-Ssua @Davinerto9
+/jenkins/vars/dockerPublish.groovy         @DavidRamirez206 @Jo-Ssua @Davinerto9
