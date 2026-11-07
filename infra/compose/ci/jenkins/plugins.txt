@@ -11,3 +11,5 @@ job-dsl
 sonar
 ws-cleanup
 ssh-agent
+junit
+coverage

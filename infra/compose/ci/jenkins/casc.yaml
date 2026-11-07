@@ -26,6 +26,9 @@ jenkins:
             value: "${DEPLOY_HOST_STAGE:-}"
           - key: "DEPLOY_HOST_PROD"
             value: "${DEPLOY_HOST_PROD:-}"
+          # Branch the rollback job takes its pipeline and the shared library from (HU-17)
+          - key: "ROLLBACK_BRANCH"
+            value: "${ROLLBACK_BRANCH:-main}"
 
 credentials:
   system:
@@ -135,6 +138,25 @@ jobs:
         orphanedItemStrategy {
           discardOldItems {
             numToKeep(20)
+          }
+        }
+      }
+  - script: |
+      pipelineJob('circleguard-rollback') {
+        description('Redeploys a version already published in Nexus to dev, stage or prod (HU-17)')
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote {
+                  url("https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}.git")
+                  credentials('github-pat')
+                }
+                branch("*/${ROLLBACK_BRANCH:-main}")
+              }
+            }
+            scriptPath('jenkins/rollback.Jenkinsfile')
+            lightweight(true)
           }
         }
       }
