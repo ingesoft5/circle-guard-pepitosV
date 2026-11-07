@@ -94,9 +94,11 @@ unclassified:
   globalLibraries:
     libraries:
       - name: "circleguard-shared-library"
+        # The Jenkinsfile loads the library from the branch being built. This version is only
+        # a fallback for Jenkinsfiles that still use @Library without a version.
         defaultVersion: "5a8248a4df8ebe2b0213b9f06d221b737eaf0a50"
         implicit: false
-        allowVersionOverride: false
+        allowVersionOverride: true
         retriever:
           modernSCM:
             libraryPath: "jenkins"
