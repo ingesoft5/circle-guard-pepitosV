@@ -1,6 +1,6 @@
 jenkins:
   systemMessage: "CircleGuard CI — Jenkins"
-  numExecutors: 2
+  numExecutors: 1
   mode: NORMAL
   securityRealm:
     local:
@@ -43,6 +43,43 @@ credentials:
               username: "${NEXUS_CI_USER}"
               password: "${NEXUS_CI_PASSWORD}"
               description: "Nexus user that pushes images to docker-hosted"
+          - string:
+              scope: GLOBAL
+              id: "discord-webhook"
+              secret: "${DISCORD_WEBHOOK_URL}"
+              description: "Discord webhook for CircleGuard CI notifications"
+          - usernamePassword:
+              scope: GLOBAL
+              id: "e2e-user"
+              username: "${E2E_USERNAME:-}"
+              password: "${E2E_PASSWORD:-}"
+              description: "Web client user that the Playwright suite signs in with"
+          # Declared here because JCasC removes any credential it does not list. The keys
+          # are files on the CI host, written by infra/bootstrap/load-deploy-credential.sh.
+          - basicSSHUserPrivateKey:
+              scope: GLOBAL
+              id: "deploy-ssh-dev"
+              username: "deploy"
+              description: "Deploy key for dev"
+              privateKeySource:
+                directEntry:
+                  privateKey: "${readFile:/run/secrets/deploy/deploy-ssh-dev}"
+          - basicSSHUserPrivateKey:
+              scope: GLOBAL
+              id: "deploy-ssh-stage"
+              username: "deploy"
+              description: "Deploy key for stage"
+              privateKeySource:
+                directEntry:
+                  privateKey: "${readFile:/run/secrets/deploy/deploy-ssh-stage}"
+          - basicSSHUserPrivateKey:
+              scope: GLOBAL
+              id: "deploy-ssh-prod"
+              username: "deploy"
+              description: "Deploy key for prod"
+              privateKeySource:
+                directEntry:
+                  privateKey: "${readFile:/run/secrets/deploy/deploy-ssh-prod}"
 
 unclassified:
   location:
@@ -57,9 +94,11 @@ unclassified:
   globalLibraries:
     libraries:
       - name: "circleguard-shared-library"
-        defaultVersion: "beecf5b485be775529b916adc2e25c446dc8b2da"
+        # The Jenkinsfile loads the library from the branch being built. This version is only
+        # a fallback for Jenkinsfiles that still use @Library without a version.
+        defaultVersion: "5a8248a4df8ebe2b0213b9f06d221b737eaf0a50"
         implicit: false
-        allowVersionOverride: false
+        allowVersionOverride: true
         retriever:
           modernSCM:
             libraryPath: "jenkins"
@@ -79,7 +118,9 @@ jobs:
             repoOwner("${GITHUB_OWNER}")
             repository("${GITHUB_REPO}")
             buildOriginBranch(true)
-            buildOriginBranchWithPR(true)
+            // A branch with an open pull request is built only as PR-<n> (merged with its
+            // base), so each push runs one build instead of two on the single executor.
+            buildOriginBranchWithPR(false)
             buildOriginPRMerge(true)
             buildOriginPRHead(false)
             buildForkPRMerge(false)

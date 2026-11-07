@@ -19,3 +19,7 @@ spring:
     database-platform: org.hibernate.dialect.H2Dialect
     hibernate:
       ddl-auto: create-drop
+
+circleguard:
+  cors:
+    allowed-origins: http://localhost:8081

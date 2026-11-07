@@ -18,10 +18,11 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.UUID;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@WebMvcTest(LoginController.class)
+@WebMvcTest(controllers = LoginController.class, properties = "circleguard.cors.allowed-origins=https://web.example.edu")
 @Import(SecurityConfig.class)
 public class LoginControllerTest {
 
@@ -63,5 +64,19 @@ public class LoginControllerTest {
                 .andExpect(jsonPath("$.token").value(token))
                 .andExpect(jsonPath("$.anonymousId").value(anonymousId.toString()))
                 .andExpect(jsonPath("$.type").value("Bearer"));
+    }
+
+    @Test
+    void corsUsesTheConfiguredOrigins() throws Exception {
+        mockMvc.perform(options("/api/v1/auth/login")
+                        .header("Origin", "https://web.example.edu")
+                        .header("Access-Control-Request-Method", "POST"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "https://web.example.edu"));
+
+        mockMvc.perform(options("/api/v1/auth/login")
+                        .header("Origin", "http://localhost:8081")
+                        .header("Access-Control-Request-Method", "POST"))
+                .andExpect(status().isForbidden());
     }
 }

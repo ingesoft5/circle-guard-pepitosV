@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Stores the deploy SSH key of one environment as a Jenkins credential, idempotently.
-# Runs on the CI host and reads the private key from stdin, so it never reaches disk or argv:
+# Stores the deploy SSH key of one environment for Jenkins, idempotently.
+# Runs on the CI host and reads the private key from stdin, so it never reaches argv:
 #   ssh ubuntu@<ci-host> 'sudo ~/circleguard/infra/bootstrap/load-deploy-credential.sh dev' \
 #     < ~/.ssh/circleguard-deploy-dev
+# The key is kept in infra/compose/ci/secrets, which casc.yaml reads as deploy-ssh-<env>.
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -10,21 +11,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/common.sh"
 
 readonly CI_ENV_FILE="${COMPOSE_DIR}/ci/.env"
-readonly DEPLOY_USER="${DEPLOY_USER:-deploy}"
+readonly SECRETS_DIR="${COMPOSE_DIR}/ci/secrets"
+readonly JENKINS_UID=1000
 
-credential_xml() {
-  local credential_id="$1" env_name="$2" private_key="$3"
-  cat <<EOF
-<com.cloudbees.jenkins.plugins.sshcredentials.impl.BasicSSHUserPrivateKey>
-  <scope>GLOBAL</scope>
-  <id>${credential_id}</id>
-  <description>Deploy key for ${env_name}</description>
-  <username>${DEPLOY_USER}</username>
-  <privateKeySource class="com.cloudbees.jenkins.plugins.sshcredentials.impl.BasicSSHUserPrivateKey\$DirectEntryPrivateKeySource">
-    <privateKey>${private_key}</privateKey>
-  </privateKeySource>
-</com.cloudbees.jenkins.plugins.sshcredentials.impl.BasicSSHUserPrivateKey>
-EOF
+reload_casc() {
+  local jenkins="http://localhost:${JENKINS_PORT}" crumb
+  cookies="$(mktemp)"
+  trap 'rm -f "${cookies}"' EXIT
+  crumb="$(curl -fsS -c "${cookies}" -u "${JENKINS_ADMIN_USER}:${JENKINS_ADMIN_PASSWORD}" \
+    "${jenkins}/crumbIssuer/api/json" \
+    | python3 -c 'import json, sys; d = json.load(sys.stdin); print(d["crumbRequestField"] + ":" + d["crumb"])')"
+  curl -fsS -o /dev/null -b "${cookies}" -u "${JENKINS_ADMIN_USER}:${JENKINS_ADMIN_PASSWORD}" \
+    -H "${crumb}" -X POST "${jenkins}/configuration-as-code/reload"
 }
 
 main() {
@@ -37,27 +35,12 @@ main() {
   private_key="$(cat)"
   [[ "${private_key}" == *"PRIVATE KEY"* ]] || die "Expected a private key on stdin"
 
-  local jenkins="http://localhost:${JENKINS_PORT}" store crumb
-  store="${jenkins}/credentials/store/system/domain/_"
-  cookies="$(mktemp)"
-  trap 'rm -f "${cookies}"' EXIT
-  crumb="$(curl -fsS -c "${cookies}" -u "${JENKINS_ADMIN_USER}:${JENKINS_ADMIN_PASSWORD}" \
-    "${jenkins}/crumbIssuer/api/json" \
-    | python3 -c 'import json, sys; d = json.load(sys.stdin); print(d["crumbRequestField"] + ":" + d["crumb"])')"
+  install -d -m 700 -o "${JENKINS_UID}" -g "${JENKINS_UID}" "${SECRETS_DIR}"
+  (umask 077; printf '%s\n' "${private_key}" > "${SECRETS_DIR}/${credential_id}")
+  chown "${JENKINS_UID}:${JENKINS_UID}" "${SECRETS_DIR}/${credential_id}"
+  chmod 400 "${SECRETS_DIR}/${credential_id}"
 
-  local target
-  if curl -fsS -o /dev/null -u "${JENKINS_ADMIN_USER}:${JENKINS_ADMIN_PASSWORD}" \
-    "${store}/credential/${credential_id}/api/json" 2>/dev/null; then
-    target="${store}/credential/${credential_id}/config.xml"
-    info "Updating Jenkins credential ${credential_id}"
-  else
-    target="${store}/createCredentials"
-    info "Creating Jenkins credential ${credential_id}"
-  fi
-
-  credential_xml "${credential_id}" "${env_name}" "${private_key}" \
-    | curl -fsS -o /dev/null -b "${cookies}" -u "${JENKINS_ADMIN_USER}:${JENKINS_ADMIN_PASSWORD}" \
-      -H "${crumb}" -H "Content-Type: application/xml" -X POST --data-binary @- "${target}"
+  reload_casc
   info "Jenkins credential ${credential_id} is ready"
 }
 

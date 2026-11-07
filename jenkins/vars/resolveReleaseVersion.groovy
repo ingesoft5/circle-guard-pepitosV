@@ -5,8 +5,8 @@
  *
  *   def version = resolveReleaseVersion()
  *
- * Hasta la HU-15 el tag se crea a mano (git tag v1.0.0 && git push origin v1.0.0);
- * después lo creará el paso de versionado automático antes de publicar.
+ * calculateVersion la usa para que re-ejecutar el build de un commit ya etiquetado
+ * devuelva la misma versión en lugar de calcular una nueva.
  */
 def call(Map config = [:]) {
     String credentialsId = config.credentialsId ?: 'github-pat'
@@ -21,20 +21,6 @@ def call(Map config = [:]) {
         returnStdout: true
     ).trim()
 
-    List<String> versions = []
-    for (String tag : (tags ? tags.split('\\s+') : [])) {
-        String candidate = tag.substring(1)
-        if (candidate ==~ /\d+\.\d+\.\d+/) {
-            versions.add(candidate)
-        }
-    }
-    if (versions.isEmpty()) {
-        return null
-    }
-
     // Si un commit tiene varios tags de release, se usa el mayor.
-    return versions.max { String v ->
-        List<Integer> parts = v.tokenize('.').collect { it as int }
-        parts[0] * 1000000 + parts[1] * 1000 + parts[2]
-    }
+    return semver.highest(semver.fromTags(tags))
 }

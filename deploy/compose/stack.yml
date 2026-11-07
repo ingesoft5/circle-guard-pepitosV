@@ -148,6 +148,7 @@ services:
       VAULT_SECRET: ${VAULT_SECRET:?}
       VAULT_SALT: ${VAULT_SALT:?}
       VAULT_HASHSALT: ${VAULT_HASH_SALT:?}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:8081,http://localhost:8080}
       JWT_SECRET: ${JWT_SECRET:?}
     healthcheck:
       <<: *spring-healthcheck
@@ -172,6 +173,7 @@ services:
       SPRING_LDAP_URLS: ldap://openldap:389
       SPRING_LDAP_PASSWORD: ${LDAP_ADMIN_PASSWORD:?}
       IDENTITY_URL: http://identity:8083
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:8081,http://localhost:8080}
       JWT_SECRET: ${JWT_SECRET:?}
       QR_SECRET: ${QR_SECRET:?}
     healthcheck:
@@ -202,6 +204,7 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:?}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:8081,http://localhost:8080}
       JWT_SECRET: ${JWT_SECRET:?}
     healthcheck:
       <<: *spring-healthcheck

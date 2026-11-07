@@ -126,6 +126,7 @@ La primera ejecución genera `infra/compose/ci/.env` con contraseñas aleatorias
 | Nexus (Jenkins, push) | `ci-publisher` | `NEXUS_CI_PASSWORD` en `infra/compose/ci/.env`; en Jenkins como credencial `nexus-ci` |
 | Nexus (ambientes, solo pull) | `deploy-puller` | `NEXUS_PULL_PASSWORD` en `infra/compose/ci/.env`; se pasa a `bootstrap-env.sh` |
 | GitHub | `<usuario>` | `GITHUB_USER` y `GITHUB_TOKEN` en `infra/compose/ci/.env` |
+| Ambientes (SSH) | `deploy` | Una llave por ambiente en `infra/compose/ci/secrets/`, en Jenkins como `deploy-ssh-<ambiente>`; se carga con `load-deploy-credential.sh` |
 
 El job multibranch y el webhook de GitHub se documentan en [docs/operaciones/jenkins-pipeline.md](../../../docs/operaciones/jenkins-pipeline.md).
 

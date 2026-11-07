@@ -1,0 +1,13 @@
+# Code owners (HU-21). GitHub requests their review on every pull request that touches
+# these paths. Roles and approval rules: docs/release-notes/politica-cambios.md
+#
+# Pipeline, deployment and infrastructure decide what reaches production, so they are
+# owned by the production approvers. Any other path needs the usual review from one
+# teammate. When an approver changes, update this file and the policy together.
+
+/Jenkinsfile                               @DavidRamirez206 @Jo-Ssua
+/jenkins/                                  @DavidRamirez206 @Jo-Ssua
+/deploy/                                   @DavidRamirez206 @Jo-Ssua
+/infra/                                    @DavidRamirez206 @Jo-Ssua
+/.github/                                  @DavidRamirez206 @Jo-Ssua
+/docs/release-notes/politica-cambios.md    @DavidRamirez206 @Jo-Ssua

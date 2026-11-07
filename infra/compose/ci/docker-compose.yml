@@ -21,6 +21,9 @@ services:
       GITHUB_REPO: ${GITHUB_REPO:-circle-guard-pepitosV}
       GITHUB_USER: ${GITHUB_USER}
       GITHUB_TOKEN: ${GITHUB_TOKEN}
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      E2E_USERNAME: ${E2E_USERNAME:-}
+      E2E_PASSWORD: ${E2E_PASSWORD:-}
       NEXUS_REGISTRY: ${NEXUS_REGISTRY:-localhost:5000}
       IMAGE_NAMESPACE: ${IMAGE_NAMESPACE:-circleguard}
       DEPLOY_HOST_DEV: ${DEPLOY_HOST_DEV:-}
@@ -35,6 +38,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./jenkins/casc.yaml:/var/jenkins_home/casc.yaml:ro
       - ./jenkins/plugins.txt:/usr/share/jenkins/ref/plugins.txt:ro
+      - ./secrets:/run/secrets/deploy:ro
     networks:
       - ci
     healthcheck:
