@@ -28,7 +28,8 @@ Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`), 
 | `Jenkinsfile` | Detección de cambios, ejecución selectiva y publicación. |
 | `jenkins/vars/detectChangedServices.groovy` | Calcula servicios y web client modificados. |
 | `jenkins/vars/gradleBuild.groovy` | Paso reutilizable de compilación Gradle. |
-| `jenkins/vars/runTests.groovy` | Paso reutilizable de pruebas y publicación JUnit opcional. |
+| `jenkins/vars/runTests.groovy` | Paso reutilizable de pruebas, cobertura JaCoCo y publicación JUnit opcional. |
+| `jenkins/vars/publishCoverage.groovy` | Publica la cobertura JaCoCo de cada servicio en Jenkins. |
 | `jenkins/vars/dockerBuild.groovy` | Construye imágenes sin publicarlas. |
 | `jenkins/vars/dockerPublish.groovy` | Construye y publica imágenes semver en Nexus. |
 | `jenkins/vars/resolveReleaseVersion.groovy` | Lee el tag de release de `HEAD`. |
@@ -103,7 +104,9 @@ Test <servicio>    -> runTests(publish: false)
 Package <servicio> -> dockerBuild
 ```
 
-Los resultados JUnit se publican una sola vez al final. El web client se empaqueta después de los servicios si aplica.
+`runTests` también genera el reporte JaCoCo y verifica la cobertura mínima: auth, identity, promotion, form y gateway deben tener al menos 60 % de cobertura de líneas, o la etapa `Test <servicio>` falla. Las clases `*Application` y el código que genera Lombok no cuentan en la cobertura.
+
+Los resultados JUnit se publican una sola vez al final, y `publishCoverage` publica la cobertura de cada servicio seleccionado como un resultado independiente. El web client se empaqueta después de los servicios si aplica.
 
 En `main` con tag de release, `Publish images` sigue publicando los 8 servicios y el web client con la versión semver. La ejecución selectiva aplica a los builds de PR y ramas; no reduce la publicación de un release.
 
