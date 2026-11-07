@@ -9,6 +9,14 @@ plugins {
 // Spring Boot 3.2.4 manages an older Testcontainers that Docker 29 rejects (API 1.32).
 extra["testcontainers.version"] = "1.21.4"
 
+// Form's compiled classes and runtime libraries, not the Spring Boot executable jar.
+val formRuntimeClasspath = project(":services:circleguard-form-service")
+    .extensions
+    .getByType(SourceSetContainer::class.java)
+    .named("main")
+    .get()
+    .runtimeClasspath
+
 dependencies {
     implementation(platform("org.springframework.boot:spring-boot-dependencies:3.2.4"))
     testImplementation(platform("org.springframework.boot:spring-boot-dependencies:3.2.4"))
@@ -33,6 +41,8 @@ dependencies {
     testImplementation("org.testcontainers:junit-jupiter:1.21.4")
     testImplementation("org.testcontainers:postgresql:1.21.4")
     testImplementation("org.testcontainers:neo4j:1.21.4")
+    "integrationTestImplementation"(formRuntimeClasspath)
+    "integrationTestImplementation"("org.testcontainers:kafka:1.21.4")
 }
 
 // The benchmark asserts a response time, so its result depends on the machine running it.

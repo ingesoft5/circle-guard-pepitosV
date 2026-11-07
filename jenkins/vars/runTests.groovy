@@ -1,14 +1,18 @@
 def call(Map config = [:]) {
     def service = config.service
-    def coverage = config.coverage == null ? true : config.coverage
-    def tasks = ['test']
+    def integration = config.integration == true
+    // Integration tests bring up containers and are not part of the coverage gate.
+    def coverage = config.coverage == null ? !integration : config.coverage
+    def tasks = [integration ? 'integrationTest' : 'test']
     if (coverage) {
         // jacocoTestReport writes the XML that publishCoverage reads; the
         // verification fails the build when a gated service is below 60 %.
         tasks += ['jacocoTestReport', 'jacocoTestCoverageVerification']
     }
     def targets = tasks.collect { service ? ":services:${service}:${it}" : it }
-    def testResults = config.testResults ?: '**/build/test-results/test/*.xml'
+    def testResults = config.testResults ?: (integration
+        ? '**/build/test-results/integrationTest/*.xml'
+        : '**/build/test-results/test/*.xml')
     def publish = config.publish == null ? true : config.publish
 
     try {

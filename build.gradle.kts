@@ -56,6 +56,26 @@ subprojects {
         useJUnitPlatform()
     }
 
+    // HU-19: integration tests use Testcontainers and stay out of the unit-test task.
+    val sourceSets = the<SourceSetContainer>()
+    val integrationTestSourceSet = sourceSets.create("integrationTest")
+    integrationTestSourceSet.compileClasspath += sourceSets["main"].output
+    integrationTestSourceSet.runtimeClasspath += sourceSets["main"].output
+    configurations.named("integrationTestImplementation") {
+        extendsFrom(configurations.named("testImplementation").get())
+    }
+    configurations.named("integrationTestRuntimeOnly") {
+        extendsFrom(configurations.named("testRuntimeOnly").get())
+    }
+    tasks.register<Test>("integrationTest") {
+        description = "Runs Testcontainers integration tests."
+        group = "verification"
+        testClassesDirs = integrationTestSourceSet.output.classesDirs
+        classpath = integrationTestSourceSet.runtimeClasspath
+        shouldRunAfter(tasks.named("test"))
+        timeout.set(java.time.Duration.ofMinutes(25))
+    }
+
     // ---- Coverage
     apply(plugin = "jacoco")
     extensions.configure<JacocoPluginExtension> {
@@ -100,4 +120,10 @@ subprojects {
     tasks.named("check") {
         dependsOn("jacocoTestCoverageVerification")
     }
+}
+
+tasks.register("integrationTest") {
+    group = "verification"
+    description = "Runs Testcontainers integration tests in every service."
+    dependsOn(subprojects.map { it.tasks.named("integrationTest") })
 }

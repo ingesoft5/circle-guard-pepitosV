@@ -109,6 +109,8 @@ Package <servicio> -> dockerBuild
 
 Los resultados JUnit se publican una sola vez al final, y `publishCoverage` publica la cobertura de cada servicio seleccionado como un resultado independiente. El web client se empaqueta después de los servicios si aplica.
 
+Después, la etapa `Integration tests` (HU-19, CGR-42) ejecuta `./gradlew integrationTest` cuando el build toca auth, form, promotion o gateway, o cuando el cambio obliga a procesar todos los servicios. Esa tarea es distinta de `test`: levanta Kafka, Neo4j, OpenLDAP, PostgreSQL y Redis con Testcontainers y publica sus reportes JUnit. No cuenta para el mínimo de cobertura.
+
 En `main` con tag de release, `Publish images` sigue publicando los 8 servicios y el web client con la versión semver. La ejecución selectiva aplica a los builds de PR y ramas; no reduce la publicación de un release.
 
 ## Notificaciones de Discord (HU-16)

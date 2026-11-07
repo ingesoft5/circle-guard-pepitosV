@@ -16,4 +16,5 @@ dependencies {
     runtimeOnly("io.jsonwebtoken:jjwt-impl:0.11.5")
     runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.11.5")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    "integrationTestImplementation"("org.testcontainers:junit-jupiter:1.21.4")
 }
