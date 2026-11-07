@@ -6,6 +6,9 @@ plugins {
     kotlin("plugin.jpa")
 }
 
+// Spring Boot 3.2.4 manages an older Testcontainers that Docker 29 rejects (API 1.32).
+extra["testcontainers.version"] = "1.21.4"
+
 dependencies {
     implementation(platform("org.springframework.boot:spring-boot-dependencies:3.2.4"))
     testImplementation(platform("org.springframework.boot:spring-boot-dependencies:3.2.4"))
