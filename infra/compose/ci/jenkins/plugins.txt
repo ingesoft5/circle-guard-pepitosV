@@ -13,3 +13,4 @@ ws-cleanup
 ssh-agent
 junit
 coverage
+matrix-auth

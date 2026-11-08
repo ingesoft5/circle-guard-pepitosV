@@ -6,11 +6,31 @@ jenkins:
     local:
       allowsSignup: false
       users:
+        # Administrator and the only prod approver (input submitter, HU-21).
         - id: "${JENKINS_ADMIN_ID}"
           password: "${JENKINS_ADMIN_PASSWORD}"
+        # Non-admin account: runs, cancels and inspects builds, cannot approve prod.
+        - id: "${JENKINS_DEV_ID}"
+          password: "${JENKINS_DEV_PASSWORD}"
+  # Jenkins lets any administrator answer an input, so only the admin account
+  # gets Overall/Administer; every other account is a regular user.
   authorizationStrategy:
-    loggedInUsersCanDoAnything:
-      allowAnonymousRead: false
+    globalMatrix:
+      entries:
+        - user:
+            name: "${JENKINS_ADMIN_ID}"
+            permissions:
+              - "Overall/Administer"
+        - group:
+            name: "authenticated"
+            permissions:
+              - "Overall/Read"
+              - "Job/Build"
+              - "Job/Cancel"
+              - "Job/Read"
+              - "Job/Workspace"
+              - "Run/Replay"
+              - "View/Read"
   globalNodeProperties:
     - envVars:
         env:
