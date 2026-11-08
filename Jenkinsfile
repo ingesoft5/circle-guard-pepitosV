@@ -372,6 +372,7 @@ pipeline {
                         env.PROD_APPROVER = input(
                             message: "Deploy v${releaseVersion} to prod",
                             ok: 'Deploy to prod',
+                            // Only the admin account approves prod (docs/release-notes/politica-cambios.md)
                             submitter: 'admin',
                             submitterParameter: 'APPROVER'
                         )

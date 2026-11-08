@@ -51,6 +51,8 @@ La plantilla es [infra/compose/ci/.env.example](../../infra/compose/ci/.env.exam
 |:---|:---|:---|
 | `JENKINS_ADMIN_USER` | `admin` | Fijo |
 | `JENKINS_ADMIN_PASSWORD` | `admin` | `__GENERATE__` |
+| `JENKINS_DEV_USER` | `dev` | Fijo. Usuario sin permisos de administrador (HU-21) |
+| `JENKINS_DEV_PASSWORD` | `dev` | `__GENERATE__` |
 | `GITHUB_OWNER` | | `ingesoft5` |
 | `GITHUB_REPO` | | `circle-guard-pepitosV` |
 | `GITHUB_USER` | cuenta de GitHub | `__SET_ME__` |
@@ -304,7 +306,7 @@ En `main`, si los commits desde el último tag incluyen `feat`, `fix`, `perf` o 
 7. Si las E2E pasan, despliega la misma versión en `stage` (`Deploy to stage`).
 8. Se detiene en `Approve production`; al aprobar, despliega en `prod` (`Deploy to prod`).
 
-El job `circleguard-rollback` sigue disponible para redesplegar una versión ya publicada en cualquiera de los tres ambientes: **Build with Parameters**, `ENVIRONMENT` en `dev`, `stage` o `prod`, y `VERSION` con o sin `v` (`0.1.0` o `v0.1.0`). En `prod` el job se detiene en **Approve production** hasta que alguien confirma. Mientras CGR-124 no cree los usuarios de Jenkins de HU-21, el `input` del pipeline se limita temporalmente a `admin`.
+El job `circleguard-rollback` sigue disponible para redesplegar una versión ya publicada en cualquiera de los tres ambientes: **Build with Parameters**, `ENVIRONMENT` en `dev`, `stage` o `prod`, y `VERSION` con o sin `v` (`0.1.0` o `v0.1.0`). En `prod` el job se detiene en **Approve production** hasta que alguien confirma. Solo el usuario `admin` puede confirmar, como en el `input` del pipeline (ver [política de cambios](../release-notes/politica-cambios.md)).
 
 El despliegue copia `deploy/compose` al host sin tocar su `.env` y ejecuta `deploy/compose/deploy.sh`. Ese script descarga las imágenes primero: si el registro no tiene la versión, el ambiente no cambia. Después espera a que los servicios queden `healthy` y prueba el cliente web en el puerto `HTTP_PORT`.
 
