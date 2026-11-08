@@ -51,6 +51,11 @@ credentials:
               id: "discord-webhook"
               secret: "${DISCORD_WEBHOOK_URL}"
               description: "Discord webhook for CircleGuard CI notifications"
+          - string:
+              scope: GLOBAL
+              id: "sonar-token"
+              secret: "${SONAR_TOKEN}"
+              description: "SonarQube analysis token"
           - usernamePassword:
               scope: GLOBAL
               id: "e2e-user"
@@ -94,6 +99,13 @@ unclassified:
         credentialsId: "github-pat"
         manageHooks: true
         clientCacheSize: 20
+
+  sonarGlobalConfiguration:
+    buildWrapperEnabled: true
+    installations:
+      - name: "SonarQube"
+        serverUrl: "http://sonarqube:9000"
+        credentialsId: "sonar-token"
   globalLibraries:
     libraries:
       - name: "circleguard-shared-library"
