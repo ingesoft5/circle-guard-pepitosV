@@ -60,7 +60,7 @@ El resto del repositorio sigue la regla general: lo aprueba otro integrante.
 
 ## Aplicación en el pipeline
 
-El paso `input` de la etapa de producción restringe la aprobación con `submitter` a los usuarios de Jenkins de la tabla de aprobadores. Jenkins registra quién aprobó y en qué ejecución, lo que queda como evidencia junto con el pull request.
+El paso `input` de la etapa de producción restringe la aprobación con `submitter` a los usuarios de Jenkins de la tabla de aprobadores. Mientras CGR-124 no cree esos usuarios en Jenkins, el `submitter` se limita temporalmente a `admin`. Jenkins registra quién aprobó y en qué ejecución, lo que queda como evidencia junto con el pull request.
 
 ## Emergencias
 

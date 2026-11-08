@@ -2,7 +2,7 @@
 
 ## Alcance
 
-Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`), la HU-15 (`CGR-38`), la HU-16 (`CGR-39`) y la etapa E2E de la HU-20 (`CGR-43`): job multibranch, webhook de GitHub, etapas del `Jenkinsfile`, check obligatorio en `dev` y `main`, Shared Library reutilizable en `jenkins/vars/`, ejecución selectiva por servicio, versionado semántico automático, notificaciones de Discord y pruebas E2E.
+Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`), la HU-15 (`CGR-38`), la HU-16 (`CGR-39`), la etapa E2E de la HU-20 (`CGR-43`) y la promoción a stage y prod de la HU-14 (`CGR-37`): job multibranch, webhook de GitHub, etapas del `Jenkinsfile`, check obligatorio en `dev` y `main`, Shared Library reutilizable en `jenkins/vars/`, ejecución selectiva por servicio, versionado semántico automático, notificaciones de Discord, pruebas E2E y aprobación manual de producción.
 
 ## Cómo funciona
 
@@ -15,6 +15,8 @@ Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`), 
 - `Publish images` publica las imágenes de los 8 servicios y del web client con esa versión, y después `Tag release` crea y publica el tag `vX.Y.Z` en GitHub con `pushReleaseTag`. El orden garantiza que un tag en GitHub siempre tiene sus imágenes.
 - En `main`, después de `Deploy to dev`, `Release notes` (HU-22) crea el GitHub Release con las notas generadas por `releaseNotes` y abre o actualiza el PR `chore(release): update changelog for vX.Y.Z` hacia `dev` con el `CHANGELOG.md` regenerado. No hace push directo porque `main` y `dev` están protegidas. Va antes de las E2E: el tag y las imágenes ya existen, así que el release queda documentado aunque fallen las pruebas.
 - Después, la etapa `E2E tests on dev` corre las pruebas de Playwright contra dev y publica sus resultados (HU-20).
+- Si las E2E pasan, `Deploy to stage` despliega la misma versión en `stage`; si fallan, el pipeline se detiene y la versión no se promueve.
+- `Approve production` detiene el pipeline en un `input` de 15 minutos. Mientras CGR-124 no cree los usuarios de Jenkins de HU-21, el `submitter` se limita temporalmente a `admin`. Al aprobar, `Deploy to prod` despliega la misma versión en `prod`; si se rechaza o expira, prod no cambia.
 - Cuando un build falla o queda inestable, `notifyDiscord` envía un mensaje al canal de Discord con rama, servicio, etapa, autor y enlace al build. Si el build siguiente se recupera, envía un mensaje de recuperación.
 - La librería se carga desde `jenkins/vars/` usando `libraryPath: "jenkins"`, en la versión de la misma rama que se está construyendo.
 - Jenkins publica el resultado como estado de commit en GitHub. Para builds de PR el contexto es `continuous-integration/jenkins/pr-merge`.
@@ -182,6 +184,16 @@ E2E_PASSWORD=<contraseña-del-usuario-de-prueba>
 2. Re-ejecutar `sudo ./infra/bootstrap/bootstrap-jenkins.sh`.
 
 Sin esta credencial la etapa falla con `Set E2E_USERNAME`.
+
+## Promoción a stage y prod (HU-14)
+
+`Deploy to stage` corre después de `E2E tests on dev` y usa el mismo `releaseVersion` que `Deploy to dev`. Si las E2E fallan, la etapa no se ejecuta. Si el despliegue a stage falla, el pipeline se detiene y no llega a producción.
+
+`Approve production` es un `input` de 15 minutos. Mientras CGR-124 no cree los usuarios de Jenkins de HU-21, el `submitter` se limita temporalmente a `admin`. Al aprobar, `Deploy to prod` despliega la misma versión en `prod`; si se rechaza o expira, prod no cambia.
+
+El despliegue reutiliza `deployCompose`, `deploy/compose` y `deploy.sh`; no hay pasos nuevos de despliegue. El smoke test y la espera de servicios `healthy` siguen dentro de `deploy.sh`.
+
+Jenkins tiene un solo ejecutor: mientras el `input` espera aprobación, los demás builds quedan en cola. El timeout global del pipeline sigue en 60 minutos y el `input` tiene un límite de 15.
 
 ## Rollback (HU-17)
 
