@@ -18,7 +18,7 @@ Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`), 
 - En `main`, después de `Deploy to dev`, `Release notes` (HU-22) crea el GitHub Release con las notas generadas por `releaseNotes` y abre o actualiza el PR `chore(release): update changelog for vX.Y.Z` hacia `dev` con el `CHANGELOG.md` regenerado. No hace push directo porque `main` y `dev` están protegidas. Va antes de las E2E: el tag y las imágenes ya existen, así que el release queda documentado aunque fallen las pruebas.
 - Después, la etapa `E2E tests on dev` corre las pruebas de Playwright contra dev y publica sus resultados (HU-20).
 - Si las E2E pasan, `Deploy to stage` despliega la misma versión en `stage`; si fallan, el pipeline se detiene y la versión no se promueve.
-- `Approve production` detiene el pipeline en un `input` de 15 minutos. Mientras CGR-124 no cree los usuarios de Jenkins de HU-21, el `submitter` se limita temporalmente a `admin`. Al aprobar, `Deploy to prod` despliega la misma versión en `prod`; si se rechaza o expira, prod no cambia.
+- `Approve production` detiene el pipeline en un `input` de 15 minutos. Solo el usuario `admin` puede aprobarlo (`submitter: 'admin'`, HU-21); el usuario `dev` no puede. Ver la [política de cambios](../release-notes/politica-cambios.md). Al aprobar, `Deploy to prod` despliega la misma versión en `prod`; si se rechaza o expira, prod no cambia.
 - Cuando un build falla o queda inestable, `notifyDiscord` envía un mensaje al canal de Discord con rama, servicio, etapa, autor y enlace al build. Si el build siguiente se recupera, envía un mensaje de recuperación.
 - La librería se carga desde `jenkins/vars/` usando `libraryPath: "jenkins"`, en la versión de la misma rama que se está construyendo.
 - Jenkins publica el resultado como estado de commit en GitHub. Para builds de PR el contexto es `continuous-integration/jenkins/pr-merge`.
@@ -163,7 +163,7 @@ Sin esta credencial la etapa falla con `Set E2E_USERNAME`.
 
 `Deploy to stage` corre después de `E2E tests on dev` y usa el mismo `releaseVersion` que `Deploy to dev`. Si las E2E fallan, la etapa no se ejecuta. Si el despliegue a stage falla, el pipeline se detiene y no llega a producción.
 
-`Approve production` es un `input` de 15 minutos. Mientras CGR-124 no cree los usuarios de Jenkins de HU-21, el `submitter` se limita temporalmente a `admin`. Al aprobar, `Deploy to prod` despliega la misma versión en `prod`; si se rechaza o expira, prod no cambia.
+`Approve production` es un `input` de 15 minutos. Solo el usuario `admin` puede aprobarlo (`submitter: 'admin'`, HU-21); el usuario `dev` no puede. Ver la [política de cambios](../release-notes/politica-cambios.md). Al aprobar, `Deploy to prod` despliega la misma versión en `prod`; si se rechaza o expira, prod no cambia.
 
 El despliegue reutiliza `deployCompose`, `deploy/compose` y `deploy.sh`; no hay pasos nuevos de despliegue. El smoke test y la espera de servicios `healthy` siguen dentro de `deploy.sh`.
 
@@ -252,8 +252,8 @@ En la regla de cada rama:
 
 1. Mantener `Require a pull request before merging` con 1 aprobación.
 2. Mantener el check existente `commitlint`.
-3. Agregar `continuous-integration/jenkins/pr-merge` en `Require status checks to pass before merging`.
-4. Marcar el check como obligatorio y guardar.
+3. Agregar `continuous-integration/jenkins/pr-merge` y `unit-tests` en `Require status checks to pass before merging`.
+4. Marcar los checks como obligatorios y guardar.
 5. Hacer que el job multibranch reporte al menos una vez para que GitHub muestre el contexto.
 
 ### 5. Aplicar la Shared Library
