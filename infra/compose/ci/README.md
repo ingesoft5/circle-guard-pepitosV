@@ -109,8 +109,8 @@ sudo ./infra/bootstrap/bootstrap-all.sh
 
 `bootstrap-all.sh` ejecuta en orden:
 
-1. `bootstrap-jenkins.sh`: instala y levanta Jenkins, aplica JCasC e instala los plugins declarados.
-2. `bootstrap-sonarqube.sh`: levanta SonarQube con PostgreSQL, cambia la contraseña inicial, genera el token de análisis y asegura el quality gate `CircleGuard Gate`.
+1. `bootstrap-sonarqube.sh`: levanta SonarQube con PostgreSQL, cambia la contraseña inicial, genera el token de análisis, asegura el quality gate `CircleGuard Gate` y registra el webhook `Jenkins` hacia `http://jenkins:8080/sonarqube-webhook/`.
+2. `bootstrap-jenkins.sh`: instala y levanta Jenkins, exporta `SONAR_TOKEN`, aplica JCasC e instala los plugins declarados.
 3. `bootstrap-nexus.sh`: levanta Nexus, cambia la contraseña inicial, crea los repositorios `docker-hosted` (con `writePolicy: allow_once`, un tag publicado no se sobrescribe) y `raw-hosted`, activa el realm `Docker Bearer Token` y crea los usuarios del registro.
 
 La primera ejecución genera `infra/compose/ci/.env` con contraseñas aleatorias. El archivo queda con permisos `600` y está excluido del repositorio.
@@ -128,7 +128,9 @@ La primera ejecución genera `infra/compose/ci/.env` con contraseñas aleatorias
 | GitHub | `<usuario>` | `GITHUB_USER` y `GITHUB_TOKEN` en `infra/compose/ci/.env` |
 | Ambientes (SSH) | `deploy` | Una llave por ambiente en `infra/compose/ci/secrets/`, en Jenkins como `deploy-ssh-<ambiente>`; se carga con `load-deploy-credential.sh` |
 
-El job multibranch y el webhook de GitHub se documentan en [docs/operaciones/jenkins-pipeline.md](../../../docs/operaciones/jenkins-pipeline.md).
+La credencial `sonar-token` se declara por JCasC a partir de `SONAR_TOKEN`; el servidor `SonarQube` apunta a `http://sonarqube:9000`.
+
+El job multibranch, el webhook de GitHub y la etapa de Sonar se documentan en [docs/operaciones/jenkins-pipeline.md](../../../docs/operaciones/jenkins-pipeline.md).
 
 ## Operación
 
