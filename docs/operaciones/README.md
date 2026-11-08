@@ -129,6 +129,65 @@ Jenkins, SonarQube, Nexus y el registro solo aceptan tráfico desde `ADMIN_CIDR`
 
 Si se repite el alta en otra cuenta, las IP de esta tabla no sirven. Las nuevas salen de los scripts y de `hosts.sh status`.
 
+## Accesos para la evaluación
+
+> CircleGuard es un proyecto universitario. Las credenciales de esta sección se publican a propósito para que el docente pueda revisar el entorno. En la entrega el repositorio queda **privado**: solo se hizo público mientras había pull requests, porque los rulesets de GitHub del plan gratuito solo aplican en repositorios públicos.
+
+### 1. Consola de AWS
+
+| Dato | Valor |
+|:---|:---|
+| URL | https://028658486093.signin.aws.amazon.com/console |
+| Usuario IAM | `circleguard-johan` |
+| Contraseña | `zI-0{g@%` |
+| Región | `us-east-1` (Norte de Virginia) |
+
+En la consola, ir a **EC2 → Instances** y filtrar por `circleguard`. Son cuatro máquinas: `circleguard-ci`, `circleguard-dev`, `circleguard-stage` y `circleguard-prod`. Si están apagadas, seleccionarlas y usar **Instance state → Start**. La IP pública de cada una aparece en la columna *Public IPv4 address*. La de CI es fija (Elastic IP) y las de los ambientes cambian al encenderlas.
+
+### 2. Habilitar la IP propia
+
+Jenkins, SonarQube, Nexus, el SSH y las APIs solo responden a las IP autorizadas. Antes de entrar hay que agregar la IP pública propia, de una de estas dos formas:
+
+**Opción A: con el script del repositorio** (requiere la AWS CLI configurada con llaves de acceso de la cuenta):
+
+```bash
+git clone https://github.com/ingesoft5/circle-guard-pepitosV.git
+cd circle-guard-pepitosV
+infra/cloud/aws/hosts.sh allow          # detecta la IP pública y la agrega a los Security Groups
+infra/cloud/aws/hosts.sh status         # estado e IP de cada máquina
+```
+
+**Opción B: desde la consola de AWS:**
+
+1. Ir a **EC2 → Security Groups**.
+2. Abrir `circleguard-ci-sg` → **Edit inbound rules** → **Add rule** para cada puerto de CI de la tabla de la sección 3 (`22`, `8080`, `9000`, `8081` y `5000`), con *Source* en **My IP**.
+3. Repetir en `circleguard-dev-sg`, `circleguard-stage-sg` y `circleguard-prod-sg` para `22`, `8180` y `8082-8088`, si se quieren las APIs directas. La aplicación (puerto `80`) ya está abierta a todos.
+4. **Save rules**.
+
+### 3. Puertos
+
+| Máquina | Puerto | Servicio |
+|:---|:---|:---|
+| CI | `8080` | Jenkins |
+| CI | `9000` | SonarQube |
+| CI | `8081` | Nexus (interfaz web) |
+| CI | `5000` | Registro Docker de Nexus |
+| CI y ambientes | `22` | SSH |
+| dev, stage y prod | `80` | Aplicación (cliente web, que enruta `/svc/<servicio>/` a cada servicio) |
+| dev, stage y prod | `8180` | API directa de auth |
+| dev, stage y prod | `8082`–`8088` | APIs directas de notification, identity, dashboard, file, form, gateway y promotion |
+
+### 4. Usuarios, contraseñas y permisos
+
+| Herramienta | URL | Usuario | Contraseña | Permisos |
+|:---|:---|:---|:---|:---|
+| Jenkins | `http://<IP de CI>:8080` | `admin` | `admin123` | Administrador. Es el único que aprueba el despliegue a `prod` (paso `input` del pipeline y del rollback) |
+| Jenkins | `http://<IP de CI>:8080` | `dev` | `dev12345` | Lanza, cancela y revisa builds, incluido el rollback. No administra Jenkins ni aprueba `prod` |
+| SonarQube | `http://<IP de CI>:9000` | `admin` | `admin123` | Administrador |
+| Nexus | `http://<IP de CI>:8081` | `admin` | `admin123` | Administrador |
+
+Nexus tiene además dos usuarios técnicos con contraseña generada en el `.env` del host de CI: `ci-publisher`, que Jenkins usa para publicar imágenes, y `deploy-puller`, de solo lectura, que usan los ambientes para descargarlas.
+
 ## Reproducción desde cero
 
 Trabajar desde la raíz del clon. `<clave>.pem` es la llave del key pair, y no se copia al repositorio.
