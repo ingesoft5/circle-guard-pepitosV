@@ -2,6 +2,8 @@
 
 **Absolute Privacy. High-Speed Containment. Secure Campus.**
 
+To provision Jenkins, SonarQube, the Nexus registry and the three environments from an empty cloud account, and to deploy or roll back, follow [docs/operaciones/README.md](docs/operaciones/README.md).
+
 CircleGuard is a state-of-the-art university contact tracing and fencing system designed to identify interconnected contact groups ("Circles") and apply rapid health fences while preserving individual anonymity.
 
 ---
