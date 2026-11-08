@@ -40,7 +40,7 @@ Para publicar una versión estable, se abre un pull request de `dev` hacia `main
 |:---|:---|
 | Pull request obligatorio | Sí, se rechaza el push directo |
 | Aprobaciones requeridas | 1 |
-| Checks obligatorios | `commitlint` |
+| Checks obligatorios | `commitlint`, `unit-tests` y `continuous-integration/jenkins/pr-merge` |
 | Aplica a administradores | Sí |
 | Force push y borrado de la rama | Bloqueados |
 

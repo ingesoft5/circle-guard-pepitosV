@@ -2,6 +2,8 @@
 
 **Absolute Privacy. High-Speed Containment. Secure Campus.**
 
+To provision Jenkins, SonarQube, the Nexus registry and the three environments from an empty cloud account, and to deploy or roll back, follow [docs/operaciones/README.md](docs/operaciones/README.md).
+
 CircleGuard is a state-of-the-art university contact tracing and fencing system designed to identify interconnected contact groups ("Circles") and apply rapid health fences while preserving individual anonymity.
 
 ---
@@ -54,7 +56,7 @@ CircleGuard follows a **Microservice Architecture** built on a **Hybrid Data Mod
 
 | Layer | Technology | Rationale |
 |:---|:---|:---|
-| **Backend** | Spring Boot 4 / Java 21 | Enterprise-grade maturity & low-latency Jakarta EE support. |
+| **Backend** | Spring Boot 3.2 / Java 21 | Enterprise-grade maturity & low-latency Jakarta EE support. |
 | **Graph DB** | Neo4j 5.26 | High-performance recursive traversals unreachable with SQL. |
 | **Relational DB**| PostgreSQL 16 | ACID compliant storage for identity and configuration. |
 | **Message Bus** | Apache Kafka 7.6 | Persistent, audit-trailed event log for status dispatches. |

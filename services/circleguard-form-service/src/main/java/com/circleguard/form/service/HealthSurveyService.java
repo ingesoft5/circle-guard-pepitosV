@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -43,12 +44,11 @@ public class HealthSurveyService {
         
         HealthSurvey saved = repository.save(survey);
         
-        // Emit Event for Promotion Service
-        Map<String, Object> event = Map.of(
-            "anonymousId", saved.getAnonymousId(),
-            "hasSymptoms", hasSymptoms,
-            "timestamp", System.currentTimeMillis()
-        );
+        // HashMap, not Map.of: the Kafka type header must be a class the consumer can construct.
+        Map<String, Object> event = new HashMap<>();
+        event.put("anonymousId", saved.getAnonymousId());
+        event.put("hasSymptoms", hasSymptoms);
+        event.put("timestamp", System.currentTimeMillis());
         kafkaTemplate.send(TOPIC_SURVEY_SUBMITTED, saved.getAnonymousId().toString(), event);
         
         return saved;
@@ -69,12 +69,11 @@ public class HealthSurveyService {
 
         // Emit event so promotion-service can restore access if approved
         if (status == ValidationStatus.APPROVED) {
-            Map<String, Object> event = Map.of(
-                "anonymousId", survey.getAnonymousId(),
-                "status", "APPROVED",
-                "adminId", adminId,
-                "timestamp", System.currentTimeMillis()
-            );
+            Map<String, Object> event = new HashMap<>();
+            event.put("anonymousId", survey.getAnonymousId());
+            event.put("status", "APPROVED");
+            event.put("adminId", adminId);
+            event.put("timestamp", System.currentTimeMillis());
             kafkaTemplate.send(TOPIC_CERTIFICATE_VALIDATED, survey.getAnonymousId().toString(), event);
         }
     }

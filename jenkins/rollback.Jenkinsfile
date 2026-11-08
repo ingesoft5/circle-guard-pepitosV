@@ -102,7 +102,9 @@ pipeline {
         stage('Approve production') {
             when { expression { params.ENVIRONMENT == 'prod' } }
             steps {
-                input message: "Roll back prod from ${currentVersion} to ${targetVersion}?", ok: 'Roll back'
+                // Only the admin account approves prod (docs/release-notes/politica-cambios.md)
+                input message: "Roll back prod from ${currentVersion} to ${targetVersion}?", ok: 'Roll back',
+                        submitter: 'admin'
             }
         }
 

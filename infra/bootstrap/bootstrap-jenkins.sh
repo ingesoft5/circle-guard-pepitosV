@@ -34,15 +34,18 @@ main() {
 
   ensure_env_file "${CI_ENV_EXAMPLE}" "${CI_ENV_FILE}"
   ensure_registry_env_keys "${CI_ENV_FILE}"
+  ensure_jenkins_user_env_keys "${CI_ENV_FILE}"
   load_env "${CI_ENV_FILE}"
 
   export CI_PROJECT CI_NETWORK
   export JENKINS_PORT JENKINS_ADMIN_USER JENKINS_ADMIN_PASSWORD
+  export JENKINS_DEV_USER JENKINS_DEV_PASSWORD
   export GITHUB_OWNER GITHUB_REPO GITHUB_USER GITHUB_TOKEN
   export DISCORD_WEBHOOK_URL
   export NEXUS_REGISTRY IMAGE_NAMESPACE NEXUS_CI_USER NEXUS_CI_PASSWORD
   DOCKER_GID="$(stat -c '%g' /var/run/docker.sock 2>/dev/null || echo 0)"
   export DOCKER_GID
+  export SONAR_TOKEN
   # Saved in .env so a direct "docker compose up" also keeps Jenkins' access to Docker.
   set_env_value "${CI_ENV_FILE}" DOCKER_GID "${DOCKER_GID}"
 
@@ -52,6 +55,10 @@ main() {
 
   if [[ "${DISCORD_WEBHOOK_URL:-}" == "" || "${DISCORD_WEBHOOK_URL}" == "__SET_ME__" ]]; then
     warn "DISCORD_WEBHOOK_URL no está configurado; las notificaciones de Discord no se enviarán"
+  fi
+
+  if [[ -z "${SONAR_TOKEN:-}" ]]; then
+    warn "SONAR_TOKEN no está configurado; el análisis de SonarQube fallará"
   fi
 
   info "Aprovisionando Jenkins en el proyecto ${CI_PROJECT}"

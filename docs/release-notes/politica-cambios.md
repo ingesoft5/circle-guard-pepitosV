@@ -60,7 +60,15 @@ El resto del repositorio sigue la regla general: lo aprueba otro integrante.
 
 ## Aplicación en el pipeline
 
-El paso `input` de la etapa de producción restringe la aprobación con `submitter` a los usuarios de Jenkins de la tabla de aprobadores. Jenkins registra quién aprobó y en qué ejecución, lo que queda como evidencia junto con el pull request.
+El paso `input` de la etapa de producción, y el del job de rollback en `prod`, restringe la aprobación con `submitter: 'admin'`. Jenkins registra quién aprobó y en qué ejecución, lo que queda como evidencia junto con el pull request.
+
+| Usuario de Jenkins | Permisos | Aprueba `prod` |
+|:---|:---|:---|
+| `admin` | Administrador | Sí. Lo usan los aprobadores de producción de la tabla anterior |
+| `dev` | Lanza, cancela y revisa builds, incluido el rollback | No. Jenkins rechaza su respuesta al `input` |
+
+- Jenkins deja que cualquier administrador responda un `input`, sin importar el `submitter`. Por eso `admin` es la única cuenta con permisos de administrador.
+- Los usuarios se declaran en `infra/compose/ci/jenkins/casc.yaml` y sus contraseñas en el `.env` del host de CI, nunca en el repositorio.
 
 ## Emergencias
 

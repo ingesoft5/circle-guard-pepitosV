@@ -19,3 +19,8 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 USER jenkins
+
+# Plugins baked into the image, so casc.yaml can use a newly added plugin on the
+# first start. bootstrap-jenkins.sh still runs jenkins-plugin-cli to update them.
+COPY plugins.txt /usr/share/jenkins/ref/plugins.txt
+RUN jenkins-plugin-cli --plugin-file /usr/share/jenkins/ref/plugins.txt

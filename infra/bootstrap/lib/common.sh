@@ -300,6 +300,13 @@ ensure_registry_env_keys() {
   ensure_env_key "${file}" NEXUS_PULL_PASSWORD __GENERATE__
 }
 
+# Non-admin Jenkins account (HU-21), also added to .env files created before it.
+ensure_jenkins_user_env_keys() {
+  local file="$1"
+  ensure_env_key "${file}" JENKINS_DEV_USER dev
+  ensure_env_key "${file}" JENKINS_DEV_PASSWORD __GENERATE__
+}
+
 http_matches() {
   local body
   body="$(curl -fsS --max-time 10 "$1")" || return 1
