@@ -284,6 +284,53 @@ pipeline {
                 }
             }
         }
+
+
+        stage('Deploy to stage'){
+            when {
+                allOf {
+                    branch 'main'
+                    expression {releaseVersion != null}
+                }
+            }
+            steps {
+                deployCompose(environment: 'stage' , version: releaseVersion)
+            }
+        }
+
+        stage('Approve production') {
+            when {
+                allOf {
+                    branch 'main'
+                    expression { releaseVersion != null}
+                }
+            }
+            steps {
+                timeout(time : 15, unit: 'MINUTES') {
+                    script {
+                        env.PROD_APPROVER = input(
+                            message: "Deploy v${releaseVersion} to prod",
+                            ok: 'Deploy to prod',
+                            submitter: 'admin',
+                            submitterParameter: 'APPROVER'
+                        )
+                        echo "Production deployment approved by ${env.PROD_APPROVER}"
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to prod') {
+            when {
+                allOf {
+                    branch 'main'
+                    expression { releaseVersion != null}
+                }
+            }
+            steps{
+                deployCompose(environment: 'prod', version: releaseVersion)
+            }
+        }
     }
 
     post {
