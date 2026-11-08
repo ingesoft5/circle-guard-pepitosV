@@ -12,6 +12,8 @@ readonly CI_ENV_EXAMPLE="${CI_DIR}/.env.example"
 readonly CI_ENV_FILE="${CI_DIR}/.env"
 readonly GATE_NAME="CircleGuard Gate"
 readonly TOKEN_NAME="circleguard-ci"
+readonly WEBHOOK_NAME="Jenkins"
+readonly JENKINS_WEBHOOK_URL="http://jenkins:8080/sonarqube-webhook/"
 
 sonar_url() {
   printf 'http://localhost:%s' "${SONAR_PORT}"
@@ -122,6 +124,39 @@ ensure_quality_gate() {
   info "Quality gate '${GATE_NAME}' asegurado como predeterminado"
 }
 
+json_webhook_id() {
+  python3 -c '
+import json, sys
+
+name = sys.argv[1]
+data = json.load(sys.stdin)
+print(next((w["id"] for w in data.get("webhooks", []) if w.get("name") == name), ""))
+' "$1"
+}
+
+ensure_webhook() {
+  local webhooks_json webhook_id
+
+  webhooks_json="$(curl -fsS -u "admin:${SONAR_ADMIN_PASSWORD}" \
+    "$(sonar_url)/api/webhooks/list")"
+  webhook_id="$(printf '%s' "${webhooks_json}" | json_webhook_id "${WEBHOOK_NAME}")"
+
+  if [[ -z "${webhook_id}" ]]; then
+    sonar_api POST "$(sonar_url)/api/webhooks/create" \
+      --data-urlencode "name=${WEBHOOK_NAME}" \
+      --data-urlencode "url=${JENKINS_WEBHOOK_URL}"
+    info "Webhook ${WEBHOOK_NAME} -> ${JENKINS_WEBHOOK_URL} creado"
+  elif [[ "${webhooks_json}" != *"\"url\":\"${JENKINS_WEBHOOK_URL}\""* ]]; then
+    sonar_api POST "$(sonar_url)/api/webhooks/update" \
+      --data-urlencode "webhook=${webhook_id}" \
+      --data-urlencode "name=${WEBHOOK_NAME}" \
+      --data-urlencode "url=${JENKINS_WEBHOOK_URL}"
+    info "Webhook ${WEBHOOK_NAME} actualizado"
+  else
+    info "Webhook ${WEBHOOK_NAME} ya está configurado"
+  fi
+}
+
 main() {
   acquire_lock /tmp/circleguard-ci-sonarqube.lock
   require_cmd curl python3
@@ -146,6 +181,7 @@ main() {
   ensure_admin_password
   ensure_token
   ensure_quality_gate
+  ensure_webhook
 
   info "SonarQube listo en $(sonar_url) (usuario: admin)"
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Orquestador idempotente del stack CI de CircleGuard:
-# Jenkins -> SonarQube -> Nexus, con verificación final de endpoints.
+# SonarQube -> Jenkins -> Nexus, con verificación final de endpoints.
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -29,8 +29,8 @@ main() {
   export JENKINS_PORT SONAR_PORT NEXUS_PORT
 
   info "Iniciando bootstrap del stack CI (${CI_PROJECT})"
-  bash "${SCRIPT_DIR}/bootstrap-jenkins.sh"
   bash "${SCRIPT_DIR}/bootstrap-sonarqube.sh"
+  bash "${SCRIPT_DIR}/bootstrap-jenkins.sh"
   bash "${SCRIPT_DIR}/bootstrap-nexus.sh"
 
   info "Verificando endpoints del stack CI"

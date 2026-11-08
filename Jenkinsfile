@@ -71,7 +71,7 @@ pipeline {
             }
         }
 
-        stage('Build, test and package') {
+        stage('Build and test') {
             steps {
                 script {
                     int maxParallel = (env.MAX_PARALLEL_SERVICES ?: '3') as int
@@ -105,10 +105,6 @@ pipeline {
                                     stage(currentStage) {
                                         runTests(service: service, publish: false)
                                     }
-                                    currentStage = "Package ${service}"
-                                    stage(currentStage) {
-                                        dockerBuild(service: service)
-                                    }
                                 } catch (Exception e) {
                                     if (!failedService) {
                                         failedService = service
@@ -118,6 +114,73 @@ pipeline {
                                 }
                             }
                         }
+                        parallel branches
+                    }
+
+                }
+            }
+        }
+
+        stage('Sonar analysis and quality gate') {
+            when {
+                expression { !changed.services.isEmpty() }
+            }
+            steps {
+                script {
+                    for (String service : changed.services) {
+                        def currentStage = "Sonar ${service}"
+                        try {
+                            stage(currentStage) {
+                                sonarScan(service: service)
+                            }
+
+                            currentStage = "Quality gate ${service}"
+                            stage(currentStage) {
+                                timeout(time: 10, unit: 'MINUTES') {
+                                    waitForQualityGate abortPipeline: true
+                                }
+                            }
+                        } catch (Exception e) {
+                            failedService = service
+                            failedStage = currentStage
+                            throw e
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Package images') {
+            steps {
+                script {
+                    int maxParallel = (env.MAX_PARALLEL_SERVICES ?: '3') as int
+                    if (maxParallel < 1) {
+                        maxParallel = 1
+                    }
+
+                    def services = changed.services
+                    for (int i = 0; i < services.size(); i += maxParallel) {
+                        int end = Math.min(i + maxParallel, services.size())
+                        def batch = []
+                        for (int j = i; j < end; j++) {
+                            batch.add(services[j])
+                        }
+
+                        def branches = [:]
+                        batch.each { service ->
+                            branches[service] = {
+                                try {
+                                    stage("Package ${service}") {
+                                        dockerBuild(service: service)
+                                    }
+                                } catch (Exception e) {
+                                    failedService = service
+                                    failedStage = "Package ${service}"
+                                    throw e
+                                }
+                            }
+                        }
+
                         parallel branches
                     }
 
@@ -131,10 +194,8 @@ pipeline {
                                 )
                             }
                         } catch (Exception e) {
-                            if (!failedService) {
-                                failedService = 'web-client'
-                                failedStage = 'Package web client'
-                            }
+                            failedService = 'web-client'
+                            failedStage = 'Package web client'
                             throw e
                         }
                     }
@@ -282,6 +343,53 @@ pipeline {
                         failedStage = failedStage ?: 'E2E tests on dev'
                     }
                 }
+            }
+        }
+
+
+        stage('Deploy to stage'){
+            when {
+                allOf {
+                    branch 'main'
+                    expression {releaseVersion != null}
+                }
+            }
+            steps {
+                deployCompose(environment: 'stage' , version: releaseVersion)
+            }
+        }
+
+        stage('Approve production') {
+            when {
+                allOf {
+                    branch 'main'
+                    expression { releaseVersion != null}
+                }
+            }
+            steps {
+                timeout(time : 15, unit: 'MINUTES') {
+                    script {
+                        env.PROD_APPROVER = input(
+                            message: "Deploy v${releaseVersion} to prod",
+                            ok: 'Deploy to prod',
+                            submitter: 'admin',
+                            submitterParameter: 'APPROVER'
+                        )
+                        echo "Production deployment approved by ${env.PROD_APPROVER}"
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to prod') {
+            when {
+                allOf {
+                    branch 'main'
+                    expression { releaseVersion != null}
+                }
+            }
+            steps{
+                deployCompose(environment: 'prod', version: releaseVersion)
             }
         }
     }

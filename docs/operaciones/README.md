@@ -301,8 +301,10 @@ En `main`, si los commits desde el último tag incluyen `feat`, `fix`, `perf` o 
 4. Despliega esa versión en `dev` (`Deploy to dev`).
 5. Publica las release notes y abre el PR del changelog.
 6. Corre las pruebas E2E contra `dev`.
+7. Si las E2E pasan, despliega la misma versión en `stage` (`Deploy to stage`).
+8. Se detiene en `Approve production`; al aprobar, despliega en `prod` (`Deploy to prod`).
 
-`stage` y `prod` no tienen etapa propia en el `Jenkinsfile`. Para colocar una versión ya publicada en cualquiera de los tres ambientes se usa el job `circleguard-rollback`: **Build with Parameters**, `ENVIRONMENT` en `dev`, `stage` o `prod`, y `VERSION` con o sin `v` (`0.1.0` o `v0.1.0`). En `prod` el job se detiene en **Approve production** hasta que alguien confirma.
+El job `circleguard-rollback` sigue disponible para redesplegar una versión ya publicada en cualquiera de los tres ambientes: **Build with Parameters**, `ENVIRONMENT` en `dev`, `stage` o `prod`, y `VERSION` con o sin `v` (`0.1.0` o `v0.1.0`). En `prod` el job se detiene en **Approve production** hasta que alguien confirma. Mientras CGR-124 no cree los usuarios de Jenkins de HU-21, el `input` del pipeline se limita temporalmente a `admin`.
 
 El despliegue copia `deploy/compose` al host sin tocar su `.env` y ejecuta `deploy/compose/deploy.sh`. Ese script descarga las imágenes primero: si el registro no tiene la versión, el ambiente no cambia. Después espera a que los servicios queden `healthy` y prueba el cliente web en el puerto `HTTP_PORT`.
 
@@ -313,7 +315,7 @@ cd /opt/circleguard/deploy/compose
 ./deploy.sh dev 1.4.0
 ```
 
-`1.4.0` tiene que existir en el registro. La política de cambios describe además una promoción automática a `stage` después de las E2E y un `input` de producción. Ese recorrido todavía no está en el `Jenkinsfile`: hoy `main` solo despliega en `dev`, y `stage` o `prod` se alcanzan con el job anterior.
+`1.4.0` tiene que existir en el registro. La promoción automática a `stage` después de las E2E y el `input` de producción ya están en el `Jenkinsfile`; `Deploy to dev` sigue siendo el primer despliegue de cada versión y `stage` y `prod` reciben el mismo tag.
 
 ## Rollback
 
