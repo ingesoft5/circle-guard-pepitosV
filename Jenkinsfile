@@ -142,6 +142,33 @@ pipeline {
             }
         }
 
+        stage('Integration tests') {
+            when {
+                expression {
+                    changed.all || changed.services.any { service ->
+                        service == 'circleguard-auth-service' ||
+                            service == 'circleguard-form-service' ||
+                            service == 'circleguard-promotion-service' ||
+                            service == 'circleguard-gateway-service'
+                    }
+                }
+            }
+            steps {
+                script {
+                    def currentStage = 'Integration tests'
+                    try {
+                        runTests(integration: true, coverage: false, publish: true)
+                    } catch (Exception e) {
+                        if (!failedService) {
+                            failedService = 'integration-tests'
+                            failedStage = currentStage
+                        }
+                        throw e
+                    }
+                }
+            }
+        }
+
         stage('Release version') {
             when {
                 branch 'main'

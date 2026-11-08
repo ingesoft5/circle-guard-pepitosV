@@ -101,12 +101,14 @@ Ejecuta las pruebas y, por defecto, genera el reporte de cobertura JaCoCo, verif
 | `service` | No | Todos | Nombre del módulo que se quiere probar. |
 | `testResults` | No | `**/build/test-results/test/*.xml` | Patrón de los reportes JUnit. |
 | `publish` | No | `true` | Si es `false`, no publica JUnit; útil cuando se publica una sola vez tras ejecutar servicios en paralelo. |
-| `coverage` | No | `true` | Si es `true`, también ejecuta `jacocoTestReport` y `jacocoTestCoverageVerification`. La verificación falla si auth, identity, promotion, form o gateway quedan por debajo del 60 % de cobertura de líneas. |
+| `coverage` | No | `true` en unitarias, `false` si `integration` es `true` | Si es `true`, también ejecuta `jacocoTestReport` y `jacocoTestCoverageVerification`. La verificación falla si auth, identity, promotion, form o gateway quedan por debajo del 60 % de cobertura de líneas. |
+| `integration` | No | `false` | Si es `true`, ejecuta la tarea `integrationTest` (Testcontainers) y publica `build/test-results/integrationTest/*.xml`. No entra en la cobertura. |
 
 ```groovy
 runTests()
 runTests(service: 'circleguard-form-service')
 runTests(service: 'circleguard-form-service', publish: false)
+runTests(integration: true, coverage: false)
 ```
 
 ### `publishCoverage`

@@ -5,6 +5,9 @@ plugins {
     kotlin("plugin.spring")
 }
 
+// Spring Boot 3.2.4 manages an older Testcontainers that Docker 29 rejects (API 1.32).
+extra["testcontainers.version"] = "1.21.4"
+
 dependencies {
     implementation(platform("org.springframework.boot:spring-boot-dependencies:3.2.4"))
     testImplementation(platform("org.springframework.boot:spring-boot-dependencies:3.2.4"))
@@ -16,4 +19,5 @@ dependencies {
     runtimeOnly("io.jsonwebtoken:jjwt-impl:0.11.5")
     runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.11.5")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    "integrationTestImplementation"("org.testcontainers:junit-jupiter:1.21.4")
 }
