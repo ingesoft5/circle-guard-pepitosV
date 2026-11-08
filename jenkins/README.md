@@ -125,17 +125,20 @@ publishCoverage(services: ['circleguard-auth-service', 'circleguard-form-service
 
 ### `sonarScan`
 
-Ejecuta el análisis de SonarQube dentro de `withSonarQubeEnv`. La etapa se activa en la HU-12, cuando el plugin de Sonar en Gradle, el servidor de Jenkins y el quality gate estén configurados.
+Ejecuta el análisis de SonarQube de un servicio dentro de `withSonarQubeEnv`. El `Jenkinsfile` lo usa en la etapa `Sonar analysis and quality gate`, seguida de `waitForQualityGate abortPipeline: true`.
 
 | Parámetro | Obligatorio | Valor por defecto | Descripción |
 |:---|:---|:---|:---|
+| `service` | No | Ninguno; ejecuta `sonar` en la raíz | Módulo que se analiza, por ejemplo `circleguard-form-service`. |
 | `server` | No | `SonarQube` | Nombre del servidor configurado en Jenkins. |
-| `projectKey` | No | `env.JOB_NAME` | Clave del proyecto en SonarQube. |
-| `projectName` | No | `projectKey` | Nombre visible del proyecto. |
+| `projectKey` | No | No se pasa; `build.gradle.kts` define `circleguard-<servicio>` | Clave del proyecto en SonarQube. |
+| `projectName` | No | No se pasa; `build.gradle.kts` define `CircleGuard <servicio>` | Nombre visible del proyecto. |
 | `extraArgs` | No | Vacío | Argumentos adicionales para Gradle o Sonar. |
 
+La clave y el nombre de cada proyecto se definen en `build.gradle.kts` como `circleguard-<servicio>` y `CircleGuard <servicio>`. El paso no los pasa salvo que se indiquen explícitamente.
+
 ```groovy
-sonarScan(projectKey: 'circleguard', projectName: 'CircleGuard')
+sonarScan(service: 'circleguard-form-service')
 ```
 
 ### `resolveReleaseVersion`

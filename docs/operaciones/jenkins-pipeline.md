@@ -2,14 +2,16 @@
 
 ## Alcance
 
-Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`), la HU-15 (`CGR-38`), la HU-16 (`CGR-39`), la etapa E2E de la HU-20 (`CGR-43`) y la promoción a stage y prod de la HU-14 (`CGR-37`): job multibranch, webhook de GitHub, etapas del `Jenkinsfile`, check obligatorio en `dev` y `main`, Shared Library reutilizable en `jenkins/vars/`, ejecución selectiva por servicio, versionado semántico automático, notificaciones de Discord, pruebas E2E y aprobación manual de producción.
+
+Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`), la HU-12 (`CGR-35`),la HU-15 (`CGR-38`), la HU-16 (`CGR-39`), la etapa E2E de la HU-20 (`CGR-43`) y la promoción a stage y prod de la HU-14 (`CGR-37`): job multibranch, webhook de GitHub, etapas del `Jenkinsfile`, check obligatorio en `dev` y `main`, Shared Library reutilizable en `jenkins/vars/`, ejecución selectiva por servicio, versionado semántico automático, notificaciones de Discord, pruebas E2E y aprobación manual de producción.
 
 ## Cómo funciona
 
 - `infra/compose/ci/jenkins/casc.yaml` declara por JCasC el job multibranch `circleguard`, la credencial `github-pat`, la integración con GitHub y la Global Pipeline Library.
 - GitHub Branch Source escanea las ramas y los pull requests del repositorio y crea un build por rama o PR.
 - El `Jenkinsfile` de la raíz importa la Shared Library con `@Library` y usa `detectChangedServices` para calcular qué servicios y si el web client deben procesarse.
-- Cada servicio seleccionado se compila, prueba y empaqueta con `gradleBuild`, `runTests` y `dockerBuild` dentro de un `parallel` dinámico, en lotes de 3.
+- Cada servicio seleccionado se compila y prueba con `gradleBuild` y `runTests` dentro de un `parallel` dinámico, en lotes de 3. Después de la etapa de Sonar, los servicios se empaquetan con `dockerBuild`.
+- En cada servicio seleccionado, `Sonar analysis and quality gate` ejecuta `sonarScan` y luego `waitForQualityGate abortPipeline: true` con un timeout de 10 minutos. Si el gate falla, el pipeline no llega a `Package images`.
 - El web client se empaqueta solo si cambió `mobile/` o si se ejecuta con `BUILD_ALL=true`.
 - En `main`, `Release version` calcula la versión con `calculateVersion` a partir de los Conventional Commits desde el último tag (sin tags: `1.0.0`). Si no hay commits `feat`, `fix`, `perf` ni incompatibles, no hay release y las etapas siguientes se omiten.
 - `Publish images` publica las imágenes de los 8 servicios y del web client con esa versión, y después `Tag release` crea y publica el tag `vX.Y.Z` en GitHub con `pushReleaseTag`. El orden garantiza que un tag en GitHub siempre tiene sus imágenes.
@@ -41,15 +43,16 @@ Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`), 
 | `jenkins/vars/releaseNotes.groovy` | Genera las release notes y el `CHANGELOG.md` desde los commits y PR. |
 | `jenkins/vars/publishGithubRelease.groovy` | Crea o actualiza el GitHub Release de cada versión. |
 | `jenkins/vars/openChangelogPr.groovy` | Abre o actualiza el PR del `CHANGELOG.md` hacia `dev`. |
-| `jenkins/vars/sonarScan.groovy` | Paso reutilizable de análisis SonarQube para HU-12. |
+| `jenkins/vars/sonarScan.groovy` | Paso reutilizable de análisis SonarQube por servicio (HU-12). |
 | `jenkins/vars/notifyDiscord.groovy` | Notificaciones de fallo, inestabilidad y recuperación en Discord. |
 | `jenkins/rollback.Jenkinsfile` | Job `circleguard-rollback`: redespliega una versión publicada (HU-17). |
 | `jenkins/README.md` | Contrato y ejemplos de uso de la librería. |
 | `infra/compose/ci/jenkins/plugins.txt` | Plugins de multibranch, GitHub y Job DSL. |
-| `infra/compose/ci/jenkins/casc.yaml` | Credencial, servidor GitHub, job multibranch y Global Pipeline Library. |
-| `infra/compose/ci/docker-compose.yml` | Variables de GitHub y acceso a Docker. |
-| `infra/compose/ci/.env.example` | Plantilla de las variables de GitHub. |
-| `infra/bootstrap/bootstrap-jenkins.sh` | Exporta las variables y el GID del socket de Docker. |
+| `infra/compose/ci/jenkins/casc.yaml` | Credenciales, servidor GitHub, servidor SonarQube, job multibranch y Global Pipeline Library. |
+| `infra/compose/ci/docker-compose.yml` | Variables de GitHub, SonarQube y acceso a Docker. |
+| `infra/compose/ci/.env.example` | Plantilla de las variables de GitHub, SonarQube y Nexus. |
+| `infra/bootstrap/bootstrap-sonarqube.sh` | Levanta SonarQube, genera el token y asegura el quality gate y el webhook. |
+| `infra/bootstrap/bootstrap-jenkins.sh` | Exporta las variables, incluido `SONAR_TOKEN`, y el GID del socket de Docker. |
 | `tests/e2e-playwright/` | Pruebas E2E con Playwright, su imagen y el script que las corre en un contenedor. |
 
 ## Shared Library
@@ -115,56 +118,27 @@ Después, la etapa `Integration tests` (HU-19, CGR-42) ejecuta `./gradlew integr
 
 En `main` con tag de release, `Publish images` sigue publicando los 8 servicios y el web client con la versión semver. La ejecución selectiva aplica a los builds de PR y ramas; no reduce la publicación de un release.
 
+## Análisis SonarQube y quality gate (HU-12)
+
+La etapa `Sonar analysis and quality gate` se ejecuta después de `Build and test` y antes de `Package images`. Para cada servicio seleccionado, `sonarScan` corre `:services:<servicio>:sonar` con la credencial `sonar-token` y el servidor `SonarQube` declarados por JCasC. Después, `waitForQualityGate abortPipeline: true` espera el resultado con un timeout de 10 minutos. Si el gate falla, no se publican imágenes.
+
+Cada servicio tiene su propio proyecto (`circleguard-<servicio>`) y `build.gradle.kts` envía a SonarQube los reportes JUnit y el XML de JaCoCo. El gate `CircleGuard Gate` se crea y se marca como predeterminado desde `bootstrap-sonarqube.sh`, que también registra el webhook `Jenkins` hacia `http://jenkins:8080/sonarqube-webhook/`.
+
 ## Notificaciones de Discord (HU-16)
 
-### 1. Crear el webhook
+La integración con Discord se apoya en un webhook del canal de alertas. La URL del webhook se guarda en `DISCORD_WEBHOOK_URL` dentro de `infra/compose/ci/.env` y no se versiona. JCasC la convierte en la credencial `discord-webhook` de tipo Secret text, de modo que Jenkins la enmascara en los logs y la recrea en cada bootstrap; la credencial no se administra a mano en la interfaz.
 
-En Discord:
+`infra/compose/ci/jenkins/casc.yaml` declara esa credencial y `bootstrap-jenkins.sh` exporta la variable antes de aplicar JCasC. Si la variable no está definida o conserva el valor de plantilla, el bootstrap advierte que las notificaciones no se enviarán.
 
-1. Abrir el canal de alertas, por ejemplo `#circle-guard-ci`.
-2. **Editar canal → Integraciones → Webhooks → Nuevo webhook**.
-3. Copiar la Webhook URL.
-
-### 2. Configurar la credencial por JCasC
-
-JCasC administra las credenciales y elimina las que no están declaradas. No crees `discord-webhook` a mano: se recrea en cada bootstrap a partir del `.env` del host.
-
-1. Agregar la Webhook URL al `.env` del host:
-
-```bash
-DISCORD_WEBHOOK_URL=<webhook-real>
-```
-
-2. `infra/compose/ci/jenkins/casc.yaml` declara la credencial `string` con ID `discord-webhook`.
-3. Re-ejecutar `sudo ./infra/bootstrap/bootstrap-jenkins.sh`.
-
-La URL no se versiona: vive en el `.env` del host y en la credencial de Jenkins. Jenkins la enmascara en los logs.
-
-### 3. Comportamiento
-
-`notifyDiscord` se llama desde el `post` del `Jenkinsfile`:
+`notifyDiscord` se invoca desde el bloque `post` del `Jenkinsfile` y su comportamiento es:
 
 - `failure`: mensaje `Pipeline FAILED`.
 - `unstable`: mensaje `Pipeline UNSTABLE`.
 - `success` después de un build `FAILURE` o `UNSTABLE` en el mismo job: mensaje `Pipeline RECOVERED`.
 
-El mensaje incluye:
+El mensaje incluye rama o PR, servicio afectado, etapa fallida, autor del último commit y enlace al build. Si Discord no responde, el pipeline no falla por la notificación.
 
-- Rama o PR.
-- Servicio afectado.
-- Etapa fallida.
-- Autor del último commit.
-- Enlace al build.
-
-Si Discord no responde, el pipeline no falla por la notificación.
-
-### 4. Probar
-
-1. Probar la Webhook URL con `curl` desde un equipo autorizado.
-2. Crear una rama o PR temporal con un fallo controlado en un servicio.
-3. Verificar que llega `Pipeline FAILED` con el servicio y la etapa correctos.
-4. Corregir el fallo y verificar `Pipeline RECOVERED`.
-5. Guardar capturas y enlaces de los builds como evidencia.
+La evidencia de funcionamiento se obtiene de builds controlados: un fallo en un servicio produce `Pipeline FAILED` con el servicio y la etapa correctos, y la corrección posterior produce `Pipeline RECOVERED`. Las capturas y los enlaces de esos builds se conservan como evidencia.
 
 ## Pruebas E2E (HU-20)
 

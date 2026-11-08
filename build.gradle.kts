@@ -1,6 +1,7 @@
 plugins {
     id("org.springframework.boot") version "3.2.4" apply false
     id("io.spring.dependency-management") version "1.1.4" apply false
+    id("org.sonarqube") version "5.1.0.4882" apply false
     kotlin("jvm") version "1.9.24" apply false
     kotlin("plugin.spring") version "1.9.24" apply false
     kotlin("plugin.jpa") version "1.9.24" apply false
@@ -119,6 +120,36 @@ subprojects {
 
     tasks.named("check") {
         dependsOn("jacocoTestCoverageVerification")
+    }
+
+    if (name.startsWith("circleguard-")) {
+        apply(plugin = "org.sonarqube")
+
+        extensions.configure<org.sonarqube.gradle.SonarExtension> {
+            properties {
+                val service = name.removePrefix("circleguard-").removeSuffix("-service")
+
+                property("sonar.projectKey", "circleguard-$service")
+                property("sonar.projectName", "CircleGuard $service")
+                property("sonar.sourceEncoding", "UTF-8")
+                property("sonar.sources", "src/main")
+                property("sonar.tests", "src/test")
+                property(
+                    "sonar.junit.reportPaths",
+                    layout.buildDirectory.dir("test-results/test").get().asFile.absolutePath
+                )
+                property(
+                    "sonar.coverage.jacoco.xmlReportPaths",
+                    layout.buildDirectory.file("reports/jacoco/test/jacocoTestReport.xml")
+                        .get().asFile.absolutePath
+                )
+                property("sonar.coverage.exclusions", "**/*Application*")
+            }
+        }
+
+        tasks.named("sonar") {
+            dependsOn("test", "jacocoTestReport")
+        }
     }
 }
 
