@@ -4,6 +4,18 @@ Todas las versiones de CircleGuard. Este archivo lo genera el pipeline de Jenkin
 los Conventional Commits (HU-22): no se edita a mano.
 Esquema de versiones: [docs/release-notes/etiquetado.md](docs/release-notes/etiquetado.md).
 
+## [0.4.0](https://github.com/ingesoft5/circle-guard-pepitosV/compare/v0.3.0...v0.4.0) (2026-11-08)
+
+### Features
+
+- **jenkins:** restrict production approval to the admin account ([#49](https://github.com/ingesoft5/circle-guard-pepitosV/pull/49)) ([b9286cb](https://github.com/ingesoft5/circle-guard-pepitosV/commit/b9286cbd725b43efab8c12b9a37d9e990dbeed3a))
+- **ci:** add sonar analysis and blocjing quality gate ([#48](https://github.com/ingesoft5/circle-guard-pepitosV/pull/48)) ([d853b91](https://github.com/ingesoft5/circle-guard-pepitosV/commit/d853b918ac9184eb766cd618536511a61b1b1bd9))
+
+### Fixes
+
+- **infra:** install Jenkins plugins when building the image ([#49](https://github.com/ingesoft5/circle-guard-pepitosV/pull/49)) ([da3237c](https://github.com/ingesoft5/circle-guard-pepitosV/commit/da3237cc960e8912e66258d210b39139fe54db18))
+- **tests:** pin Testcontainers so Docker 29 accepts the client ([#46](https://github.com/ingesoft5/circle-guard-pepitosV/pull/46)) ([1f36097](https://github.com/ingesoft5/circle-guard-pepitosV/commit/1f360978103d7feb768bc7526e98c722d9382190))
+
 ## [0.3.0](https://github.com/ingesoft5/circle-guard-pepitosV/compare/v0.2.0...v0.3.0) (2026-11-07)
 
 ### Features
