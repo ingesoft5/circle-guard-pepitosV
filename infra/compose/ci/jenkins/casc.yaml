@@ -176,6 +176,12 @@ jobs:
   - script: |
       pipelineJob('circleguard-rollback') {
         description('Redeploys a version already published in Nexus to dev, stage or prod (HU-17)')
+        // Same parameters as jenkins/rollback.Jenkinsfile, so a recreated job offers
+        // "Build with Parameters" before its first run.
+        parameters {
+          choiceParam('ENVIRONMENT', ['stage', 'dev', 'prod'], 'Environment to roll back')
+          stringParam('VERSION', '', 'Version already published in Nexus, e.g. 0.1.0 or v0.1.0')
+        }
         definition {
           cpsScm {
             scm {
