@@ -4,6 +4,24 @@
 
 To provision Jenkins, SonarQube, the Nexus registry and the three environments from an empty cloud account, and to deploy or roll back, follow [docs/operaciones/README.md](docs/operaciones/README.md).
 
+## Proyecto final: Ingeniería de Software V
+
+| Integrante |
+|:---|
+| Johan Suarez |
+| Jean Carlo Ocampo |
+| David Chicué Romero |
+| Ismael Barrionuevo |
+
+| Documento | Enlace |
+|:---|:---|
+| Informe de la Parte 1 (PDF) | [reporte_suarez_ocampo_chicue_barrionuevo.pdf](reporte_suarez_ocampo_chicue_barrionuevo.pdf) |
+| Bitácora de uso de IAG | [IAG_REGISTRO.md](IAG_REGISTRO.md) |
+| README operativo | [docs/operaciones/README.md](docs/operaciones/README.md) |
+| Sprints 0 y 1 | [docs/agil/sprints-0-y-1.md](docs/agil/sprints-0-y-1.md) |
+| Diagramas de arquitectura y del pipeline | [docs/arquitectura/](docs/arquitectura/) |
+| Tablero de Jira | <https://circleguard.atlassian.net> (proyecto `CGR`) |
+
 CircleGuard is a state-of-the-art university contact tracing and fencing system designed to identify interconnected contact groups ("Circles") and apply rapid health fences while preserving individual anonymity.
 
 ---
