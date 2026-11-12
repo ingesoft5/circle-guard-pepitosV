@@ -16,6 +16,7 @@ def SERVICES = [
 
 // Set by 'Release version' (HU-15) on main; publish, tag and deploy stages need it.
 def releaseVersion = null
+def prereleaseVersion = null
 
 def changed = [services: [], web: false, all: false, base: '']
 
@@ -57,11 +58,19 @@ pipeline {
             }
         }
 
+        stage('PR size policy') {
+            steps {
+                script {
+                    validatePrSize()
+                }
+            }
+        }
+
         stage('Detect changes') {
             steps {
                 script {
                     changed = detectChangedServices(
-                        buildAll: params.BUILD_ALL ?: false,
+                        buildAll: (params.BUILD_ALL ?: false) || ((env.BRANCH_NAME ?: '') ==~ /release\/.+/) || ((env.CHANGE_BRANCH ?: '') ==~ /release\/.+/),
                         services: SERVICES
                     )
                     echo "Base del diff: ${changed.base ?: 'sin base'}"
@@ -225,6 +234,36 @@ pipeline {
                             failedStage = currentStage
                         }
                         throw e
+                    }
+                }
+            }
+        }
+
+        stage('Publish prerelease images') {
+            when {
+                expression { (env.BRANCH_NAME == 'dev' && (!changed.services.isEmpty() || changed.web)) || (env.BRANCH_NAME ?: '') ==~ /release\/.+/ }
+            }
+            steps {
+                script {
+                    prereleaseVersion = resolvePrereleaseVersion()
+                    currentBuild.description = prereleaseVersion
+
+                    // SNAPSHOT publica solo los componentes afectados. Una rama release
+                    // publica el conjunto completo para validar un candidato reproducible.
+                    if (env.BRANCH_NAME == 'dev') {
+                        for (String service : changed.services) {
+                            dockerPublish(service: service, version: prereleaseVersion)
+                        }
+                        if (changed.web) {
+                            dockerPublish(image: 'web-client', dockerfile: 'mobile/Dockerfile',
+                                    context: 'mobile', version: prereleaseVersion)
+                        }
+                    } else {
+                        for (String service : SERVICES) {
+                            dockerPublish(service: service, version: prereleaseVersion)
+                        }
+                        dockerPublish(image: 'web-client', dockerfile: 'mobile/Dockerfile',
+                                context: 'mobile', version: prereleaseVersion)
                     }
                 }
             }

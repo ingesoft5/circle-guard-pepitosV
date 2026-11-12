@@ -3,7 +3,7 @@
 ## Alcance
 
 
-Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`), la HU-12 (`CGR-35`),la HU-15 (`CGR-38`), la HU-16 (`CGR-39`), la etapa E2E de la HU-20 (`CGR-43`) y la promoción a stage y prod de la HU-14 (`CGR-37`): job multibranch, webhook de GitHub, etapas del `Jenkinsfile`, check obligatorio en `dev` y `main`, Shared Library reutilizable en `jenkins/vars/`, ejecución selectiva por servicio, versionado semántico automático, notificaciones de Discord, pruebas E2E y aprobación manual de producción.
+Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`), la HU-12 (`CGR-35`),la HU-15 (`CGR-38`), la HU-16 (`CGR-39`), la etapa E2E de la HU-20 (`CGR-43`) y la promoción a stage y prod de la HU-14 (`CGR-37`): job multibranch, webhook de GitHub, etapas del `Jenkinsfile`, check obligatorio en `dev` y `main`, Shared Library reutilizable en `jenkins/vars/`, ejecución selectiva por servicio, política de tamaño de PR, versionado semántico y pre-releases automáticos, notificaciones de Discord, pruebas E2E y aprobación manual de producción.
 
 ## Cómo funciona
 
@@ -13,6 +13,8 @@ Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`), 
 - Cada servicio seleccionado se compila y prueba con `gradleBuild` y `runTests` dentro de un `parallel` dinámico, en lotes de 3. Después de la etapa de Sonar, los servicios se empaquetan con `dockerBuild`.
 - En cada servicio seleccionado, `Sonar analysis and quality gate` ejecuta `sonarScan` y luego `waitForQualityGate abortPipeline: true` con un timeout de 10 minutos. Si el gate falla, el pipeline no llega a `Package images`.
 - El web client se empaqueta solo si cambió `mobile/` o si se ejecuta con `BUILD_ALL=true`.
+- `PR size policy` valida los cambios de cada Pull Request antes de compilar: máximo predeterminado de 500 adiciones, 300 eliminaciones y 800 líneas modificadas; excluye Markdown, `docs/`, lockfiles, build output, generated output e imágenes/PDF. Los tres límites se configuran en el bloque `environment` del `Jenkinsfile`. Se omite solo para el PR de promoción `release/X.Y.Z` hacia `main`, porque esa rama ya pasó el pipeline completo de candidato.
+- En `dev`, `Publish prerelease images` publica los componentes afectados como `X.Y.Z-SNAPSHOT.BUILD.SHA`. En `release/X.Y.Z`, publica los 8 servicios y el cliente web como `X.Y.Z-rc.BUILD.SHA`. Los sufijos de build y SHA mantienen únicos los tags y compatibles con `allow_once` en Nexus.
 - En `main`, `Release version` calcula la versión con `calculateVersion` a partir de los Conventional Commits desde el último tag (sin tags: `1.0.0`). Si no hay commits `feat`, `fix`, `perf` ni incompatibles, no hay release y las etapas siguientes se omiten.
 - `Publish images` publica las imágenes de los 8 servicios y del web client con esa versión, y después `Tag release` crea y publica el tag `vX.Y.Z` en GitHub con `pushReleaseTag`. El orden garantiza que un tag en GitHub siempre tiene sus imágenes.
 - En `main`, después de `Deploy to dev`, `Release notes` (HU-22) crea el GitHub Release con las notas generadas por `releaseNotes` y abre o actualiza el PR `chore(release): update changelog for vX.Y.Z` hacia `dev` con el `CHANGELOG.md` regenerado. No hace push directo porque `main` y `dev` están protegidas. Va antes de las E2E: el tag y las imágenes ya existen, así que el release queda documentado aunque fallen las pruebas.
@@ -29,7 +31,9 @@ Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`), 
 
 | Archivo | Propósito |
 |:---|:---|
-| `Jenkinsfile` | Detección de cambios, ejecución selectiva y publicación. |
+| `Jenkinsfile` | Detección de cambios, validación del tamaño del PR, ejecución selectiva y publicación. |
+| `jenkins/vars/validatePrSize.groovy` | Bloquea PR que superan los límites de adiciones, eliminaciones o líneas totales. |
+| `jenkins/vars/resolvePrereleaseVersion.groovy` | Calcula versiones inmutables `SNAPSHOT` y `rc` para ramas `dev` y `release/X.Y.Z`. |
 | `jenkins/vars/detectChangedServices.groovy` | Calcula servicios y web client modificados. |
 | `jenkins/vars/gradleBuild.groovy` | Paso reutilizable de compilación Gradle. |
 | `jenkins/vars/runTests.groovy` | Paso reutilizable de pruebas, cobertura JaCoCo y publicación JUnit opcional. |

@@ -8,6 +8,10 @@ Cada cambio se registra en un pull request con la plantilla `.github/pull_reques
 
 Ambas piden descripción, categoría, riesgo, plan de pruebas y plan de rollback. Un pull request sin esos campos no se aprueba.
 
+## Tamaño de Pull Requests
+
+Todo PR hacia `dev` o `main` debe cumplir la validación automática de tamaño de `PR size policy`: máximo 700 líneas agregadas, 300 eliminadas y 1000 modificadas en total. Se excluyen Markdown, `docs/`, lockfiles, artefactos generados y archivos binarios comunes. Los límites se ajustan en el bloque `environment` del `Jenkinsfile`. Si el cambio supera los límites, debe dividirse en PRs más pequeños. La única excepción automática es el PR de promoción `release/X.Y.Z` hacia `main`, cuyo candidato ya pasó el pipeline completo en su rama.
+
 ## Tipos de cambio
 
 | Tipo | Cuándo aplica | Ejemplos |
