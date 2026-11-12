@@ -1,0 +1,173 @@
+name: release-request
+
+on:
+  pull_request:
+    types: [labeled, closed]
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: release-request-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  create-release-branch:
+    if: >-
+      github.event.label.name == 'release' &&
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.head.ref == 'dev' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Check out the exact dev commit from the release request
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Validate release base and calculate version
+        id: version
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --force --no-tags origin main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor origin/main "$SOURCE_SHA"; then
+            echo "The dev commit does not contain the current main history." >&2
+            echo "Merge main into dev before requesting a release." >&2
+            exit 1
+          fi
+          VERSION="$(node .github/scripts/resolve-release-version.mjs "$SOURCE_SHA")"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Release version: $VERSION"
+
+      - name: Create immutable release branch and promotion PR
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+          SOURCE_PR: ${{ github.event.pull_request.number }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          RELEASE_BRANCH="release/${RELEASE_VERSION}"
+
+          ACTIVE_RELEASES="$(gh api "repos/${GH_REPO}/branches" --paginate --jq '.[].name' \
+            | grep -E '^release/[0-9]+\.[0-9]+\.[0-9]+$' || true)"
+          while IFS= read -r active; do
+            [[ -z "$active" || "$active" == "$RELEASE_BRANCH" ]] && continue
+            echo "Another release branch is active: ${active}. Finish or clean it before starting ${RELEASE_BRANCH}." >&2
+            exit 1
+          done <<< "$ACTIVE_RELEASES"
+
+          EXISTING_SHA="$(gh api "repos/${GH_REPO}/git/matching-refs/heads/${RELEASE_BRANCH}" \
+            | jq -r --arg ref "refs/heads/${RELEASE_BRANCH}" '.[] | select(.ref == $ref) | .object.sha' | head -n 1)"
+          if [[ -n "$EXISTING_SHA" ]]; then
+            if [[ "$EXISTING_SHA" != "$SOURCE_SHA" ]]; then
+              echo "${RELEASE_BRANCH} already exists at ${EXISTING_SHA}; refusing to move an existing release branch." >&2
+              exit 1
+            fi
+            echo "${RELEASE_BRANCH} already exists at the requested commit; reusing it."
+          else
+            gh api --method POST "repos/${GH_REPO}/git/refs" \
+              -f "ref=refs/heads/${RELEASE_BRANCH}" \
+              -f "sha=${SOURCE_SHA}" >/dev/null
+            echo "Created ${RELEASE_BRANCH} at ${SOURCE_SHA}."
+          fi
+
+          EXISTING_PR="$(gh pr list --repo "$GH_REPO" --state open --base main --head "$RELEASE_BRANCH" --json number --jq '.[0].number // empty')"
+          if [[ -z "$EXISTING_PR" ]]; then
+            BODY_FILE="$(mktemp)"
+            cat > "$BODY_FILE" <<EOF_BODY
+          ## Summary
+
+          Promote release ${RELEASE_VERSION}, created automatically from the release label on request PR #${SOURCE_PR}.
+
+          ## Related issues
+
+          Release request: #${SOURCE_PR}
+
+          ## Type of change
+
+          chore(release)
+
+          ## Change category
+
+          - [x] Normal
+
+          ## Risk
+
+          This promotion changes the stable production version. The candidate must pass the Jenkins pipeline and stage E2E suite before merge. Production deployment still requires the existing manual approval.
+
+          ## Test plan
+
+          Jenkins validates all services, integration tests, Sonar quality gates, publishes the RC images, deploys them to stage, and runs Playwright E2E tests. The required Jenkins PR check must pass.
+
+          ## Rollback plan
+
+          Use the existing circleguard-rollback Jenkins job to redeploy the previous stable version to the affected environment.
+
+          ## Release details
+
+          - Release version: ${RELEASE_VERSION}
+          - Source commit: ${SOURCE_SHA}
+          - Source branch: dev
+
+          ## Checklist
+
+          - [ ] Jenkins release PR check passed
+          - [ ] RC deployed successfully to stage
+          - [ ] Playwright E2E tests passed on stage
+          - [ ] Release notes and rollback plan reviewed
+          EOF_BODY
+            gh pr create --repo "$GH_REPO" --base main --head "$RELEASE_BRANCH" \
+              --title "chore(release): prepare v${RELEASE_VERSION}" --body-file "$BODY_FILE"
+            rm -f "$BODY_FILE"
+          else
+            echo "Release promotion PR #${EXISTING_PR} is already open."
+          fi
+
+          gh pr comment "$SOURCE_PR" --repo "$GH_REPO" \
+            --body "Release branch ${RELEASE_BRANCH} has been created (or reused) at ${SOURCE_SHA}. The promotion PR to main is gated by the required Jenkins check, which publishes the RC, deploys it to stage and runs Playwright E2E tests. Do not merge this release-request PR."
+          gh pr close "$SOURCE_PR" --repo "$GH_REPO" \
+            --comment "Closing this release-request PR: the release is now tracked by the automatically created ${RELEASE_BRANCH} promotion PR."
+
+  cleanup-merged-release-branch:
+    if: >-
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'release/') &&
+      github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Delete the merged temporary release branch
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_AUTOMATION_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          BRANCH_EXISTS="$(gh api "repos/${GH_REPO}/branches" --paginate --jq '.[].name' \
+            | grep -Fx "$RELEASE_BRANCH" || true)"
+          if [[ -n "$BRANCH_EXISTS" ]]; then
+            gh api --method DELETE "repos/${GH_REPO}/git/refs/heads/${RELEASE_BRANCH}"
+            echo "Deleted ${RELEASE_BRANCH}."
+          else
+            echo "${RELEASE_BRANCH} was already deleted."
+          fi

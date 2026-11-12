@@ -5,8 +5,8 @@
  *   dockerPublish(image: 'web-client', dockerfile: 'mobile/Dockerfile', context: 'mobile', version: '1.4.0')
  *
  * Reglas:
- *  - La imagen se publica con un único tag: la versión MAJOR.MINOR.PATCH (sin "v").
- *  - "latest" o cualquier tag que no sea MAJOR.MINOR.PATCH hace fallar la etapa.
+ *  - Acepta versiones estables MAJOR.MINOR.PATCH y pre-releases SNAPSHOT/rc únicas.
+ *  - "latest" y tags fuera del formato versionado permitido hacen fallar la etapa.
  *  - Una versión publicada es inmutable: si el tag ya existe con otro commit, falla.
  *    Si existe con el mismo commit (re-ejecución del build), se omite sin error.
  *
@@ -63,6 +63,7 @@ def call(Map config = [:]) {
                       -f "$DOCKERFILE" \
                       --build-arg VERSION="$IMAGE_VERSION" \
                       --label org.opencontainers.image.revision="$REVISION" \
+                      --label org.opencontainers.image.version="$IMAGE_VERSION" \
                       -t "$IMAGE_REF" \
                       "$BUILD_CONTEXT"
                     docker push "$IMAGE_REF"
@@ -81,14 +82,14 @@ def call(Map config = [:]) {
 /** Falla con un mensaje explicativo si el tag no es una versión MAJOR.MINOR.PATCH. */
 def validateTag(String tag) {
     if (!tag) {
-        error('dockerPublish: falta "version" (formato MAJOR.MINOR.PATCH, p. ej. 1.4.0)')
+        error('dockerPublish: falta "version" (formato MAJOR.MINOR.PATCH o pre-release)')
     }
     if (tag.equalsIgnoreCase('latest')) {
         error("dockerPublish: el tag 'latest' no está permitido. Cada imagen se publica solo con su " +
                 'versión MAJOR.MINOR.PATCH para poder desplegar y revertir versiones exactas (HU-07).')
     }
-    if (!(tag ==~ /\d+\.\d+\.\d+/)) {
-        error("dockerPublish: '${tag}' no es una versión MAJOR.MINOR.PATCH (p. ej. 1.4.0, sin prefijo 'v').")
+    if (!(tag ==~ /\d+\.\d+\.\d+(?:-(?:SNAPSHOT|rc)\.\d+\.[0-9a-f]{7})?/)) {
+        error("dockerPublish: '${tag}' no es una versión estable o pre-release permitida (p. ej. 1.4.0, 1.4.0-SNAPSHOT.12.a83f21c o 1.4.0-rc.12.a83f21c).")
     }
 }
 

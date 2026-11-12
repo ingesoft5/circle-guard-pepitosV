@@ -3,7 +3,7 @@
 ## Alcance
 
 
-Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`), la HU-12 (`CGR-35`),la HU-15 (`CGR-38`), la HU-16 (`CGR-39`), la etapa E2E de la HU-20 (`CGR-43`) y la promoción a stage y prod de la HU-14 (`CGR-37`): job multibranch, webhook de GitHub, etapas del `Jenkinsfile`, check obligatorio en `dev` y `main`, Shared Library reutilizable en `jenkins/vars/`, ejecución selectiva por servicio, versionado semántico automático, notificaciones de Discord, pruebas E2E y aprobación manual de producción.
+Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`), la HU-12 (`CGR-35`),la HU-15 (`CGR-38`), la HU-16 (`CGR-39`), la etapa E2E de la HU-20 (`CGR-43`) y la promoción a stage y prod de la HU-14 (`CGR-37`): job multibranch, webhook de GitHub, etapas del `Jenkinsfile`, check obligatorio en `dev` y `main`, Shared Library reutilizable en `jenkins/vars/`, ejecución selectiva por servicio, política de tamaño de PR, versionado semántico y pre-releases automáticos, notificaciones de Discord, pruebas E2E y aprobación manual de producción.
 
 ## Cómo funciona
 
@@ -13,6 +13,8 @@ Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`), 
 - Cada servicio seleccionado se compila y prueba con `gradleBuild` y `runTests` dentro de un `parallel` dinámico, en lotes de 3. Después de la etapa de Sonar, los servicios se empaquetan con `dockerBuild`.
 - En cada servicio seleccionado, `Sonar analysis and quality gate` ejecuta `sonarScan` y luego `waitForQualityGate abortPipeline: true` con un timeout de 10 minutos. Si el gate falla, el pipeline no llega a `Package images`.
 - El web client se empaqueta solo si cambió `mobile/` o si se ejecuta con `BUILD_ALL=true`.
+- `PR size policy` valida los cambios de cada Pull Request antes de compilar: máximo predeterminado de 700 adiciones, 300 eliminaciones y 1000 líneas modificadas; excluye Markdown, `docs/`, lockfiles, build output, generated output e imágenes/PDF. Los tres límites se configuran con `PR_MAX_ADDITIONS`, `PR_MAX_DELETIONS` y `PR_MAX_CHANGED_LINES` en el bloque `environment` del `Jenkinsfile`. Se omite solo para el PR de promoción `release/X.Y.Z` hacia `main`, cuyo pipeline ejecuta la validación completa del candidato.
+- En `dev`, `Publish prerelease images` publica los componentes afectados como `X.Y.Z-SNAPSHOT.BUILD.SHA`. En el PR de promoción cuyo `CHANGE_BRANCH` es `release/X.Y.Z`, publica los 8 servicios y el cliente web como `X.Y.Z-rc.BUILD.SHA`. Los sufijos de build y SHA mantienen únicos los tags y compatibles con `allow_once` en Nexus.
 - En `main`, `Release version` calcula la versión con `calculateVersion` a partir de los Conventional Commits desde el último tag (sin tags: `1.0.0`). Si no hay commits `feat`, `fix`, `perf` ni incompatibles, no hay release y las etapas siguientes se omiten.
 - `Publish images` publica las imágenes de los 8 servicios y del web client con esa versión, y después `Tag release` crea y publica el tag `vX.Y.Z` en GitHub con `pushReleaseTag`. El orden garantiza que un tag en GitHub siempre tiene sus imágenes.
 - En `main`, después de `Deploy to dev`, `Release notes` (HU-22) crea el GitHub Release con las notas generadas por `releaseNotes` y abre o actualiza el PR `chore(release): update changelog for vX.Y.Z` hacia `dev` con el `CHANGELOG.md` regenerado. No hace push directo porque `main` y `dev` están protegidas. Va antes de las E2E: el tag y las imágenes ya existen, así que el release queda documentado aunque fallen las pruebas.
@@ -29,7 +31,11 @@ Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`), 
 
 | Archivo | Propósito |
 |:---|:---|
-| `Jenkinsfile` | Detección de cambios, ejecución selectiva y publicación. |
+| `Jenkinsfile` | Detección de cambios, validación del tamaño del PR, ejecución selectiva y publicación. |
+| `jenkins/vars/validatePrSize.groovy` | Bloquea PR que superan los límites de adiciones, eliminaciones o líneas totales. |
+| `jenkins/vars/resolvePrereleaseVersion.groovy` | Calcula versiones inmutables `SNAPSHOT` y `rc`; en el PR de promoción usa `CHANGE_BRANCH` para reconocer `release/X.Y.Z`. |
+| `.github/workflows/release-request.yml` | Crea la rama de release y el PR de promoción al agregar la etiqueta `release`; elimina la rama después del merge. |
+| `.github/scripts/resolve-release-version.mjs` | Replica las reglas de `semver.groovy` para calcular la versión desde el SHA solicitado. |
 | `jenkins/vars/detectChangedServices.groovy` | Calcula servicios y web client modificados. |
 | `jenkins/vars/gradleBuild.groovy` | Paso reutilizable de compilación Gradle. |
 | `jenkins/vars/runTests.groovy` | Paso reutilizable de pruebas, cobertura JaCoCo y publicación JUnit opcional. |
@@ -116,7 +122,7 @@ Los resultados JUnit se publican una sola vez al final, y `publishCoverage` publ
 
 Después, la etapa `Integration tests` (HU-19, CGR-42) ejecuta `./gradlew integrationTest` cuando el build toca auth, form, promotion o gateway, o cuando el cambio obliga a procesar todos los servicios. Esa tarea es distinta de `test`: levanta Kafka, Neo4j, OpenLDAP, PostgreSQL y Redis con Testcontainers y publica sus reportes JUnit. No cuenta para el mínimo de cobertura.
 
-En `main` con tag de release, `Publish images` sigue publicando los 8 servicios y el web client con la versión semver. La ejecución selectiva aplica a los builds de PR y ramas; no reduce la publicación de un release.
+En `main` con tag de release, `Publish images` sigue publicando los 8 servicios y el web client con la versión semver. La ejecución selectiva aplica a los builds de PR y ramas; no reduce la publicación de un release. En el PR de promoción cuyo origen es `release/X.Y.Z`, Jenkins también procesa todos los componentes, publica el RC y lo valida en stage antes de permitir la fusión.
 
 ## Análisis SonarQube y quality gate (HU-12)
 
@@ -142,7 +148,12 @@ La evidencia de funcionamiento se obtiene de builds controlados: un fallo en un 
 
 ## Pruebas E2E (HU-20)
 
-La etapa `E2E tests on dev` corre `tests/e2e-playwright/run-e2e.sh` en `main` después de `Deploy to dev` y `Release notes`. Los escenarios, las variables y cómo leer los resultados están en [`tests/e2e-playwright/README.md`](../../tests/e2e-playwright/README.md).
+Las etapas E2E corren `tests/e2e-playwright/run-e2e.sh` en dos puntos del ciclo:
+
+- En el PR de promoción `release/X.Y.Z` -> `main`, después de publicar el RC y desplegarlo en stage, contra `DEPLOY_HOST_STAGE`. El check obligatorio de Jenkins falla si E2E no pasa y bloquea la fusión.
+- En `main`, después de `Deploy to dev` y `Release notes`, contra `DEPLOY_HOST_DEV`, conservando la validación existente de la versión estable.
+
+Los escenarios, las variables y cómo leer los resultados están en [`tests/e2e-playwright/README.md`](../../tests/e2e-playwright/README.md).
 
 ### Credencial `e2e-user`
 
@@ -161,7 +172,7 @@ Sin esta credencial la etapa falla con `Set E2E_USERNAME`.
 
 ## Promoción a stage y prod (HU-14)
 
-`Deploy to stage` corre después de `E2E tests on dev` y usa el mismo `releaseVersion` que `Deploy to dev`. Si las E2E fallan, la etapa no se ejecuta. Si el despliegue a stage falla, el pipeline se detiene y no llega a producción.
+Para los RC, `Deploy RC to stage` despliega la imagen preliminar en stage antes de ejecutar E2E. Para la versión estable, `Deploy to stage` conserva el flujo actual: corre después de `E2E tests on dev` y usa el mismo `releaseVersion` que `Deploy to dev`. Si las E2E fallan, la etapa estable no se ejecuta. Si el despliegue a stage falla, el pipeline se detiene y no llega a producción.
 
 `Approve production` es un `input` de 15 minutos. Solo el usuario `admin` puede aprobarlo (`submitter: 'admin'`, HU-21); el usuario `dev` no puede. Ver la [política de cambios](../release-notes/politica-cambios.md). Al aprobar, `Deploy to prod` despliega la misma versión en `prod`; si se rechaza o expira, prod no cambia.
 
@@ -226,7 +237,19 @@ https://<CI_DOMAIN>/github-webhook/
 
 Si el host no tiene TLS, usar la URL `http://<IP-o-dominio>:8080/github-webhook/` solo para pruebas y documentarlo. El script `infra/cloud/aws/allow-github-webhooks.sh` abre el puerto de Jenkins a los rangos de GitHub.
 
-### 3. Webhook en GitHub
+### 3. Automatización de solicitud de release por etiqueta
+
+1. En la primera instalación, publicar `.github/workflows/release-request.yml` y `.github/scripts/resolve-release-version.mjs` en `main` mediante un PR exclusivo `ci(github): add label-triggered release automation`. GitHub necesita que el workflow exista en la rama base para recibir el evento de etiqueta. Este commit `ci` no genera una versión estable.
+2. Integrar el resto de los cambios de Jenkins y Shared Library en `dev`.
+3. Crear la etiqueta de Pull Request `release` en GitHub.
+4. En **Settings → Secrets and variables → Actions**, crear `RELEASE_AUTOMATION_TOKEN` con un fine-grained token limitado a este repositorio y permisos `Contents: Read and write`, `Pull requests: Read and write` e `Issues: Read and write`.
+5. El flujo `.github/workflows/release-request.yml` se activa cuando se agrega `release` a un PR `dev` -> `main`. Calcula la versión con `.github/scripts/resolve-release-version.mjs`, crea `release/X.Y.Z` desde el SHA del PR, abre el PR de promoción hacia `main` y cierra la solicitud original.
+6. Jenkins debe descubrir PRs de origen y ejecutar el check `continuous-integration/jenkins/pr-merge`. En el PR `release/X.Y.Z` -> `main`, `CHANGE_BRANCH` hace que Jenkins publique el RC, lo despliegue a stage y ejecute Playwright E2E. La fusión queda bloqueada hasta que el check pase.
+7. Al fusionarse el PR de promoción, el mismo workflow elimina la rama `release/X.Y.Z`.
+
+El token `RELEASE_AUTOMATION_TOKEN` es exclusivo de GitHub Actions. Jenkins continúa usando la credencial `github-pat` almacenada en JCasC.
+
+### 4. Webhook en GitHub
 
 Con `manageHooks: true` y un token con `admin:repo_hook`, GitHub Branch Source registra el hook automáticamente al crear o escanear el job. Verificar en **Settings → Webhooks** del repositorio.
 
@@ -239,7 +262,7 @@ Si el registro automático falla, crear el webhook a mano:
 | Events | `push` y `pull_request` |
 | Secret | Opcional; si se usa, configurarlo también en Jenkins |
 
-### 4. Check obligatorio en `dev` y `main`
+### 5. Check obligatorio en `dev` y `main`
 
 Se requiere una sola vez y necesita permisos de administrador del repositorio. Se puede aplicar desde **Settings → Branches → Branch protection rules** o con el script del repositorio:
 
@@ -256,7 +279,7 @@ En la regla de cada rama:
 4. Marcar los checks como obligatorios y guardar.
 5. Hacer que el job multibranch reporte al menos una vez para que GitHub muestre el contexto.
 
-### 5. Aplicar la Shared Library
+### 6. Aplicar la Shared Library
 
 No se crea a mano: JCasC la registra al re-ejecutar el bootstrap.
 
