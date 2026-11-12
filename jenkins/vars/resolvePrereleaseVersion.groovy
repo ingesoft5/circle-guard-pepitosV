@@ -17,7 +17,7 @@ def call(Map config = [:]) {
             sh 'git fetch --tags --force --quiet origin'
         }
         String tags = sh(
-            script: "git tag --merged HEAD --list 'v[0-9]*' | grep -E '^v[0-9]+\\.[0-9]+\\.[0-9]+$' || true",
+            script: "git tag --merged HEAD --list 'v[0-9]*' | grep -E '^v[0-9]+\\.[0-9]+\\.[0-9]+\$' || true",
             returnStdout: true
         ).trim()
         String previous = semver.highest(semver.fromTags(tags))
@@ -43,7 +43,7 @@ def call(Map config = [:]) {
             error("resolvePrereleaseVersion: la rama '${branch}' debe tener el formato release/X.Y.Z.")
         }
         String stableTags = sh(
-            script: "git tag --merged HEAD --list 'v[0-9]*' | grep -E '^v[0-9]+\\.[0-9]+\\.[0-9]+$' || true",
+            script: "git tag --merged HEAD --list 'v[0-9]*' | grep -E '^v[0-9]+\\.[0-9]+\\.[0-9]+\$' || true",
             returnStdout: true
         ).trim()
         String latestStable = semver.highest(semver.fromTags(stableTags))
