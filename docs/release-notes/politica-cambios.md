@@ -10,7 +10,7 @@ Ambas piden descripción, categoría, riesgo, plan de pruebas y plan de rollback
 
 ## Tamaño de Pull Requests
 
-Todo PR hacia `dev` o `main` debe cumplir la validación automática de tamaño de `PR size policy`: máximo 700 líneas agregadas, 300 eliminadas y 1000 modificadas en total. Se excluyen Markdown, `docs/`, lockfiles, artefactos generados y archivos binarios comunes. Los límites se ajustan en el bloque `environment` del `Jenkinsfile`. Si el cambio supera los límites, debe dividirse en PRs más pequeños. La única excepción automática es el PR de promoción `release/X.Y.Z` hacia `main`, cuyo candidato ya pasó el pipeline completo en su rama.
+Todo PR hacia `dev` o `main` debe cumplir la validación automática de tamaño de `PR size policy`: máximo 700 líneas agregadas, 300 eliminadas y 1000 modificadas en total. Se excluyen Markdown, `docs/`, lockfiles, artefactos generados y archivos binarios comunes. Los límites se ajustan en el bloque `environment` del `Jenkinsfile`. Si el cambio supera los límites, debe dividirse en PRs más pequeños. La única excepción automática es el PR de promoción `release/X.Y.Z` hacia `main`: el pipeline de ese PR ejecuta la validación completa del candidato (incluidos despliegue a stage y E2E) y sus checks obligatorios bloquean la fusión. El PR de solicitud `dev` -> `main` no se fusiona; al recibir la etiqueta `release`, la automatización lo cierra y crea la promoción desde `release/X.Y.Z`. La promoción se fusiona con **Create a merge commit**, no squash ni rebase, para conservar el historial que consume SemVer.
 
 ## Tipos de cambio
 
@@ -59,8 +59,8 @@ El resto del repositorio sigue la regla general: lo aprueba otro integrante.
 | Ambiente | Cómo llega un cambio | Control |
 |:---|:---|:---|
 | `dev` | Despliegue automático desde `main` | Revisión del pull request y checks obligatorios |
-| `stage` | Promoción automática | Pruebas E2E aprobadas |
-| `prod` | Paso `input` del pipeline | Solo los aprobadores de producción |
+| `stage` | Primero RC desde el PR `release/X.Y.Z` -> `main`; después versión estable desde `main` | Jenkins publica el RC, despliega en stage y exige Playwright E2E aprobado |
+| `prod` | Versión estable desde `main` | Paso `input` del pipeline; solo los aprobadores de producción |
 
 ## Aplicación en el pipeline
 

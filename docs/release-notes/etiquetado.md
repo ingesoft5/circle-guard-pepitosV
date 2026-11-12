@@ -55,9 +55,9 @@ Además de los releases estables `MAJOR.MINOR.PATCH`, Jenkins publica imágenes 
 
 | Origen | Formato Docker | Propósito |
 |:---|:---|:---|
-| PR hacia `dev` o `main` | No publica | Valida el cambio sin distribuir artefactos |
+| PR hacia `dev` o PR de solicitud `dev` -> `main` | No publica | Valida el cambio o solicita una release sin distribuir artefactos |
 | Rama `dev` | `X.Y.Z-SNAPSHOT.BUILD.SHA` | Integración continua; solo publica los servicios/cliente afectados |
-| Rama `release/X.Y.Z` | `X.Y.Z-rc.BUILD.SHA` | Release Candidate; publica los 8 servicios y el web client |
+| PR de promoción cuya rama origen es `release/X.Y.Z` | `X.Y.Z-rc.BUILD.SHA` | Release Candidate; publica los 8 servicios y el web client, despliega en stage y ejecuta E2E |
 | Rama `main` | `X.Y.Z` | Release estable; conserva el flujo automático existente |
 
 Ejemplos:
@@ -74,10 +74,10 @@ localhost:5000/circleguard/auth-service:1.4.0
 
 1. Los PR se integran en `dev` después de pasar la política de tamaño, pruebas y análisis de calidad.
 2. Cada build de `dev` publica los componentes afectados con sufijo `-SNAPSHOT`.
-3. Para preparar una versión, se crea `release/X.Y.Z` desde `dev`, donde `X.Y.Z` debe ser mayor que el último release estable y coincidir con el incremento calculado por Conventional Commits.
-4. Cada build de esa rama publica el conjunto completo con sufijo `-rc`; el número de build y el SHA distinguen cada candidato.
-5. Si se requieren correcciones, se integran en la rama `release/X.Y.Z` y se genera otro candidato.
-6. Cuando el candidato está aprobado, se integra la rama de release en `main`. El pipeline existente calcula y publica `X.Y.Z` estable, crea `vX.Y.Z` y despliega según las aprobaciones actuales.
+3. Para preparar una versión, se agrega la etiqueta `release` a un PR de solicitud `dev` -> `main`. GitHub Actions calcula `X.Y.Z` con las reglas de `calculateVersion` y crea `release/X.Y.Z` en el SHA exacto de `dev`; también abre el PR de promoción hacia `main` y cierra la solicitud original.
+4. El PR de promoción ejecuta el pipeline de Jenkins. La rama origen `release/X.Y.Z` publica el conjunto completo con sufijo `-rc`, despliega ese candidato en `stage` y ejecuta Playwright E2E. El número de build y el SHA distinguen cada candidato.
+5. Si se requieren correcciones, se integran mediante PRs hacia `release/X.Y.Z`; cada actualización del PR de promoción genera y valida un nuevo candidato.
+6. Cuando el candidato está aprobado y todos los checks pasan, se integra el PR de release en `main` mediante un merge commit (no squash ni rebase). Así el pipeline existente puede leer los Conventional Commits originales, calcular y publicar `X.Y.Z` estable, crear `vX.Y.Z` y conservar los despliegues y aprobaciones actuales. Al fusionarse, GitHub Actions elimina la rama temporal.
 
 Los artefactos preliminares se publican en el mismo repositorio Docker `docker-hosted`, cuya política `allow_once` los mantiene inmutables. No se publica un tag genérico `SNAPSHOT`, `RC` ni `latest`.
 

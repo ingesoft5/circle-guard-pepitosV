@@ -53,11 +53,11 @@ Quedan en `tests/e2e-playwright/results/`, que no se versiona:
 
 ## En el pipeline
 
-La etapa **E2E tests on dev** del `Jenkinsfile` corre después de **Deploy to dev**, solo en `main` y con un tag de release:
+El `Jenkinsfile` ejecuta la suite en dos puntos del ciclo de release:
 
-- Ejecuta `run-e2e.sh` contra la IP privada de dev (`DEPLOY_HOST_DEV`), con la credencial `e2e-user` de Jenkins.
-- Publica `junit.xml` en el build.
-- Archiva `results/` (reporte HTML, trazas, capturas y videos) como artefactos del build.
-- Si una prueba falla, el build falla y Discord lo notifica.
+- En el PR de promoción `release/X.Y.Z` -> `main`, Jenkins publica el RC, lo despliega en stage y ejecuta `run-e2e.sh` contra `DEPLOY_HOST_STAGE`. Si falla, el check obligatorio de Jenkins bloquea la fusión.
+- En `main`, después de desplegar la versión estable en dev, conserva la ejecución contra `DEPLOY_HOST_DEV`.
+
+Ambas ejecuciones usan la credencial `e2e-user` de Jenkins. Cada una publica `junit.xml` y archiva `results/` (reporte HTML, trazas, capturas y videos) como artefactos del build. Si una prueba falla, el build falla y Discord lo notifica.
 
 La imagen usa solo Chromium headless (unos 1,2 GB) para no llenar el disco del host de CI. La imagen oficial de Playwright trae tres navegadores y pesa unos 3,5 GB.

@@ -47,6 +47,9 @@ pipeline {
         GRADLE_USER_HOME = "${JENKINS_HOME}/gradle-cache"
         GRADLE_OPTS = '-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx1g'
         MAX_PARALLEL_SERVICES = '3'
+        PR_MAX_ADDITIONS = '700'
+        PR_MAX_DELETIONS = '300'
+        PR_MAX_CHANGED_LINES = '1000'
     }
 
     stages {
@@ -241,7 +244,11 @@ pipeline {
 
         stage('Publish prerelease images') {
             when {
-                expression { (env.BRANCH_NAME == 'dev' && (!changed.services.isEmpty() || changed.web)) || (env.BRANCH_NAME ?: '') ==~ /release\/.+/ }
+                expression {
+                    (env.BRANCH_NAME == 'dev' && (!changed.services.isEmpty() || changed.web)) ||
+                        ((env.BRANCH_NAME ?: '') ==~ /release\/.+/) ||
+                        ((env.CHANGE_BRANCH ?: '') ==~ /release\/.+/)
+                }
             }
             steps {
                 script {
@@ -250,7 +257,8 @@ pipeline {
 
                     // SNAPSHOT publica solo los componentes afectados. Una rama release
                     // publica el conjunto completo para validar un candidato reproducible.
-                    if (env.BRANCH_NAME == 'dev') {
+                    String sourceBranch = env.CHANGE_BRANCH ?: env.BRANCH_NAME
+                    if (sourceBranch == 'dev') {
                         for (String service : changed.services) {
                             dockerPublish(service: service, version: prereleaseVersion)
                         }
@@ -268,6 +276,55 @@ pipeline {
                 }
             }
         }
+
+        // A release branch is created by the GitHub 'release' label workflow.
+        // Its promotion PR cannot merge until this RC has passed stage deployment and E2E.
+        stage('Deploy RC to stage') {
+            when {
+                expression {
+                    (((env.CHANGE_BRANCH ?: env.BRANCH_NAME) ?: '') ==~ /release\/\d+\.\d+\.\d+/) && prereleaseVersion != null
+                }
+            }
+            steps {
+                deployCompose(environment: 'stage', version: prereleaseVersion)
+            }
+        }
+
+        stage('E2E tests on stage') {
+            when {
+                expression {
+                    (((env.CHANGE_BRANCH ?: env.BRANCH_NAME) ?: '') ==~ /release\/\d+\.\d+\.\d+/) && prereleaseVersion != null
+                }
+            }
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'e2e-user',
+                    usernameVariable: 'E2E_USERNAME',
+                    passwordVariable: 'E2E_PASSWORD'
+                )]) {
+                    withEnv(["E2E_BASE_URL=http://${env.DEPLOY_HOST_STAGE}"]) {
+                        sh 'bash tests/e2e-playwright/run-e2e.sh'
+                    }
+                }
+            }
+            post {
+                always {
+                    junit allowEmptyResults: true,
+                        testResults: 'tests/e2e-playwright/results/junit.xml'
+                    archiveArtifacts allowEmptyArchive: true,
+                        artifacts: 'tests/e2e-playwright/results/**'
+                }
+                failure {
+                    script {
+                        failedService = failedService ?: 'web-client'
+                        failedStage = failedStage ?: 'E2E tests on stage'
+                    }
+                }
+            }
+        }
+
+        // The release-request workflow opens the release/X.Y.Z -> main PR.
+        // This PR's Jenkins check remains pending until RC publication, stage deploy and E2E pass.
 
         stage('Release version') {
             when {

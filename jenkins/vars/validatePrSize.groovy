@@ -13,7 +13,7 @@ def call(Map config = [:]) {
         return [skipped: true, additions: 0, deletions: 0, files: 0]
     }
     if (env.CHANGE_TARGET == 'main' && (env.CHANGE_BRANCH ?: '') ==~ /release\/.+/) {
-        echo 'validatePrSize: promoción de release a main; se omite el límite porque el candidato ya pasó la validación completa de la rama release.'
+        echo 'validatePrSize: promoción de release a main; se omite el límite de tamaño. Este mismo PR debe completar build, análisis, publicación RC, despliegue a stage y E2E antes de poder fusionarse.'
         return [skipped: true, reason: 'release-promotion', additions: 0, deletions: 0, files: 0]
     }
 

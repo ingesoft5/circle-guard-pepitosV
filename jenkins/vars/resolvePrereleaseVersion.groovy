@@ -2,12 +2,12 @@
  * Resuelve tags de imágenes inmutables para ramas de integración y release.
  *
  * dev:           MAJOR.MINOR.PATCH-SNAPSHOT.BUILD.SHA
- * release/X.Y.Z: X.Y.Z-rc.BUILD.SHA
+ * release/X.Y.Z (including CHANGE_BRANCH on a promotion PR): X.Y.Z-rc.BUILD.SHA
  *
  * Los sufijos de build y SHA evitan sobrescribir tags en Nexus (writePolicy allow_once).
  */
 def call(Map config = [:]) {
-    String branch = (env.BRANCH_NAME ?: '').trim()
+    String branch = (env.CHANGE_BRANCH ?: env.BRANCH_NAME ?: '').trim()
     String build = (env.BUILD_NUMBER ?: '0').replaceAll('[^0-9]', '')
     if (!build) build = '0'
     String sha = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()

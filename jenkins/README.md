@@ -149,9 +149,9 @@ Valida el tamaño de un Pull Request antes de compilar. En builds PR-Merge compa
 
 | Parámetro | Valor por defecto | Descripción |
 |:---|:---|:---|
-| `maxAdditions` | `500` | Máximo de líneas agregadas. |
+| `maxAdditions` | `700` | Máximo de líneas agregadas. |
 | `maxDeletions` | `300` | Máximo de líneas eliminadas. |
-| `maxChangedLines` | `800` | Máximo de adiciones + eliminaciones. |
+| `maxChangedLines` | `1000` | Máximo de adiciones + eliminaciones. |
 
 ```groovy
 validatePrSize()
@@ -163,7 +163,7 @@ validatePrSize(maxAdditions: 300, maxDeletions: 200, maxChangedLines: 500)
 Resuelve una versión única para cada build de integración:
 
 - `dev`: `X.Y.Z-SNAPSHOT.BUILD.SHA`, donde `X.Y.Z` incorpora el incremento SemVer de los Conventional Commits desde el último release.
-- `release/X.Y.Z`: `X.Y.Z-rc.BUILD.SHA`; la versión candidata debe ser superior al último release estable y coincidir con el incremento SemVer calculado.
+- PR de promoción cuyo `CHANGE_BRANCH` sea `release/X.Y.Z`: `X.Y.Z-rc.BUILD.SHA`; la versión candidata debe ser superior al último release estable y coincidir con el incremento SemVer calculado. Jenkins usa `CHANGE_BRANCH` porque el multibranch construye el PR de promoción como `PR-<n>`.
 
 Los tags son compatibles con Nexus `allow_once` y llevan metadata OCI de versión y commit.
 
