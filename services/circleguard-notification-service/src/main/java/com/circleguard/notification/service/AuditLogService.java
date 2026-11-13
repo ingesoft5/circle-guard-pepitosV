@@ -25,7 +25,7 @@ public class AuditLogService {
         Map<String, Object> auditEvent = new HashMap<>();
         auditEvent.put("eventId", UUID.randomUUID().toString());
         auditEvent.put("timestamp", Instant.now().toString());
-        auditEvent.put("userId", userId); // This is an anonymousId, so it's compliant
+        auditEvent.put("userId", userId); // This is an anonymousId, so it's compliant 'TEST for pipeline dispatch' 
         auditEvent.put("channel", channel);
         auditEvent.put("status", status);
         auditEvent.put("correlationId", correlationId != null ? correlationId : UUID.randomUUID().toString());
