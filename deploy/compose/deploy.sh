@@ -2,6 +2,7 @@
 # Deploys one image version to an environment and checks that it is healthy.
 # Runs on the environment host, as the deploy user:
 #   deploy/compose/deploy.sh <dev|stage|prod> <MAJOR.MINOR.PATCH>
+#   deploy/compose/deploy.sh stage <MAJOR.MINOR.PATCH-rc.BUILD.SHA>
 # If the version cannot be pulled, the running environment is left untouched.
 set -Eeuo pipefail
 
@@ -35,7 +36,13 @@ smoke_test() {
 main() {
   local env_name="${1:-}" version="${2:-}"
   [[ "${env_name}" =~ ^(dev|stage|prod)$ ]] || die "Usage: deploy.sh <dev|stage|prod> <version>"
-  [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "Version must be MAJOR.MINOR.PATCH: '${version}'"
+  if [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    : # Stable release is allowed in dev, stage and prod.
+  elif [[ "${env_name}" == "stage" && "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+\.[0-9a-f]{7}$ ]]; then
+    : # Release candidates are isolated to stage.
+  else
+    die "Version '${version}' is not allowed in ${env_name}; RC versions may only be deployed to stage"
+  fi
 
   cd "$(dirname "${BASH_SOURCE[0]}")/${env_name}"
   [[ -f .env ]] || die "Missing .env: run infra/bootstrap/bootstrap-env.sh ${env_name} first"

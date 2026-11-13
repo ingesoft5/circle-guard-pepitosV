@@ -21,7 +21,9 @@ jenkins/
     ├── publishGithubRelease.groovy
     ├── pushReleaseTag.groovy
     ├── releaseNotes.groovy
+    ├── resolvePrereleaseVersion.groovy
     ├── resolveReleaseVersion.groovy
+    ├── validatePrSize.groovy
     ├── runTests.groovy
     ├── semver.groovy
     └── sonarScan.groovy
@@ -139,6 +141,34 @@ La clave y el nombre de cada proyecto se definen en `build.gradle.kts` como `cir
 
 ```groovy
 sonarScan(service: 'circleguard-form-service')
+```
+
+### `validatePrSize`
+
+Valida el tamaño de un Pull Request antes de compilar. En builds PR-Merge compara el primer padre del merge commit contra el resultado integrado; en builds PR-Head calcula el merge-base con la rama destino. Excluye documentación Markdown, lockfiles, artefactos generados y archivos binarios comunes.
+
+| Parámetro | Valor por defecto | Descripción |
+|:---|:---|:---|
+| `maxAdditions` | `700` | Máximo de líneas agregadas. |
+| `maxDeletions` | `300` | Máximo de líneas eliminadas. |
+| `maxChangedLines` | `1000` | Máximo de adiciones + eliminaciones. |
+
+```groovy
+validatePrSize()
+validatePrSize(maxAdditions: 300, maxDeletions: 200, maxChangedLines: 500)
+```
+
+### `resolvePrereleaseVersion`
+
+Resuelve una versión única para cada build de integración:
+
+- `dev`: `X.Y.Z-SNAPSHOT.BUILD.SHA`, donde `X.Y.Z` incorpora el incremento SemVer de los Conventional Commits desde el último release.
+- PR de promoción cuyo `CHANGE_BRANCH` sea `release/X.Y.Z`: `X.Y.Z-rc.BUILD.SHA`; la versión candidata debe ser superior al último release estable y coincidir con el incremento SemVer calculado. Jenkins usa `CHANGE_BRANCH` porque el multibranch construye el PR de promoción como `PR-<n>`.
+
+Los tags son compatibles con Nexus `allow_once` y llevan metadata OCI de versión y commit.
+
+```groovy
+def version = resolvePrereleaseVersion()
 ```
 
 ### `resolveReleaseVersion`

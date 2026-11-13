@@ -2,6 +2,7 @@
  * Deploys one published version to an environment host over SSH.
  *
  *   deployCompose(environment: 'dev', version: '1.4.0')
+ *   deployCompose(environment: 'stage', version: '1.4.0-rc.12.a83f21c')
  *
  * Copies deploy/compose to the host, keeping its .env file, and runs deploy.sh there.
  * The host comes from the global variable DEPLOY_HOST_<ENVIRONMENT> and the SSH key from
@@ -13,8 +14,10 @@ def call(Map config = [:]) {
     if (!(environment in ['dev', 'stage', 'prod'])) {
         error("deployCompose: unknown environment '${environment}'")
     }
-    if (!(version ==~ /\d+\.\d+\.\d+/)) {
-        error("deployCompose: '${version}' is not a MAJOR.MINOR.PATCH version")
+    boolean stableVersion = semver.isVersion(version)
+    boolean releaseCandidate = version ==~ /\d+\.\d+\.\d+-rc\.\d+\.[0-9a-f]{7}/
+    if (!stableVersion && !(environment == 'stage' && releaseCandidate)) {
+        error("deployCompose: '${version}' is not allowed for ${environment}; only stable versions are allowed except RC versions on stage")
     }
     String host = env."DEPLOY_HOST_${environment.toUpperCase()}"
     if (!host) {

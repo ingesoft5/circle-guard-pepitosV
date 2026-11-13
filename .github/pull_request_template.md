@@ -30,6 +30,10 @@
 
 <!-- How to go back: version to redeploy, revert to apply, and data or configuration to restore. -->
 
+## Size policy
+
+<!-- CI counts additions + deletions in source/configuration files (Markdown, docs, lockfiles and generated output are excluded). Defaults: <= 700 additions, <= 300 deletions and <= 1000 changed lines. Split larger changes into smaller PRs. -->
+
 ## Checklist
 
 - [ ] Commits follow Conventional Commits
