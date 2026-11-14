@@ -1,0 +1,8 @@
+qr:
+  # Two minutes in dev, so a ConfigMap or this profile can change the TTL
+  # without rebuilding the image. The default file stays at 60 seconds.
+  expiration: 120000
+
+circleguard:
+  features:
+    qr-diagnostics: true
