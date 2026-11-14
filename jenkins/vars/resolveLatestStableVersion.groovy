@@ -18,7 +18,7 @@ def call(Map config = [:]) {
     }
 
     String tags = sh(
-        script: "git tag --merged '${remoteRef}' --list 'v[0-9]*' | grep -E '^v[0-9]+\\.[0-9]+\\.[0-9]+\\$' || true",
+        script: "git tag --merged '${remoteRef}' --list 'v[0-9]*' | grep -E '^v[0-9]+\\.[0-9]+\\.[0-9]+\$' || true",
         returnStdout: true
     ).trim()
 
