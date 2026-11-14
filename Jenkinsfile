@@ -83,6 +83,57 @@ pipeline {
             }
         }
 
+        stage('Validate shared library') {
+            when {
+                allOf {
+                    changeRequest()
+                    expression { changed.all }
+                }
+            }
+            steps {
+                sh '''
+                    docker run --rm -v "$PWD":/w:ro groovy:jdk21 groovy -e '
+                        import org.codehaus.groovy.control.*
+                        def failed = false
+                        new File("/w/jenkins/vars").listFiles().findAll { it.name.endsWith(".groovy") }.each { f ->
+                            try {
+                                def cu = new CompilationUnit()
+                                cu.addSource(f)
+                                cu.compile(Phases.CONVERSION)
+                            } catch (Exception e) {
+                                println "ERROR en " + f.name + ": " + e.message
+                                failed = true
+                            }
+                        }
+                        System.exit(failed ? 1 : 0)
+                    '
+                '''
+            }
+        }
+        
+        stage('Resolve version') {
+            when {
+                expression {
+                    (env.BRANCH_NAME == 'dev' && (!changed.services.isEmpty() || changed.web)) ||
+                        ((env.BRANCH_NAME ?: '') ==~ /release\/.+/) ||
+                        ((env.CHANGE_BRANCH ?: '') ==~ /release\/.+/)
+                }
+            }
+            steps {
+                script {
+                    try {
+                        prereleaseVersion = resolvePrereleaseVersion()
+                        currentBuild.description = prereleaseVersion
+                        echo "Versión de imágenes: ${prereleaseVersion}"
+                    } catch (Exception e) {
+                        failedService = 'shared-library'
+                        failedStage = 'Resolve version'
+                        throw e
+                    }
+                }
+            }
+        }
+
         stage('Build and test') {
             steps {
                 script {
@@ -252,9 +303,6 @@ pipeline {
             }
             steps {
                 script {
-                    prereleaseVersion = resolvePrereleaseVersion()
-                    currentBuild.description = prereleaseVersion
-
                     // SNAPSHOT publica solo los componentes afectados. Una rama release
                     // publica el conjunto completo para validar un candidato reproducible.
                     String sourceBranch = env.CHANGE_BRANCH ?: env.BRANCH_NAME
