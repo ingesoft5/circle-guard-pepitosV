@@ -1,18 +1,18 @@
 /**
  * Calcula la siguiente versión semántica a partir de los Conventional Commits (HU-15).
  *
- *   def release = calculateVersion()
- *   // [version: '1.3.0', previous: '1.2.3', bump: 'minor', alreadyTagged: false]
+ * La referencia es el último tag estable alcanzable desde origin/main, porque los
+ * releases estables se crean exclusivamente durante la promoción aprobada a main.
+ * Esto permite que dev y release/* calculen versiones aunque el tag no sea ancestro
+ * directo de su HEAD.
  *
  * Reglas:
- *  - Sin ningún tag vMAJOR.MINOR.PATCH en el historial: 1.0.0.
- *  - Commits desde el último tag: "!" o BREAKING CHANGE -> major, feat -> minor,
- *    fix o perf -> patch. Otros tipos (docs, chore, ci, build...) no generan release
- *    y el paso devuelve null.
- *  - Si HEAD ya tiene un tag de release (re-ejecución del build), devuelve esa
- *    versión con alreadyTagged: true en lugar de calcular otra.
+ *  - Sin releases estables en main: utiliza initialVersion (por defecto 1.0.0).
+ *  - Commits desde el último release: "!" o BREAKING CHANGE -> major,
+ *    feat -> minor, fix o perf -> patch. Otros tipos no generan release.
+ *  - Si HEAD ya tiene un tag de release, devuelve esa versión (idempotencia).
  *
- * Solo calcula: el tag lo crea y publica pushReleaseTag, después de publicar las imágenes.
+ * Solo calcula: el tag lo crea y publica pushReleaseTag después de publicar imágenes.
  */
 def call(Map config = [:]) {
     String credentialsId = config.credentialsId ?: 'github-pat'
@@ -24,17 +24,18 @@ def call(Map config = [:]) {
         return [version: current, previous: current, bump: 'none', alreadyTagged: true]
     }
 
-    String previous = semver.highest(semver.fromTags(sh(
-        script: "git tag --merged HEAD --list 'v[0-9]*'",
-        returnStdout: true
-    ).trim()))
+    String previous = resolveLatestStableVersion(
+        credentialsId: credentialsId,
+        mainBranch: config.mainBranch ?: 'main'
+    )
 
     if (!previous) {
-        echo "calculateVersion: no hay tags de versión; versión inicial ${initialVersion}"
+        echo "calculateVersion: main no tiene tags de versión; versión inicial ${initialVersion}"
         return [version: initialVersion, previous: null, bump: 'initial', alreadyTagged: false]
     }
 
-    // Mensajes completos (asunto y cuerpo) separados por el carácter RS (0x1e).
+    // El rango funciona aunque el tag estable y HEAD estén en ramas divergentes:
+    // incluye commits alcanzables desde HEAD que no están contenidos en el tag.
     String log = sh(
         script: "git log --no-merges --format='%B%x1e' 'v${previous}..HEAD'",
         returnStdout: true
