@@ -1,16 +1,22 @@
 /**
  * Construye la imagen Docker de un componente y la publica en el registro (HU-07).
  *
- *   dockerPublish(service: 'circleguard-auth-service', version: '1.4.0')
- *   dockerPublish(image: 'web-client', dockerfile: 'mobile/Dockerfile', context: 'mobile', version: '1.4.0')
+ *   dockerPublish(service: 'circleguard-auth-service', version: '0.4.1-SNAPSHOT.12.a83f21c')
+ *   dockerPublish(image: 'web-client', dockerfile: 'mobile/Dockerfile', context: 'mobile', version: '0.4.1-rc.9f3a1c2')
  *
  * Reglas:
- *  - Acepta versiones estables MAJOR.MINOR.PATCH y pre-releases SNAPSHOT/rc únicas.
+ *  - Acepta versiones estables MAJOR.MINOR.PATCH y pre-releases: SNAPSHOT y rc únicos por build
+ *    (X.Y.Z-SNAPSHOT.BUILD.SHA, X.Y.Z-rc.BUILD.SHA) o rc identificado por contenido (X.Y.Z-rc.TREE),
+ *    el release candidate de una promoción dev -> main.
  *  - "latest" y tags fuera del formato versionado permitido hacen fallar la etapa.
  *  - Una versión publicada es inmutable: si el tag ya existe con otro commit, falla.
  *    Si existe con el mismo commit (re-ejecución del build), se omite sin error.
+ *    Para un rc por contenido se compara el árbol de código (label io.circleguard.source-tree):
+ *    una re-ejecución sobre el mismo contenido reutiliza el RC ya publicado.
+ *  - Las versiones estables de main no se construyen aquí: las crea promoteRelease por retag
+ *    del RC aprobado.
  *
- * Devuelve la referencia publicada, por ejemplo localhost:5000/circleguard/auth-service:1.4.0
+ * Devuelve la referencia publicada, por ejemplo localhost:5000/circleguard/auth-service:0.4.1-rc.9f3a1c2
  */
 def call(Map config = [:]) {
     String version = (config.version ?: '').toString().trim()
@@ -33,6 +39,10 @@ def call(Map config = [:]) {
     String namespace = config.namespace ?: (env.IMAGE_NAMESPACE ?: 'circleguard')
     String credentialsId = config.credentialsId ?: 'nexus-ci'
     String revision = env.GIT_COMMIT ?: sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+    // Árbol de código de HEAD: identifica el contenido aunque cambie el commit (p. ej. el merge
+    // temporal que Jenkins crea en cada build de un PR).
+    String sourceTree = sh(script: 'git rev-parse HEAD^{tree}', returnStdout: true).trim()
+    boolean byContent = isContentTag(version)
     String ref = "${registry}/${namespace}/${image}:${version}"
 
     withEnv([
@@ -42,6 +52,7 @@ def call(Map config = [:]) {
         "BUILD_CONTEXT=${buildContext}",
         "IMAGE_VERSION=${version}",
         "REVISION=${revision}",
+        "SOURCE_TREE=${sourceTree}",
         // Credenciales del login aisladas por build, no en el home de Jenkins
         "DOCKER_CONFIG=${env.WORKSPACE}/.docker-publish"
     ]) {
@@ -51,11 +62,12 @@ def call(Map config = [:]) {
                 sh 'printf "%s" "$REGISTRY_PASSWORD" | docker login "$REGISTRY" -u "$REGISTRY_USER" --password-stdin'
             }
 
-            String published = publishedRevision()
-            if (published == revision) {
-                echo "dockerPublish: ${ref} ya está publicada desde ${revision}; se omite"
+            String identity = byContent ? sourceTree : revision
+            String published = publishedLabel(byContent ? 'io.circleguard.source-tree' : 'org.opencontainers.image.revision')
+            if (published == identity) {
+                echo "dockerPublish: ${ref} ya está publicada desde ${byContent ? 'el árbol' : 'el commit'} ${identity}; se omite"
             } else if (published) {
-                error("dockerPublish: ${ref} ya existe (commit ${published}). Las versiones publicadas son " +
+                error("dockerPublish: ${ref} ya existe (${byContent ? 'árbol' : 'commit'} ${published}). Las versiones publicadas son " +
                         'inmutables: genere una versión nueva en lugar de sobrescribirla.')
             } else {
                 sh '''
@@ -64,6 +76,7 @@ def call(Map config = [:]) {
                       --build-arg VERSION="$IMAGE_VERSION" \
                       --label org.opencontainers.image.revision="$REVISION" \
                       --label org.opencontainers.image.version="$IMAGE_VERSION" \
+                      --label io.circleguard.source-tree="$SOURCE_TREE" \
                       -t "$IMAGE_REF" \
                       "$BUILD_CONTEXT"
                     docker push "$IMAGE_REF"
@@ -79,7 +92,12 @@ def call(Map config = [:]) {
     return ref
 }
 
-/** Falla con un mensaje explicativo si el tag no es una versión MAJOR.MINOR.PATCH. */
+/** rc identificado por contenido: X.Y.Z-rc.<7 caracteres hexadecimales del árbol>. */
+boolean isContentTag(String tag) {
+    return tag ==~ /\d+\.\d+\.\d+-rc\.[0-9a-f]{7}/
+}
+
+/** Falla con un mensaje explicativo si el tag no es una versión MAJOR.MINOR.PATCH o pre-release. */
 def validateTag(String tag) {
     if (!tag) {
         error('dockerPublish: falta "version" (formato MAJOR.MINOR.PATCH o pre-release)')
@@ -88,24 +106,33 @@ def validateTag(String tag) {
         error("dockerPublish: el tag 'latest' no está permitido. Cada imagen se publica solo con su " +
                 'versión MAJOR.MINOR.PATCH para poder desplegar y revertir versiones exactas (HU-07).')
     }
-    if (!(tag ==~ /\d+\.\d+\.\d+(?:-(?:SNAPSHOT|rc)\.\d+\.[0-9a-f]{7})?/)) {
-        error("dockerPublish: '${tag}' no es una versión estable o pre-release permitida (p. ej. 1.4.0, 1.4.0-SNAPSHOT.12.a83f21c o 1.4.0-rc.12.a83f21c).")
+    if (!(tag ==~ /\d+\.\d+\.\d+(?:-(?:SNAPSHOT|rc)\.\d+\.[0-9a-f]{7}|-rc\.[0-9a-f]{7})?/)) {
+        error("dockerPublish: '${tag}' no es una versión estable o pre-release permitida (p. ej. 1.4.0, " +
+                '1.4.0-SNAPSHOT.12.a83f21c, 1.4.0-rc.12.a83f21c o 1.4.0-rc.9f3a1c2).')
     }
 }
 
 /**
- * Commit con el que se publicó IMAGE_REF, o '' si el tag no existe en el registro.
+ * Valor del label "key" con el que se publicó IMAGE_REF, '' si el tag no existe en el registro,
+ * o 'desconocido' si existe sin ese label.
  * Usa el daemon Docker (no la API HTTP) porque el registro solo es alcanzable
  * como localhost desde el host CI.
  */
-def publishedRevision() {
+def publishedLabel(String key) {
     int status = sh(script: 'docker pull -q "$IMAGE_REF" >/dev/null 2>&1', returnStatus: true)
     if (status != 0) {
         return ''
     }
-    String label = sh(
-        script: 'docker image inspect -f \'{{ index .Config.Labels "org.opencontainers.image.revision" }}\' "$IMAGE_REF"',
+    String json = sh(
+        script: 'docker image inspect -f \'{{ json .Config.Labels }}\' "$IMAGE_REF"',
         returnStdout: true
     ).trim()
-    return label ?: 'desconocido'
+    return labelValue(json, key) ?: 'desconocido'
+}
+
+@NonCPS
+String labelValue(String json, String key) {
+    def labels = new groovy.json.JsonSlurperClassic().parseText(json ?: 'null')
+    def value = labels instanceof Map ? labels[key] : null
+    return value == null ? '' : value.toString()
 }
