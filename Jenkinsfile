@@ -23,6 +23,8 @@ def prereleaseVersion = null
 def promotionPr = env.CHANGE_ID != null && env.CHANGE_TARGET == 'main' && env.CHANGE_BRANCH == 'dev' && env.CHANGE_FORK == null
 
 def changed = [services: [], web: false, all: false, base: '']
+// A branch whose commit is already in dev (its PR was merged) is not built again.
+def alreadyMerged = false
 
 // Set when a service or the web client fails; used by the Discord notification.
 def failedService = null
@@ -62,6 +64,12 @@ pipeline {
                 checkout scm
                 sh 'chmod +x gradlew'
                 sh 'find services -path "*/build/test-results" -type d -prune -exec rm -rf {} +'
+                script {
+                    alreadyMerged = alreadyMergedBranch()
+                    if (alreadyMerged) {
+                        currentBuild.description = 'Skipped: already merged into dev'
+                    }
+                }
             }
         }
 
@@ -73,7 +81,9 @@ pipeline {
             }
         }
 
+        // With no changes detected every later stage is skipped by its own condition.
         stage('Detect changes') {
+            when { expression { !alreadyMerged } }
             steps {
                 script {
                     changed = detectChangedServices(
