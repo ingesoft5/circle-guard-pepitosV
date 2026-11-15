@@ -1,0 +1,3 @@
+# Accepted vulnerabilities need an id, a reason and a review date.
+# Example:
+# CVE-2024-00000  # expires 2026-12-01, no fixed release, not reachable in this service

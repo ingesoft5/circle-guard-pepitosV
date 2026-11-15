@@ -325,6 +325,14 @@ pipeline {
             }
         }
 
+        stage('IaC scan') {
+            steps {
+                script {
+                    trivyConfigScan()
+                }
+            }
+        }
+
         stage('Integration tests') {
             when {
                 expression {

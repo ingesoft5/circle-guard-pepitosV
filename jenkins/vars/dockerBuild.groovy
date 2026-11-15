@@ -39,6 +39,7 @@ def call(Map config = [:]) {
               "\$BUILD_CONTEXT"
         """
         echo "dockerBuild: imagen construida ${imageRef}"
+        trivyImageScan(image: imageRef)
         if (!keep) {
             sh 'docker image rm "$IMAGE_REF" >/dev/null'
             echo "dockerBuild: removed ${imageRef} from the CI host"
