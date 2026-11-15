@@ -145,7 +145,9 @@ sonarScan(service: 'circleguard-form-service')
 
 ### `validatePrSize`
 
-Valida el tamaño de un Pull Request antes de compilar. En builds PR-Merge compara el primer padre del merge commit contra el resultado integrado; en builds PR-Head calcula el merge-base con la rama destino. Excluye documentación Markdown, lockfiles, artefactos generados y archivos binarios comunes.
+Valida el tamaño de un Pull Request antes de compilar. En builds PR-Merge compara la punta de la rama destino (segundo padre del merge commit, ver `prDiffBase`) contra el resultado integrado; en builds PR-Head calcula el merge-base con la rama destino. Excluye documentación Markdown, lockfiles, artefactos generados y archivos binarios comunes.
+
+No se aplica al PR de promoción a `main` (desde `dev` o desde una rama `release/*` heredada): ese PR reúne todos los cambios que ya pasaron este límite al entrar a `dev`, así que su tamaño es el del release completo.
 
 | Parámetro | Valor por defecto | Descripción |
 |:---|:---|:---|
@@ -294,7 +296,7 @@ Construye la imagen de un componente y la publica en el registro de Nexus con un
 | `service` | Sí, si no se usa `image` | | Módulo de `services/`, por ejemplo `circleguard-auth-service`. |
 | `image` | No | `service` sin el prefijo `circleguard-` | Nombre de la imagen en el registro. |
 | `dockerfile` | No | `services/<service>/Dockerfile` | Dockerfile a construir. |
-| `context` | No | `.` | Contexto de build. |
+| `context` | No | `services/<service>/build/docker` con `service`; `.` con `image` | Contexto de build. Con `service` es la carpeta donde la tarea Gradle `dockerContext` (parte de `assemble`, etapa *Compile*) deja `app.jar`: la imagen empaqueta el JAR ya compilado y probado, sin volver a compilar en Docker. |
 | `registry` | No | `env.NEXUS_REGISTRY` | Registro destino (variable global definida en JCasC). |
 | `namespace` | No | `env.IMAGE_NAMESPACE` o `circleguard` | Prefijo de las imágenes. |
 | `credentialsId` | No | `nexus-ci` | Credencial de Jenkins con permiso de push. |
@@ -320,7 +322,7 @@ Construye la imagen de un componente sin publicarla. Se usa en builds selectivos
 | `service` | Sí, si no se usa `image` | | Módulo de `services/`, por ejemplo `circleguard-form-service`. |
 | `image` | No | `service` sin el prefijo `circleguard-` | Nombre de la imagen local. |
 | `dockerfile` | No | `services/<service>/Dockerfile` | Dockerfile a construir. |
-| `context` | No | `.` | Contexto de build. |
+| `context` | No | `services/<service>/build/docker` con `service`; `.` con `image` | Contexto de build. Con `service` es la carpeta donde la tarea Gradle `dockerContext` (parte de `assemble`, etapa *Compile*) deja `app.jar`: la imagen empaqueta el JAR ya compilado y probado, sin volver a compilar en Docker. |
 | `namespace` | No | `env.IMAGE_NAMESPACE` o `circleguard` | Prefijo de la imagen local. |
 | `pull` | No | `true` | Ejecuta `docker build --pull`. |
 | `keep` | No | `false` | Conserva la imagen en el host de CI después de construirla. |
@@ -396,3 +398,26 @@ Consideraciones:
 - Un merge a `main` con un `feat` crea el tag con `MINOR` incrementado y publica las imágenes con esa versión; un merge con solo `docs` o `chore` no crea release.
 - Cada release crea su GitHub Release con las notas agrupadas y abre o actualiza el PR `chore(release): update changelog for vX.Y.Z` hacia `dev`.
 - La documentación operativa completa está en [docs/operaciones/jenkins-pipeline.md](../docs/operaciones/jenkins-pipeline.md).
+
+### `imageLabels`
+
+Etiquetas de auditoría que `dockerBuild` y `dockerPublish` ponen en cada imagen. Se fijan al construir, así que la promoción RC → estable no cambia el digest.
+
+| Etiqueta | Contenido |
+|:---|:---|
+| `org.opencontainers.image.title`, `description`, `vendor` | Nombre del componente |
+| `org.opencontainers.image.source`, `url` | Repositorio en GitHub |
+| `org.opencontainers.image.revision` | Commit |
+| `org.opencontainers.image.version`, `ref.name` | Versión con la que se construyó (en un RC, el tag RC) |
+| `org.opencontainers.image.created` | Fecha y hora UTC del build |
+| `io.circleguard.service` | Imagen (`auth-service`, `web-client`, ...) |
+| `io.circleguard.base-version` | `X.Y.Z` a la que pertenece: en una imagen estable promovida dice la versión estable aunque `version` diga el RC |
+| `io.circleguard.source-tree` | Árbol de código (identifica el RC por contenido) |
+| `io.circleguard.branch`, `change-id` | Rama y número de PR |
+| `io.circleguard.build-number`, `build-url`, `job` | Build de Jenkins que la produjo |
+
+```bash
+docker image inspect -f '{{ json .Config.Labels }}' <registro>/circleguard/auth-service:0.5.0
+```
+
+Al promover en `main`, `promoteRelease` archiva además `promotion-<versión>.json`: por imagen, el tag estable, el tag RC y el digest, con el commit, el árbol y el build.

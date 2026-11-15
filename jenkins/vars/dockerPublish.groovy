@@ -31,7 +31,7 @@ def call(Map config = [:]) {
     if (!dockerfile) {
         error('dockerPublish: indique "dockerfile" cuando no usa "service"')
     }
-    String buildContext = config.context ?: '.'
+    String buildContext = config.context ?: (service ? dockerBuild.serviceContext(service) : '.')
     String registry = config.registry ?: env.NEXUS_REGISTRY
     if (!registry) {
         error('dockerPublish: falta el registro (parámetro "registry" o variable global NEXUS_REGISTRY en JCasC)')
@@ -44,6 +44,7 @@ def call(Map config = [:]) {
     String sourceTree = sh(script: 'git rev-parse HEAD^{tree}', returnStdout: true).trim()
     boolean byContent = isContentTag(version)
     String ref = "${registry}/${namespace}/${image}:${version}"
+    String labels = imageLabels(image: image, version: version, revision: revision, sourceTree: sourceTree)
 
     withEnv([
         "IMAGE_REF=${ref}",
@@ -53,8 +54,8 @@ def call(Map config = [:]) {
         "IMAGE_VERSION=${version}",
         "REVISION=${revision}",
         "SOURCE_TREE=${sourceTree}",
-        // Credenciales del login aisladas por build, no en el home de Jenkins
-        "DOCKER_CONFIG=${env.WORKSPACE}/.docker-publish"
+        // Login isolated per build and per image (publications run in parallel), not in Jenkins' home
+        "DOCKER_CONFIG=${env.WORKSPACE}/.docker-publish-${image}"
     ]) {
         try {
             withCredentials([usernamePassword(credentialsId: credentialsId,
@@ -70,17 +71,15 @@ def call(Map config = [:]) {
                 error("dockerPublish: ${ref} ya existe (${byContent ? 'árbol' : 'commit'} ${published}). Las versiones publicadas son " +
                         'inmutables: genere una versión nueva en lugar de sobrescribirla.')
             } else {
-                sh '''
-                    docker build --pull \
-                      -f "$DOCKERFILE" \
-                      --build-arg VERSION="$IMAGE_VERSION" \
-                      --label org.opencontainers.image.revision="$REVISION" \
-                      --label org.opencontainers.image.version="$IMAGE_VERSION" \
-                      --label io.circleguard.source-tree="$SOURCE_TREE" \
-                      -t "$IMAGE_REF" \
-                      "$BUILD_CONTEXT"
-                    docker push "$IMAGE_REF"
-                '''
+                sh """
+                    docker build --pull \\
+                      -f "\$DOCKERFILE" \\
+                      --build-arg VERSION="\$IMAGE_VERSION" \\
+                      ${labels} \\
+                      -t "\$IMAGE_REF" \\
+                      "\$BUILD_CONTEXT"
+                    docker push "\$IMAGE_REF"
+                """
                 echo "dockerPublish: publicada ${ref}"
             }
         } finally {

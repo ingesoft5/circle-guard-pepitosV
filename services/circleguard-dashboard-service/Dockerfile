@@ -1,28 +1,19 @@
+# La imagen empaqueta el JAR que ya compiló y probó el pipeline (etapa "Build and test"):
+# Docker no vuelve a compilar con Gradle. El contexto de build es build/docker del servicio,
+# donde la tarea dockerContext deja app.jar:
+#
+#   ./gradlew :services:circleguard-dashboard-service:assemble
 #   docker build -f services/circleguard-dashboard-service/Dockerfile \
-#     --build-arg VERSION=1.0.0 -t circleguard/dashboard-service:1.0.0 .
+#     --build-arg VERSION=1.0.0 -t circleguard/dashboard-service:1.0.0 \
+#     services/circleguard-dashboard-service/build/docker
 
-ARG GRADLE_IMAGE=gradle:8.14.3-jdk21-alpine
 ARG RUNTIME_IMAGE=eclipse-temurin:21-jre-alpine
 
-# Etapa 1 · build: compila con JDK 21 + Gradle y extrae las capas del JAR
-FROM ${GRADLE_IMAGE} AS build
-WORKDIR /workspace
-
-ENV GRADLE_OPTS="-Dorg.gradle.daemon=false -Dkotlin.compiler.execution.strategy=in-process"
-
-# 1) Solo los descriptores de build: esta capa (dependencias) queda en caché
-#    mientras no cambien los build.gradle.kts.
-COPY settings.gradle.kts build.gradle.kts ./
-COPY services/circleguard-dashboard-service/build.gradle.kts services/circleguard-dashboard-service/
-RUN gradle --quiet :services:circleguard-dashboard-service:dependencies > /dev/null
-
-# 2) Código fuente y empaquetado (las pruebas corren en su propia etapa del pipeline)
-COPY services/circleguard-dashboard-service/src services/circleguard-dashboard-service/src
-RUN gradle :services:circleguard-dashboard-service:bootJar -x test \
- && mkdir -p /out \
- && find services/circleguard-dashboard-service/build/libs -name '*.jar' ! -name '*-plain.jar' -exec cp {} /out/app.jar \; \
- && cd /out \
- && java -Djarmode=layertools -jar app.jar extract \
+# Etapa 1 · layers: separa el JAR en las capas de Spring Boot
+FROM ${RUNTIME_IMAGE} AS layers
+WORKDIR /out
+COPY app.jar app.jar
+RUN java -Djarmode=layertools -jar app.jar extract \
  && mkdir -p dependencies spring-boot-loader snapshot-dependencies application \
  && rm app.jar
 
@@ -43,10 +34,10 @@ WORKDIR /app
 
 # Capas de Spring Boot de la menos a la más cambiante: un cambio de código solo
 # reconstruye la última capa (application).
-COPY --from=build --chown=spring:spring /out/dependencies/ ./
-COPY --from=build --chown=spring:spring /out/spring-boot-loader/ ./
-COPY --from=build --chown=spring:spring /out/snapshot-dependencies/ ./
-COPY --from=build --chown=spring:spring /out/application/ ./
+COPY --from=layers --chown=spring:spring /out/dependencies/ ./
+COPY --from=layers --chown=spring:spring /out/spring-boot-loader/ ./
+COPY --from=layers --chown=spring:spring /out/snapshot-dependencies/ ./
+COPY --from=layers --chown=spring:spring /out/application/ ./
 
 # UID numérico para que Kubernetes pueda verificar runAsNonRoot
 USER 10001:10001

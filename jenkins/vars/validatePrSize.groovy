@@ -4,7 +4,7 @@
  * Por defecto: máximo 700 líneas agregadas, 300 eliminadas y 1000 en total.
  * Los límites se centralizan como variables de entorno en el Jenkinsfile.
  *
- * En builds PR-Merge se compara HEAD^1 (base) contra HEAD (merge result).
+ * En builds PR-Merge se compara la punta de la rama destino (HEAD^2, ver prDiffBase) contra HEAD.
  * En builds PR-Head se usa el merge-base con la rama destino.
  */
 def call(Map config = [:]) {
@@ -12,7 +12,10 @@ def call(Map config = [:]) {
         echo 'validatePrSize: no es un build de Pull Request; se omite.'
         return [skipped: true, additions: 0, deletions: 0, files: 0]
     }
-    if (env.CHANGE_TARGET == 'main' && (env.CHANGE_BRANCH ?: '') ==~ /release\/.+/) {
+    // Promotion to main (dev -> main, or a legacy release/* branch) carries every change already
+    // reviewed into dev under this same limit, so its size is the release, not a single change.
+    if (env.CHANGE_TARGET == 'main' && env.CHANGE_FORK == null &&
+            ((env.CHANGE_BRANCH ?: '') == 'dev' || (env.CHANGE_BRANCH ?: '') ==~ /release\/.+/)) {
         echo 'validatePrSize: promoción de release a main; se omite el límite de tamaño. Este mismo PR debe completar build, análisis, publicación RC, despliegue a stage y E2E antes de poder fusionarse.'
         return [skipped: true, reason: 'release-promotion', additions: 0, deletions: 0, files: 0]
     }
@@ -25,8 +28,7 @@ def call(Map config = [:]) {
         error('validatePrSize: los límites no pueden ser negativos.')
     }
 
-    String base = sh(script: 'git rev-parse --verify HEAD^1 2>/dev/null || true',
-            returnStdout: true).trim()
+    String base = prDiffBase()
     if (!base) {
         String target = (env.CHANGE_TARGET ?: '').trim()
         if (!target) {

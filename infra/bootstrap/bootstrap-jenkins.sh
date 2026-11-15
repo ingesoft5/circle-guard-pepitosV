@@ -25,6 +25,13 @@ ensure_deploy_key_files() {
       warn "No deploy key for ${env_name}: run load-deploy-credential.sh ${env_name} before deploying"
     fi
   done
+  # Same for the kubeconfig of each k3s cluster (Part 2): empty until load-kubeconfig.sh runs.
+  for env_name in dev stage prod; do
+    key_file="${SECRETS_DIR}/kubeconfig-${env_name}"
+    if ! run_as_root test -s "${key_file}"; then
+      run_as_root install -m 400 -o "${JENKINS_UID}" -g "${JENKINS_UID}" /dev/null "${key_file}"
+    fi
+  done
 }
 
 main() {
