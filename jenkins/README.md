@@ -143,6 +143,12 @@ La clave y el nombre de cada proyecto se definen en `build.gradle.kts` como `cir
 sonarScan(service: 'circleguard-form-service')
 ```
 
+### `alreadyMergedBranch`
+
+Indica si un build de rama no tiene nada nuevo que comprobar porque su commit ya está en `dev`. Pasa cuando se fusiona o se cierra un PR y su rama sigue existiendo: Jenkins deja de construir `PR-<n>` y vuelve a construir la rama. El `Jenkinsfile` lo consulta en *Checkout*. Si es `true`, se saltan las demás etapas y el build termina en segundos, con la descripción *Skipped: already merged into dev*.
+
+Nunca aplica a PR, `dev`, `main` ni `release/*`. Una rama cuyo commit es justo la punta de `dev` (recién creada, sin commits) sí se construye, para no publicar un segundo estado sobre el mismo commit que reporta `dev`.
+
 ### `validatePrSize`
 
 Valida el tamaño de un Pull Request antes de compilar. En builds PR-Merge compara la punta de la rama destino (segundo padre del merge commit, ver `prDiffBase`) contra el resultado integrado; en builds PR-Head calcula el merge-base con la rama destino. Excluye documentación Markdown, lockfiles, artefactos generados y archivos binarios comunes.
