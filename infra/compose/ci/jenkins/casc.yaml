@@ -29,7 +29,6 @@ jenkins:
               - "Job/Cancel"
               - "Job/Read"
               - "Job/Workspace"
-              - "Run/Replay"
               - "View/Read"
   globalNodeProperties:
     - envVars:
@@ -39,6 +38,9 @@ jenkins:
             value: "${NEXUS_REGISTRY}"
           - key: "IMAGE_NAMESPACE"
             value: "${IMAGE_NAMESPACE}"
+          # Registry HTTP API (promoteRelease, rollback): http://nexus:5000 or the tools host
+          - key: "NEXUS_REGISTRY_API"
+            value: "${NEXUS_REGISTRY_API:-http://nexus:5000}"
           # Private IP of each environment host, used by the deployCompose step
           - key: "DEPLOY_HOST_DEV"
             value: "${DEPLOY_HOST_DEV:-}"
@@ -124,7 +126,7 @@ unclassified:
     buildWrapperEnabled: true
     installations:
       - name: "SonarQube"
-        serverUrl: "http://sonarqube:9000"
+        serverUrl: "${SONAR_HOST_URL:-http://sonarqube:9000}"
         credentialsId: "sonar-token"
   globalLibraries:
     libraries:

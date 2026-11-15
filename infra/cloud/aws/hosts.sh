@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Starts, stops and lists the CircleGuard hosts, and keeps their current IPs in one file.
-# Usage: hosts.sh <status|refresh|start|stop> [ci|envs|all]
+# Usage: hosts.sh <status|refresh|start|stop> [ci|tools|envs|all]
+#        ci starts or stops both CI hosts: Jenkins (ci) and SonarQube/Nexus (tools).
 #        hosts.sh allow [public-ip] [owner]   grants the documented admin ports and replaces the
 #        rules that owner already had. Defaults: this machine's public IP and the IAM user's name.
 # Public IPs of the environments change on every start: read them from hosts.env (not versioned).
@@ -11,17 +12,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/../../bootstrap/lib/common.sh"
 
 readonly HOSTS_FILE="${SCRIPT_DIR}/hosts.env"
-readonly ALL_HOSTS=(ci dev stage prod)
+readonly ALL_HOSTS=(ci tools dev stage prod)
 export AWS_DEFAULT_REGION="${AWS_REGION:-us-east-1}"
 export AWS_PAGER=""
 
 usage() {
-  die "Usage: $(basename "$0") <status|refresh|start|stop> [ci|envs|all] | allow [public-ip] [owner]"
+  die "Usage: $(basename "$0") <status|refresh|start|stop> [ci|tools|envs|all] | allow [public-ip] [owner]"
 }
 
 hosts_of() {
   case "$1" in
-    ci) echo ci ;;
+    ci) echo ci tools ;;
+    tools) echo tools ;;
     envs) echo dev stage prod ;;
     all) echo "${ALL_HOSTS[*]}" ;;
     *) usage ;;
@@ -55,7 +57,7 @@ refresh() {
     [[ "${public_ip}" == "None" ]] && public_ip=""
     [[ "${private_ip}" == "None" ]] && private_ip=""
     printf '%s_PUBLIC_IP=%s\n%s_PRIVATE_IP=%s\n' "${upper}" "${public_ip}" "${upper}" "${private_ip}" >>"${tmp}"
-    printf '%-6s %-20s %-8s private=%-15s public=%s\n' \
+    printf '%-9s %-20s %-8s private=%-15s public=%s\n' \
       "${host}" "${id}" "${state}" "${private_ip:--}" "${public_ip:--}"
   done
   mv "${tmp}" "${HOSTS_FILE}"
@@ -126,8 +128,11 @@ allow_admin_ip() {
   [[ "${ip}" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || usage
   [[ "${owner}" =~ ^[A-Za-z0-9_-]+$ ]] || usage
   cidr="${ip}/32"
-  for port in 22 8080 9000 8081 5000; do
+  for port in 22 8080; do
     replace_owner_rule circleguard-ci-sg "${port}" "${port}" "${cidr}" "${owner}"
+  done
+  for port in 22 9000 8081 5000; do
+    replace_owner_rule circleguard-tools-sg "${port}" "${port}" "${cidr}" "${owner}"
   done
   for env_name in dev stage prod; do
     replace_owner_rule "circleguard-${env_name}-sg" 22 22 "${cidr}" "${owner}"
