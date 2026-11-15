@@ -70,7 +70,7 @@ La plantilla es [infra/compose/ci/.env.example](../../infra/compose/ci/.env.exam
 | `NEXUS_CI_PASSWORD` | `ci-publisher` | `__GENERATE__`. En Jenkins queda como `nexus-ci` |
 | `NEXUS_PULL_USER` | `deploy-puller` | Fijo. Solo pull |
 | `NEXUS_PULL_PASSWORD` | `deploy-puller` | `__GENERATE__`. Se pasa a `bootstrap-env.sh` |
-| `NEXUS_REGISTRY` | | En CI, `localhost:5000`. Los ambientes usan `<ip-privada-de-ci>:5000` |
+| `NEXUS_REGISTRY` | | `<ip-privada-de-tools>:5000` en CI y en los ambientes (`localhost:5000` solo con `CI_ROLE=all`) |
 | `DEPLOY_HOST_DEV` | | IP privada de `dev` |
 | `DEPLOY_HOST_STAGE` | | IP privada de `stage` |
 | `DEPLOY_HOST_PROD` | | IP privada de `prod` |
@@ -225,7 +225,7 @@ export ENV_KEY_NAME=circleguard
 
 `ADMIN_CIDR` tiene que ser la IP pública desde la que se abre SSH y las consolas. Si cambia, `infra/cloud/aws/hosts.sh allow` autoriza la IP nueva sin acumular reglas viejas del mismo dueño.
 
-### 2. Host de CI y Elastic IP
+### 2. Hosts de CI y Elastic IP
 
 ```bash
 infra/cloud/aws/provision-ci-hosts.sh
@@ -235,24 +235,49 @@ aws ec2 describe-addresses --allocation-ids "$ALLOC" \
   --query 'Addresses[0].PublicIp' --output text
 ```
 
-El script imprime el id de la instancia (`i-...`) y una IP pública inicial. `<id-de-ci>` es ese id. La IP que imprime `describe-addresses` es la Elastic IP y es la que queda en las URL. Sin ella, apagar CI cambia la IP y rompe el webhook.
+El script crea dos hosts `m7i-flex.large` (2 vCPU, 8 GB, el máximo del plan gratuito de AWS), cada uno con 50 GB y su Security Group:
 
-### 3. Jenkins, SonarQube y Nexus
+| Host | Corre | Security Group |
+|:---|:---|:---|
+| `circleguard-ci` | Jenkins y los builds | `circleguard-ci-sg` |
+| `circleguard-tools` | SonarQube y Nexus (registro) | `circleguard-tools-sg` |
+
+Antes todo corría en un solo host de 8 GB y el kernel mataba a Nexus por falta de memoria durante los builds en paralelo. Separarlos duplica la memoria y el disco sin salir del plan gratuito. Entre los dos hosts las reglas usan el Security Group como origen (no una IP): Jenkins llega a SonarQube (9000), Nexus (8081) y el registro (5000), y SonarQube avisa a Jenkins (8080) el resultado del quality gate.
+
+`<id-de-ci>` es el id (`i-...`) que imprime el script para `circleguard-ci`. La IP de `describe-addresses` es la Elastic IP y es la que queda en las URL de Jenkins. Al final, el script imprime los valores de `NEXUS_REGISTRY`, `NEXUS_REGISTRY_API` y `SONAR_HOST_URL` para el paso siguiente.
+
+### 3. SonarQube y Nexus (host tools), luego Jenkins (host ci)
+
+`bootstrap-all.sh` lee `CI_ROLE` del `.env`: `tools` levanta SonarQube y Nexus, `jenkins` solo Jenkins y `all` (por defecto) los tres en un solo host. Ambos hosts usan el mismo `infra/compose/ci/.env`, con las mismas contraseñas, para que las credenciales de Jenkins sirvan en Nexus.
 
 ```bash
-tar czf - infra | ssh -i circleguard.pem ubuntu@<ip-publica-de-ci> \
+# 1) tools: SonarQube y Nexus. La primera ejecución crea infra/compose/ci/.env.
+tar czf - infra | ssh -i circleguard.pem ubuntu@<ip-publica-de-tools> \
   'mkdir -p ~/circleguard && tar xzf - -C ~/circleguard'
-
-ssh -i circleguard.pem ubuntu@<ip-publica-de-ci>
+ssh -i circleguard.pem ubuntu@<ip-publica-de-tools>
 cd ~/circleguard
-sudo ./infra/bootstrap/bootstrap-all.sh
+sudo CI_ROLE=tools \
+  JENKINS_WEBHOOK_URL=http://<ip-privada-de-ci>:8080/sonarqube-webhook/ \
+  ./infra/bootstrap/bootstrap-all.sh
+
+# 2) ci: copiar a ci el .env de tools sin mostrarlo (mismas contraseñas y token de Sonar),
+#    y levantar Jenkins apuntando a tools.
+sudo CI_ROLE=jenkins \
+  NEXUS_REGISTRY=<ip-privada-de-tools>:5000 \
+  NEXUS_REGISTRY_API=http://<ip-privada-de-tools>:5000 \
+  SONAR_HOST_URL=http://<ip-privada-de-tools>:9000 \
+  ./infra/bootstrap/bootstrap-all.sh
 ```
 
-`bootstrap-all.sh` ejecuta, en orden, `bootstrap-jenkins.sh`, `bootstrap-sonarqube.sh` y `bootstrap-nexus.sh`. Crea `infra/compose/ci/.env` la primera vez. Al terminar responden:
+El rol y las direcciones quedan guardados en el `.env`; las siguientes ejecuciones son solo `sudo ./infra/bootstrap/bootstrap-all.sh`.
 
-- `http://localhost:8080` Jenkins
-- `http://localhost:9000` SonarQube
-- `http://localhost:8081` Nexus
+En el host `jenkins`, el bootstrap agrega el registro de `tools` a `insecure-registries` de Docker, porque Nexus sirve HTTP. En ambos hosts crea un swap de 4 GB (`ensure-swap.sh`). En `tools` además programa `nexus-retention.sh` (timer diario de systemd): conserva todas las versiones estables, que son las que usa el rollback, y los RC ya promovidos, y de las demás prerelease deja las 5 más recientes por imagen.
+
+Responden:
+
+- `http://<ip-de-ci>:8080` Jenkins
+- `http://<ip-de-tools>:9000` SonarQube
+- `http://<ip-de-tools>:8081` Nexus
 
 Las contraseñas de `admin` están en ese `.env`. No se copian a la estación de trabajo ni al repositorio.
 
@@ -285,7 +310,7 @@ Con el token de escritura y `manageHooks`, Jenkins registra el webhook al escane
 JENKINS_CIDR=<ip-privada-de-ci>/32 infra/cloud/aws/provision-env-hosts.sh
 ```
 
-El script crea `circleguard-dev`, `circleguard-stage` y `circleguard-prod`, abre el `80` y el `443`, y permite que cada IP privada llegue al registro en el puerto `5000`.
+El script crea `circleguard-dev`, `circleguard-stage` y `circleguard-prod`, abre el `80` y el `443`, y permite que cada IP privada llegue al registro (host `tools`) en el puerto `5000`.
 
 Generar una llave de despliegue por ambiente, fuera del repositorio:
 
@@ -295,7 +320,7 @@ ssh-keygen -t ed25519 -N '' -C circleguard-deploy-stage -f ~/.ssh/circleguard-de
 ssh-keygen -t ed25519 -N '' -C circleguard-deploy-prod -f ~/.ssh/circleguard-deploy-prod
 ```
 
-Copiar el repositorio y aprovisionar cada host. `<ip>` es la IP pública de ese host. `<NEXUS_PULL_PASSWORD>` es el valor de `NEXUS_PULL_PASSWORD` en el `.env` de CI. Repetir el bloque para `stage` y para `prod`: cambian la IP, el archivo `.pub` (`circleguard-deploy-stage.pub`, `circleguard-deploy-prod.pub`) y el argumento final del script.
+Copiar el repositorio y aprovisionar cada host. `<ip>` es la IP pública de ese host. `<NEXUS_PULL_PASSWORD>` es el valor de `NEXUS_PULL_PASSWORD` en el `.env` de CI (el mismo que en `tools`). Repetir el bloque para `stage` y para `prod`: cambian la IP, el archivo `.pub` (`circleguard-deploy-stage.pub`, `circleguard-deploy-prod.pub`) y el argumento final del script.
 
 ```bash
 tar czf - --exclude='*.env' infra deploy | ssh -i circleguard.pem ubuntu@<ip> \
@@ -303,7 +328,7 @@ tar czf - --exclude='*.env' infra deploy | ssh -i circleguard.pem ubuntu@<ip> \
 
 ssh -i circleguard.pem ubuntu@<ip> "cd /opt/circleguard && sudo env \
   DEPLOY_SSH_PUBLIC_KEY='$(cat ~/.ssh/circleguard-deploy-dev.pub)' \
-  ADMIN_CIDR=${ADMIN_CIDR} NEXUS_REGISTRY=<ip-privada-de-ci>:5000 \
+  ADMIN_CIDR=${ADMIN_CIDR} NEXUS_REGISTRY=<ip-privada-de-tools>:5000 \
   NEXUS_PULL_USER=deploy-puller NEXUS_PULL_PASSWORD=<NEXUS_PULL_PASSWORD> \
   ./infra/bootstrap/bootstrap-env.sh dev"
 ```

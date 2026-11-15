@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-# Crea (de forma idempotente) el host EC2 y el Security Group del stack CI.
+# Crea (de forma idempotente) los dos hosts del stack CI y sus Security Groups:
+#   circleguard-ci     Jenkins y los builds          (circleguard-ci-sg)
+#   circleguard-tools  SonarQube y Nexus (registro)  (circleguard-tools-sg)
+# En el plan gratuito de AWS ninguna instancia puede pasar de m7i-flex.large (2 vCPU, 8 GB):
+# separar las herramientas en su propio host duplica la memoria y el disco disponibles.
 # Requiere AWS CLI configurado y los parámetros CI_SUBNET_ID, CI_KEY_NAME y ADMIN_CIDR.
 set -Eeuo pipefail
 
@@ -10,9 +14,11 @@ source "${SCRIPT_DIR}/../../bootstrap/lib/common.sh"
 readonly PROJECT_TAG="${PROJECT_TAG:-CircleGuard}"
 readonly CI_INSTANCE_NAME="${CI_INSTANCE_NAME:-circleguard-ci}"
 readonly CI_SG_NAME="${CI_SG_NAME:-circleguard-ci-sg}"
+readonly TOOLS_INSTANCE_NAME="${TOOLS_INSTANCE_NAME:-circleguard-tools}"
+readonly TOOLS_SG_NAME="${TOOLS_SG_NAME:-circleguard-tools-sg}"
 readonly AWS_REGION="${AWS_REGION:-us-east-1}"
-readonly CI_INSTANCE_TYPE="${CI_INSTANCE_TYPE:-t3.large}"
-readonly CI_ROOT_VOLUME_GB="${CI_ROOT_VOLUME_GB:-30}"
+readonly CI_INSTANCE_TYPE="${CI_INSTANCE_TYPE:-m7i-flex.large}"
+readonly CI_ROOT_VOLUME_GB="${CI_ROOT_VOLUME_GB:-50}"
 readonly CI_ROOT_VOLUME_TYPE="${CI_ROOT_VOLUME_TYPE:-gp3}"
 readonly ADMIN_CIDR="${ADMIN_CIDR:?Define ADMIN_CIDR, por ejemplo 203.0.113.0/24}"
 readonly CI_SUBNET_ID="${CI_SUBNET_ID:?Define CI_SUBNET_ID}"
@@ -20,7 +26,9 @@ readonly CI_KEY_NAME="${CI_KEY_NAME:?Define CI_KEY_NAME}"
 
 export AWS_DEFAULT_REGION="${AWS_REGION}"
 
-ci_ports=(22 8080 9000 8081 5000)
+# Puertos abiertos a ADMIN_CIDR en cada host.
+ci_ports=(22 8080)
+tools_ports=(22 9000 8081 5000)
 
 resolve_root_device_name() {
   local ami="$1"
@@ -41,50 +49,59 @@ resolve_ami() {
     --output text
 }
 
+# ensure_rule <sg> <port> --cidr <cidr> | --source-group <sg>
+ensure_rule() {
+  local sg_id="$1" port="$2" output
+  shift 2
+  if output="$(aws ec2 authorize-security-group-ingress \
+    --group-id "${sg_id}" --protocol tcp --port "${port}" "$@" 2>&1)"; then
+    info "Regla agregada: ${port}/tcp desde $2"
+  elif grep -q "InvalidPermission.Duplicate" <<<"${output}"; then
+    info "Regla ya existe: ${port}/tcp desde $2"
+  else
+    die "No se pudo agregar la regla ${port}/tcp: ${output}"
+  fi
+}
+
+# ensure_security_group <nombre> <descripción> <puertos para ADMIN_CIDR...>; imprime el id.
 ensure_security_group() {
-  local vpc_id sg_id
+  local sg_name="$1" description="$2" vpc_id sg_id port
+  shift 2
   vpc_id="$(aws ec2 describe-subnets --subnet-ids "${CI_SUBNET_ID}" --query 'Subnets[0].VpcId' --output text)"
   [[ -n "${vpc_id}" && "${vpc_id}" != "None" ]] || die "No se pudo resolver la VPC de la subred ${CI_SUBNET_ID}"
 
   sg_id="$(aws ec2 describe-security-groups \
-    --filters "Name=group-name,Values=${CI_SG_NAME}" "Name=vpc-id,Values=${vpc_id}" \
+    --filters "Name=group-name,Values=${sg_name}" "Name=vpc-id,Values=${vpc_id}" \
     --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || true)"
 
   if [[ -z "${sg_id}" || "${sg_id}" == "None" ]]; then
-    info "Creando Security Group ${CI_SG_NAME}"
+    info "Creando Security Group ${sg_name}"
     sg_id="$(aws ec2 create-security-group \
-      --group-name "${CI_SG_NAME}" \
-      --description "CircleGuard CI stack" \
+      --group-name "${sg_name}" \
+      --description "${description}" \
       --vpc-id "${vpc_id}" \
       --query 'GroupId' --output text)"
     aws ec2 create-tags --resources "${sg_id}" \
-      --tags "Key=Name,Value=${CI_SG_NAME}" "Key=Project,Value=${PROJECT_TAG}" >/dev/null
+      --tags "Key=Name,Value=${sg_name}" "Key=Project,Value=${PROJECT_TAG}" >/dev/null
   else
-    info "Security Group ya existe: ${sg_id}"
+    info "Security Group ya existe: ${sg_name} (${sg_id})"
   fi
 
-  local port output
-  for port in "${ci_ports[@]}"; do
-    if output="$(aws ec2 authorize-security-group-ingress \
-      --group-id "${sg_id}" --protocol tcp --port "${port}" --cidr "${ADMIN_CIDR}" 2>&1)"; then
-      info "Regla agregada: ${port}/tcp desde ${ADMIN_CIDR}"
-    elif grep -q "InvalidPermission.Duplicate" <<<"${output}"; then
-      info "Regla ya existe: ${port}/tcp desde ${ADMIN_CIDR}"
-    else
-      die "No se pudo agregar la regla ${port}/tcp: ${output}"
-    fi
+  for port in "$@"; do
+    ensure_rule "${sg_id}" "${port}" --cidr "${ADMIN_CIDR}" >&2
   done
 
   printf '%s\n' "${sg_id}"
 }
 
+# ensure_instance <nombre> <ami> <sg>; imprime el id.
 ensure_instance() {
-  local ami="$1" sg_id="$2"
+  local name="$1" ami="$2" sg_id="$3"
   local instance_id state root_device
 
   instance_id="$(aws ec2 describe-instances \
     --filters \
-      "Name=tag:Name,Values=${CI_INSTANCE_NAME}" \
+      "Name=tag:Name,Values=${name}" \
       "Name=tag:Project,Values=${PROJECT_TAG}" \
       "Name=instance-state-name,Values=pending,running,stopped,stopping" \
     --query 'Reservations[0].Instances[0].InstanceId' --output text 2>/dev/null || true)"
@@ -94,7 +111,7 @@ ensure_instance() {
     [[ -n "${root_device}" && "${root_device}" != "None" ]] \
       || die "No se pudo resolver el dispositivo raíz de la AMI ${ami}"
 
-    info "Creando instancia EC2 ${CI_INSTANCE_NAME} (${CI_INSTANCE_TYPE}, ${CI_ROOT_VOLUME_GB} GB ${CI_ROOT_VOLUME_TYPE})"
+    info "Creando instancia EC2 ${name} (${CI_INSTANCE_TYPE}, ${CI_ROOT_VOLUME_GB} GB ${CI_ROOT_VOLUME_TYPE})"
     instance_id="$(aws ec2 run-instances \
       --image-id "${ami}" \
       --instance-type "${CI_INSTANCE_TYPE}" \
@@ -103,11 +120,11 @@ ensure_instance() {
       --security-group-ids "${sg_id}" \
       --associate-public-ip-address \
       --block-device-mappings "DeviceName=${root_device},Ebs={VolumeSize=${CI_ROOT_VOLUME_GB},VolumeType=${CI_ROOT_VOLUME_TYPE},DeleteOnTermination=true}" \
-      --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=${CI_INSTANCE_NAME}},{Key=Project,Value=${PROJECT_TAG}}]" \
+      --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=${name}},{Key=Project,Value=${PROJECT_TAG}},{Key=Role,Value=${name#circleguard-}}]" \
       --query 'Instances[0].InstanceId' --output text)"
   else
-    info "Instancia ya existe: ${instance_id}"
-    warn "Los cambios de CI_INSTANCE_TYPE o CI_ROOT_VOLUME_GB solo aplican a instancias nuevas"
+    info "Instancia ya existe: ${name} (${instance_id})"
+    warn "Los cambios de CI_INSTANCE_TYPE o CI_ROOT_VOLUME_GB solo aplican a instancias nuevas; para la existente use resize-ci-host.sh"
     state="$(aws ec2 describe-instances --instance-ids "${instance_id}" \
       --query 'Reservations[0].Instances[0].State.Name' --output text)"
     if [[ "${state}" == "stopped" ]]; then
@@ -135,7 +152,7 @@ public_ip_of() {
 
 main() {
   require_cmd aws
-  local ami sg_id instance_id public_ip
+  local ami ci_sg tools_sg ci_id tools_id ci_ip tools_ip tools_private
 
   [[ "${CI_ROOT_VOLUME_GB}" =~ ^[0-9]+$ ]] \
     || die "CI_ROOT_VOLUME_GB debe ser un número entero (valor actual: ${CI_ROOT_VOLUME_GB})"
@@ -143,17 +160,33 @@ main() {
   ami="$(resolve_ami)"
   [[ -n "${ami}" && "${ami}" != "None" ]] || die "No se pudo resolver la AMI de Ubuntu 24.04"
 
-  sg_id="$(ensure_security_group)"
-  [[ "${sg_id}" == sg-* ]] || die "No se pudo preparar el Security Group ${CI_SG_NAME}"
-  instance_id="$(ensure_instance "${ami}" "${sg_id}")"
-  [[ "${instance_id}" == i-* ]] || die "No se pudo crear la instancia ${CI_INSTANCE_NAME}"
-  public_ip="$(public_ip_of "${instance_id}")" \
-    || die "La instancia ${instance_id} no tiene IP pública todavía"
+  ci_sg="$(ensure_security_group "${CI_SG_NAME}" "CircleGuard CI: Jenkins" "${ci_ports[@]}")"
+  [[ "${ci_sg}" == sg-* ]] || die "No se pudo preparar el Security Group ${CI_SG_NAME}"
+  tools_sg="$(ensure_security_group "${TOOLS_SG_NAME}" "CircleGuard tools: SonarQube and Nexus" "${tools_ports[@]}")"
+  [[ "${tools_sg}" == sg-* ]] || die "No se pudo preparar el Security Group ${TOOLS_SG_NAME}"
 
-  info "Host CI listo: ${instance_id} (${public_ip})"
-  info "SSH: ssh -i <clave>.pem ubuntu@${public_ip}"
-  info "Recursos: ${CI_INSTANCE_TYPE}, disco ${CI_ROOT_VOLUME_GB} GB ${CI_ROOT_VOLUME_TYPE}"
-  info "Puertos expuestos a ${ADMIN_CIDR}: ${ci_ports[*]}"
+  # Tráfico entre los dos hosts, por Security Group (no por IP): Jenkins analiza en SonarQube
+  # y publica en Nexus; SonarQube avisa a Jenkins el resultado del quality gate.
+  local port
+  for port in 9000 8081 5000; do
+    ensure_rule "${tools_sg}" "${port}" --source-group "${ci_sg}"
+  done
+  ensure_rule "${ci_sg}" 8080 --source-group "${tools_sg}"
+
+  ci_id="$(ensure_instance "${CI_INSTANCE_NAME}" "${ami}" "${ci_sg}")"
+  [[ "${ci_id}" == i-* ]] || die "No se pudo crear la instancia ${CI_INSTANCE_NAME}"
+  tools_id="$(ensure_instance "${TOOLS_INSTANCE_NAME}" "${ami}" "${tools_sg}")"
+  [[ "${tools_id}" == i-* ]] || die "No se pudo crear la instancia ${TOOLS_INSTANCE_NAME}"
+
+  ci_ip="$(public_ip_of "${ci_id}")" || die "La instancia ${ci_id} no tiene IP pública todavía"
+  tools_ip="$(public_ip_of "${tools_id}")" || die "La instancia ${tools_id} no tiene IP pública todavía"
+  tools_private="$(aws ec2 describe-instances --instance-ids "${tools_id}" \
+    --query 'Reservations[0].Instances[0].PrivateIpAddress' --output text)"
+
+  info "Host CI listo:    ${ci_id} (${ci_ip}), puertos para ${ADMIN_CIDR}: ${ci_ports[*]}"
+  info "Host tools listo: ${tools_id} (${tools_ip}), puertos para ${ADMIN_CIDR}: ${tools_ports[*]}"
+  info "Recursos de cada uno: ${CI_INSTANCE_TYPE}, disco ${CI_ROOT_VOLUME_GB} GB ${CI_ROOT_VOLUME_TYPE}"
+  info "En el .env de CI: NEXUS_REGISTRY=${tools_private}:5000, NEXUS_REGISTRY_API=http://${tools_private}:5000, SONAR_HOST_URL=http://${tools_private}:9000"
 }
 
 main "$@"

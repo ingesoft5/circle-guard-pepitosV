@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Creates one EC2 host and one Security Group per environment (dev, stage, prod) idempotently.
 # Requires a configured AWS CLI and ADMIN_CIDR, ENV_SUBNET_ID and ENV_KEY_NAME.
-# Optional: JENKINS_CIDR opens SSH to the Jenkins host, and CI_SG_NAME names the CI Security Group
-# that gets a registry rule for each environment (see infra/security/security-groups.md).
+# Optional: JENKINS_CIDR opens SSH to the Jenkins host, and REGISTRY_SG_NAME names the Security Group
+# of the registry host (tools) that gets a rule for each environment (see infra/security/security-groups.md).
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -18,7 +18,7 @@ readonly ADMIN_CIDR="${ADMIN_CIDR:?Set ADMIN_CIDR, for example 203.0.113.10/32}"
 readonly ENV_SUBNET_ID="${ENV_SUBNET_ID:?Set ENV_SUBNET_ID}"
 readonly ENV_KEY_NAME="${ENV_KEY_NAME:?Set ENV_KEY_NAME}"
 readonly JENKINS_CIDR="${JENKINS_CIDR:-}"
-readonly CI_SG_NAME="${CI_SG_NAME:-circleguard-ci-sg}"
+readonly REGISTRY_SG_NAME="${REGISTRY_SG_NAME:-circleguard-tools-sg}"
 readonly REGISTRY_PORT=5000
 readonly ENVIRONMENTS=(dev stage prod)
 
@@ -127,10 +127,10 @@ ensure_instance() {
 allow_registry_access() {
   local env_name="$1" vpc_id="$2" instance_id="$3" ci_sg_id private_ip
   ci_sg_id="$(aws ec2 describe-security-groups \
-    --filters "Name=group-name,Values=${CI_SG_NAME}" "Name=vpc-id,Values=${vpc_id}" \
+    --filters "Name=group-name,Values=${REGISTRY_SG_NAME}" "Name=vpc-id,Values=${vpc_id}" \
     --query 'SecurityGroups[0].GroupId' --output text)"
   if [[ -z "${ci_sg_id}" || "${ci_sg_id}" == "None" ]]; then
-    warn "Security Group ${CI_SG_NAME} not found: ${env_name} cannot reach the registry yet"
+    warn "Security Group ${REGISTRY_SG_NAME} not found: ${env_name} cannot reach the registry yet"
     return 0
   fi
   private_ip="$(aws ec2 describe-instances --instance-ids "${instance_id}" \

@@ -324,3 +324,43 @@ wait_http_pattern() {
     || die "El endpoint no quedó listo: ${url}"
   info "Endpoint listo: ${url}"
 }
+
+# The Nexus registry (tools host) serves plain HTTP, so Docker must trust it explicitly.
+# The registry is merged into the existing daemon.json instead of replacing the file,
+# so other daemon settings (log driver, DNS, ...) are kept.
+ensure_registry_trust() {
+  local registry="${1:-}" config=/etc/docker/daemon.json rc=0
+  if [[ -z "${registry}" ]]; then
+    warn "No registry given: Docker was not configured to trust it"
+    return 0
+  fi
+  require_cmd python3
+
+  # Exit code: 0 = already trusted, 10 = file updated
+  run_as_root python3 - "${config}" "${registry}" <<'PY' || rc=$?
+import json, os, sys
+
+path, registry = sys.argv[1], sys.argv[2]
+data = {}
+if os.path.exists(path) and os.path.getsize(path) > 0:
+    with open(path) as f:
+        data = json.load(f)
+registries = data.setdefault("insecure-registries", [])
+if registry in registries:
+    sys.exit(0)
+registries.append(registry)
+with open(path, "w") as f:
+    json.dump(data, f, indent=2)
+    f.write("\n")
+sys.exit(10)
+PY
+
+  case "${rc}" in
+    0) info "Docker already trusts the registry: ${registry}" ;;
+    10)
+      run_as_root systemctl restart docker
+      info "Docker now trusts the registry: ${registry}"
+      ;;
+    *) die "Could not update ${config} (is it valid JSON?)" ;;
+  esac
+}
