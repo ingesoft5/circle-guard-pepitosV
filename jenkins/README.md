@@ -147,6 +147,8 @@ sonarScan(service: 'circleguard-form-service')
 
 Valida el tamaño de un Pull Request antes de compilar. En builds PR-Merge compara el primer padre del merge commit contra el resultado integrado; en builds PR-Head calcula el merge-base con la rama destino. Excluye documentación Markdown, lockfiles, artefactos generados y archivos binarios comunes.
 
+No se aplica al PR de promoción a `main` (desde `dev` o desde una rama `release/*` heredada): ese PR reúne todos los cambios que ya pasaron este límite al entrar a `dev`, así que su tamaño es el del release completo.
+
 | Parámetro | Valor por defecto | Descripción |
 |:---|:---|:---|
 | `maxAdditions` | `700` | Máximo de líneas agregadas. |
