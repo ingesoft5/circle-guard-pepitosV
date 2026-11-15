@@ -16,6 +16,11 @@ def call(Map config = [:]) {
 
     args.add(target)
 
+    // withSonarQubeEnv y waitForQualityGate toman el primer report-task.txt que
+    // encuentran en el workspace. Se borran los de análisis anteriores para que
+    // el gate consulte la tarea de este servicio y no la del primero que se analizó.
+    sh 'rm -f build/sonar/report-task.txt services/*/build/sonar/report-task.txt'
+
     withSonarQubeEnv(server) {
         sh args.join(' ')
     }
