@@ -110,6 +110,27 @@ credentials:
               privateKeySource:
                 directEntry:
                   privateKey: "${readFile:/run/secrets/deploy/deploy-ssh-prod}"
+          # kubeconfig of the dev k3s cluster (Part 2), loaded with load-kubeconfig.sh
+          - file:
+              scope: GLOBAL
+              id: "kubeconfig-dev"
+              fileName: "kubeconfig"
+              description: "kubeconfig of the dev k3s cluster"
+              secretBytes: "${readFileBase64:/run/secrets/deploy/kubeconfig-dev}"
+          # kubeconfig of the stage k3s cluster (Part 2), loaded with load-kubeconfig.sh
+          - file:
+              scope: GLOBAL
+              id: "kubeconfig-stage"
+              fileName: "kubeconfig"
+              description: "kubeconfig of the stage k3s cluster"
+              secretBytes: "${readFileBase64:/run/secrets/deploy/kubeconfig-stage}"
+          # kubeconfig of the prod k3s cluster (Part 2), loaded with load-kubeconfig.sh
+          - file:
+              scope: GLOBAL
+              id: "kubeconfig-prod"
+              fileName: "kubeconfig"
+              description: "kubeconfig of the prod k3s cluster"
+              secretBytes: "${readFileBase64:/run/secrets/deploy/kubeconfig-prod}"
 
 unclassified:
   location:
