@@ -97,6 +97,14 @@ pipeline {
             }
         }
 
+        stage('Dependency scan') {
+            steps {
+                script {
+                    trivyFsScan()
+                }
+            }
+        }
+
         // The syntax check runs in a throwaway container fed with docker cp: Jenkins runs in a
         // container with docker.sock, so a -v of the workspace would be resolved on the host.
         stage('Validate shared library') {
