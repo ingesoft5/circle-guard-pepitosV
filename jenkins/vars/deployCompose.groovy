@@ -15,7 +15,7 @@ def call(Map config = [:]) {
         error("deployCompose: unknown environment '${environment}'")
     }
     boolean stableVersion = semver.isVersion(version)
-    boolean releaseCandidate = version ==~ /\d+\.\d+\.\d+-rc\.\d+\.[0-9a-f]{7}/
+    boolean releaseCandidate = version ==~ /\d+\.\d+\.\d+-rc\.(?:\d+\.)?[0-9a-f]{7}/
     if (!stableVersion && !(environment == 'stage' && releaseCandidate)) {
         error("deployCompose: '${version}' is not allowed for ${environment}; only stable versions are allowed except RC versions on stage")
     }
