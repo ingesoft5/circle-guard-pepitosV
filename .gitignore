@@ -57,3 +57,10 @@ deploy/**/*.env
 *.pem
 *.key
 infra/compose/ci/secrets/
+
+# Terraform: providers and local state stay out of the repo (state lives in S3)
+**/.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfplan
