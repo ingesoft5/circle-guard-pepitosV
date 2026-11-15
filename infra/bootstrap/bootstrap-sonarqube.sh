@@ -13,7 +13,12 @@ readonly CI_ENV_FILE="${CI_DIR}/.env"
 readonly GATE_NAME="CircleGuard Gate"
 readonly TOKEN_NAME="circleguard-ci"
 readonly WEBHOOK_NAME="Jenkins"
-readonly JENKINS_WEBHOOK_URL="http://jenkins:8080/sonarqube-webhook/"
+
+# Single host: Jenkins by container name. Split CI: JENKINS_WEBHOOK_URL in .env points to the
+# CI host's private IP, because SonarQube runs on the tools host.
+jenkins_webhook_url() {
+  printf '%s' "${JENKINS_WEBHOOK_URL:-http://jenkins:8080/sonarqube-webhook/}"
+}
 
 sonar_url() {
   printf 'http://localhost:%s' "${SONAR_PORT}"
@@ -130,7 +135,8 @@ import json, sys
 
 name = sys.argv[1]
 data = json.load(sys.stdin)
-print(next((w["id"] for w in data.get("webhooks", []) if w.get("name") == name), ""))
+# SonarQube identifies webhooks by "key" (older versions used "id").
+print(next((w.get("key") or w.get("id") for w in data.get("webhooks", []) if w.get("name") == name), ""))
 ' "$1"
 }
 
@@ -144,13 +150,13 @@ ensure_webhook() {
   if [[ -z "${webhook_id}" ]]; then
     sonar_api POST "$(sonar_url)/api/webhooks/create" \
       --data-urlencode "name=${WEBHOOK_NAME}" \
-      --data-urlencode "url=${JENKINS_WEBHOOK_URL}"
-    info "Webhook ${WEBHOOK_NAME} -> ${JENKINS_WEBHOOK_URL} creado"
-  elif [[ "${webhooks_json}" != *"\"url\":\"${JENKINS_WEBHOOK_URL}\""* ]]; then
+      --data-urlencode "url=$(jenkins_webhook_url)"
+    info "Webhook ${WEBHOOK_NAME} -> $(jenkins_webhook_url) creado"
+  elif [[ "${webhooks_json}" != *"\"url\":\"$(jenkins_webhook_url)\""* ]]; then
     sonar_api POST "$(sonar_url)/api/webhooks/update" \
       --data-urlencode "webhook=${webhook_id}" \
       --data-urlencode "name=${WEBHOOK_NAME}" \
-      --data-urlencode "url=${JENKINS_WEBHOOK_URL}"
+      --data-urlencode "url=$(jenkins_webhook_url)"
     info "Webhook ${WEBHOOK_NAME} actualizado"
   else
     info "Webhook ${WEBHOOK_NAME} ya está configurado"

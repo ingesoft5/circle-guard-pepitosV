@@ -14,11 +14,17 @@ def SERVICES = [
     'circleguard-dashboard-service'
 ]
 
-// Set by 'Release version' (HU-15) on main; publish, tag and deploy stages need it.
+// Set by 'Release version' (HU-15) on main; promote, tag and deploy stages need it.
 def releaseVersion = null
+// Set by 'Resolve version': SNAPSHOT on dev, release candidate on a dev -> main promotion PR.
 def prereleaseVersion = null
 
+// PR dev -> main: builds the release candidate that main later promotes to stable.
+def promotionPr = env.CHANGE_ID != null && env.CHANGE_TARGET == 'main' && env.CHANGE_BRANCH == 'dev' && env.CHANGE_FORK == null
+
 def changed = [services: [], web: false, all: false, base: '']
+// A branch whose commit is already in dev (its PR was merged) is not built again.
+def alreadyMerged = false
 
 // Set when a service or the web client fails; used by the Discord notification.
 def failedService = null
@@ -30,7 +36,7 @@ pipeline {
     options {
         buildDiscarder(logRotator(numToKeepStr: '20'))
         disableConcurrentBuilds()
-        timeout(time: 60, unit: 'MINUTES')
+        timeout(time: 120, unit: 'MINUTES')
         skipDefaultCheckout(true)
     }
 
@@ -58,6 +64,12 @@ pipeline {
                 checkout scm
                 sh 'chmod +x gradlew'
                 sh 'find services -path "*/build/test-results" -type d -prune -exec rm -rf {} +'
+                script {
+                    alreadyMerged = alreadyMergedBranch()
+                    if (alreadyMerged) {
+                        currentBuild.description = 'Skipped: already merged into dev'
+                    }
+                }
             }
         }
 
@@ -69,11 +81,13 @@ pipeline {
             }
         }
 
+        // With no changes detected every later stage is skipped by its own condition.
         stage('Detect changes') {
+            when { expression { !alreadyMerged } }
             steps {
                 script {
                     changed = detectChangedServices(
-                        buildAll: (params.BUILD_ALL ?: false) || ((env.BRANCH_NAME ?: '') ==~ /release\/.+/) || ((env.CHANGE_BRANCH ?: '') ==~ /release\/.+/),
+                        buildAll: (params.BUILD_ALL ?: false) || promotionPr || ((env.BRANCH_NAME ?: '') ==~ /release\/.+/) || ((env.CHANGE_BRANCH ?: '') ==~ /release\/.+/),
                         services: SERVICES
                     )
                     echo "Base del diff: ${changed.base ?: 'sin base'}"
@@ -83,6 +97,8 @@ pipeline {
             }
         }
 
+        // The syntax check runs in a throwaway container fed with docker cp: Jenkins runs in a
+        // container with docker.sock, so a -v of the workspace would be resolved on the host.
         stage('Validate shared library') {
             when {
                 allOf {
@@ -91,30 +107,39 @@ pipeline {
                 }
             }
             steps {
-                sh '''
-                    docker run --rm -v "$PWD":/w:ro groovy:jdk21 groovy -e '
-                        import org.codehaus.groovy.control.*
-                        def failed = false
-                        new File("/w/jenkins/vars").listFiles().findAll { it.name.endsWith(".groovy") }.each { f ->
-                            try {
-                                def cu = new CompilationUnit()
-                                cu.addSource(f)
-                                cu.compile(Phases.CONVERSION)
-                            } catch (Exception e) {
-                                println "ERROR en " + f.name + ": " + e.message
-                                failed = true
-                            }
+                writeFile file: '.check-vars.groovy', text: '''
+                    import org.codehaus.groovy.control.*
+                    def failed = false
+                    new File("/vars").listFiles().findAll { it.name.endsWith(".groovy") }.each { f ->
+                        try {
+                            def cu = new CompilationUnit()
+                            cu.addSource(f)
+                            cu.compile(Phases.CONVERSION)
+                        } catch (Exception e) {
+                            println "ERROR en " + f.name + ": " + e.message
+                            failed = true
                         }
-                        System.exit(failed ? 1 : 0)
-                    '
+                    }
+                    System.exit(failed ? 1 : 0)
+                '''
+                sh '''
+                    cid="$(docker create groovy:4.0-jdk21 groovy /check.groovy)"
+                    docker cp .check-vars.groovy "$cid":/check.groovy
+                    docker cp jenkins/vars "$cid":/vars
+                    rc=0
+                    docker start -a "$cid" || rc=$?
+                    docker rm "$cid" >/dev/null
+                    rm -f .check-vars.groovy
+                    exit $rc
                 '''
             }
         }
-        
+
         stage('Resolve version') {
             when {
                 expression {
-                    (env.BRANCH_NAME == 'dev' && (!changed.services.isEmpty() || changed.web)) ||
+                    promotionPr ||
+                        (env.BRANCH_NAME == 'dev' && (!changed.services.isEmpty() || changed.web)) ||
                         ((env.BRANCH_NAME ?: '') ==~ /release\/.+/) ||
                         ((env.CHANGE_BRANCH ?: '') ==~ /release\/.+/)
                 }
@@ -123,8 +148,12 @@ pipeline {
                 script {
                     try {
                         prereleaseVersion = resolvePrereleaseVersion()
-                        currentBuild.description = prereleaseVersion
-                        echo "Versión de imágenes: ${prereleaseVersion}"
+                        if (prereleaseVersion) {
+                            currentBuild.description = prereleaseVersion
+                            echo "Versión de imágenes: ${prereleaseVersion}"
+                        } else {
+                            echo 'Sin release candidate: la promoción no incluye feat, fix, perf ni cambios incompatibles.'
+                        }
                     } catch (Exception e) {
                         failedService = 'shared-library'
                         failedStage = 'Resolve version'
@@ -213,7 +242,13 @@ pipeline {
             }
         }
 
+        // Proves that the images build when nothing is published afterwards (PRs to dev).
+        // Where images are published, dockerPublish already builds them; on main they are
+        // promoted from the release candidate, so building them here would be wasted work.
         stage('Package images') {
+            when {
+                expression { prereleaseVersion == null && env.BRANCH_NAME != 'main' }
+            }
             steps {
                 script {
                     int maxParallel = (env.MAX_PARALLEL_SERVICES ?: '3') as int
@@ -294,43 +329,44 @@ pipeline {
         }
 
         stage('Publish prerelease images') {
-            when {
-                expression {
-                    (env.BRANCH_NAME == 'dev' && (!changed.services.isEmpty() || changed.web)) ||
-                        ((env.BRANCH_NAME ?: '') ==~ /release\/.+/) ||
-                        ((env.CHANGE_BRANCH ?: '') ==~ /release\/.+/)
-                }
-            }
+            when { expression { prereleaseVersion != null } }
             steps {
                 script {
-                    // SNAPSHOT publica solo los componentes afectados. Una rama release
-                    // publica el conjunto completo para validar un candidato reproducible.
+                    // SNAPSHOT publishes only the affected components. A promotion PR (or a
+                    // release branch) publishes the full set: the RC is what main promotes.
                     String sourceBranch = env.CHANGE_BRANCH ?: env.BRANCH_NAME
-                    if (sourceBranch == 'dev') {
-                        for (String service : changed.services) {
-                            dockerPublish(service: service, version: prereleaseVersion)
+                    boolean onlyChanged = !promotionPr && sourceBranch == 'dev'
+                    publishImages(
+                        onlyChanged ? changed.services : SERVICES,
+                        onlyChanged ? changed.web : true,
+                        prereleaseVersion
+                    )
+
+                    // Before the merge: checks that main will be able to find this RC (read only).
+                    if (promotionPr) {
+                        try {
+                            promoteRelease(
+                                version: prereleaseVersion.substring(0, prereleaseVersion.indexOf('-rc.')),
+                                services: SERVICES,
+                                dryRun: true
+                            )
+                        } catch (Exception e) {
+                            failedService = 'registry'
+                            failedStage = 'Verify promotion path'
+                            throw e
                         }
-                        if (changed.web) {
-                            dockerPublish(image: 'web-client', dockerfile: 'mobile/Dockerfile',
-                                    context: 'mobile', version: prereleaseVersion)
-                        }
-                    } else {
-                        for (String service : SERVICES) {
-                            dockerPublish(service: service, version: prereleaseVersion)
-                        }
-                        dockerPublish(image: 'web-client', dockerfile: 'mobile/Dockerfile',
-                                context: 'mobile', version: prereleaseVersion)
                     }
                 }
             }
         }
 
-        // A release branch is created by the GitHub 'release' label workflow.
-        // Its promotion PR cannot merge until this RC has passed stage deployment and E2E.
+        // The release candidate comes from the dev -> main promotion PR. Its Jenkins check stays
+        // pending until RC publication, stage deployment and E2E pass.
         stage('Deploy RC to stage') {
             when {
                 expression {
-                    (((env.CHANGE_BRANCH ?: env.BRANCH_NAME) ?: '') ==~ /release\/\d+\.\d+\.\d+/) && prereleaseVersion != null
+                    prereleaseVersion != null &&
+                        (promotionPr || (((env.CHANGE_BRANCH ?: env.BRANCH_NAME) ?: '') ==~ /release\/\d+\.\d+\.\d+/))
                 }
             }
             steps {
@@ -341,7 +377,8 @@ pipeline {
         stage('E2E tests on stage') {
             when {
                 expression {
-                    (((env.CHANGE_BRANCH ?: env.BRANCH_NAME) ?: '') ==~ /release\/\d+\.\d+\.\d+/) && prereleaseVersion != null
+                    prereleaseVersion != null &&
+                        (promotionPr || (((env.CHANGE_BRANCH ?: env.BRANCH_NAME) ?: '') ==~ /release\/\d+\.\d+\.\d+/))
                 }
             }
             steps {
@@ -371,9 +408,6 @@ pipeline {
             }
         }
 
-        // The release-request workflow opens the release/X.Y.Z -> main PR.
-        // This PR's Jenkins check remains pending until RC publication, stage deploy and E2E pass.
-
         stage('Release version') {
             when {
                 branch 'main'
@@ -392,7 +426,9 @@ pipeline {
             }
         }
 
-        stage('Publish images') {
+        // The stable images are not rebuilt: each one is the release candidate that passed stage
+        // and E2E in the promotion PR, published under the stable tag with the same digest.
+        stage('Promote release candidate') {
             when {
                 allOf {
                     branch 'main'
@@ -401,11 +437,13 @@ pipeline {
             }
             steps {
                 script {
-                    for (String service : SERVICES) {
-                        dockerPublish(service: service, version: releaseVersion)
+                    try {
+                        promoteRelease(version: releaseVersion, services: SERVICES)
+                    } catch (Exception e) {
+                        failedService = 'registry'
+                        failedStage = 'Promote release candidate'
+                        throw e
                     }
-                    dockerPublish(image: 'web-client', dockerfile: 'mobile/Dockerfile',
-                            context: 'mobile', version: releaseVersion)
                     sh 'docker image prune -f && docker builder prune -f --filter until=24h'
                 }
             }
@@ -490,16 +528,15 @@ pipeline {
             }
         }
 
-
-        stage('Deploy to stage'){
+        stage('Deploy to stage') {
             when {
                 allOf {
                     branch 'main'
-                    expression {releaseVersion != null}
+                    expression { releaseVersion != null }
                 }
             }
             steps {
-                deployCompose(environment: 'stage' , version: releaseVersion)
+                deployCompose(environment: 'stage', version: releaseVersion)
             }
         }
 
@@ -507,11 +544,11 @@ pipeline {
             when {
                 allOf {
                     branch 'main'
-                    expression { releaseVersion != null}
+                    expression { releaseVersion != null }
                 }
             }
             steps {
-                timeout(time : 15, unit: 'MINUTES') {
+                timeout(time: 15, unit: 'MINUTES') {
                     script {
                         env.PROD_APPROVER = input(
                             message: "Deploy v${releaseVersion} to prod",
@@ -530,10 +567,10 @@ pipeline {
             when {
                 allOf {
                     branch 'main'
-                    expression { releaseVersion != null}
+                    expression { releaseVersion != null }
                 }
             }
-            steps{
+            steps {
                 deployCompose(environment: 'prod', version: releaseVersion)
             }
         }
@@ -580,5 +617,28 @@ pipeline {
         cleanup {
             cleanWs()
         }
+    }
+}
+
+// Publishes the images in parallel batches of MAX_PARALLEL_SERVICES. Each image is built from the
+// JAR of the Compile stage, so a batch is mostly the push to the registry.
+def publishImages(List<String> services, boolean web, String version) {
+    int maxParallel = Math.max((env.MAX_PARALLEL_SERVICES ?: '3') as int, 1)
+    def jobs = [:]
+    services.each { service ->
+        jobs[service] = { dockerPublish(service: service, version: version) }
+    }
+    if (web) {
+        jobs['web-client'] = {
+            dockerPublish(image: 'web-client', dockerfile: 'mobile/Dockerfile', context: 'mobile', version: version)
+        }
+    }
+    List<String> names = jobs.keySet() as List
+    for (int i = 0; i < names.size(); i += maxParallel) {
+        def batch = [:]
+        names.subList(i, Math.min(i + maxParallel, names.size())).each { name ->
+            batch["Publish ${name}"] = jobs[name]
+        }
+        parallel batch
     }
 }

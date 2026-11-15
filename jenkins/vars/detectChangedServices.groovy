@@ -18,10 +18,7 @@ def call(Map config = [:]) {
     String base = (config.baseCommit ?: '').toString().trim()
 
     if (!base && env.CHANGE_ID) {
-        base = sh(
-            script: 'git rev-parse --verify --quiet HEAD^1 || true',
-            returnStdout: true
-        ).trim()
+        base = prDiffBase()
         String target = env.CHANGE_TARGET ?: ''
         if (!base && target) {
             base = sh(

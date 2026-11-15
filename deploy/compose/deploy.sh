@@ -3,6 +3,7 @@
 # Runs on the environment host, as the deploy user:
 #   deploy/compose/deploy.sh <dev|stage|prod> <MAJOR.MINOR.PATCH>
 #   deploy/compose/deploy.sh stage <MAJOR.MINOR.PATCH-rc.BUILD.SHA>
+#   deploy/compose/deploy.sh stage <MAJOR.MINOR.PATCH-rc.TREE>
 # If the version cannot be pulled, the running environment is left untouched.
 set -Eeuo pipefail
 
@@ -38,7 +39,7 @@ main() {
   [[ "${env_name}" =~ ^(dev|stage|prod)$ ]] || die "Usage: deploy.sh <dev|stage|prod> <version>"
   if [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     : # Stable release is allowed in dev, stage and prod.
-  elif [[ "${env_name}" == "stage" && "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+\.[0-9a-f]{7}$ ]]; then
+  elif [[ "${env_name}" == "stage" && "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+-rc\.([0-9]+\.)?[0-9a-f]{7}$ ]]; then
     : # Release candidates are isolated to stage.
   else
     die "Version '${version}' is not allowed in ${env_name}; RC versions may only be deployed to stage"
