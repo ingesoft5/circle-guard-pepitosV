@@ -45,7 +45,8 @@ def call(Map config = [:]) {
         "IMAGES=${images.join(' ')}",
         "RC_TAG=${rcTag}",
         "STABLE_TAG=${version}",
-        "DRY_RUN=${dryRun}"
+        "DRY_RUN=${dryRun}",
+        "AUDIT_FILE=${env.WORKSPACE}/.promotion-digests"
     ]) {
         withCredentials([usernamePassword(credentialsId: credentialsId,
                 usernameVariable: 'REGISTRY_USER', passwordVariable: 'REGISTRY_PASSWORD')]) {
@@ -81,6 +82,7 @@ check_digest() {
 }
 
 echo "Release candidate $RC_TAG -> versión estable $STABLE_TAG ($REGISTRY_API/v2/$NAMESPACE)"
+: > "$AUDIT_FILE"
 
 # Fase 1: todos los RC deben existir antes de crear ningún tag estable.
 for img in $IMAGES; do
@@ -126,6 +128,7 @@ for img in $IMAGES; do
         exit 1
       fi
       echo "Ya promovida: $img:$STABLE_TAG ($stable_digest)"
+      echo "$img $stable_digest" >> "$AUDIT_FILE"
       continue ;;
     404) ;;
     *)
@@ -148,8 +151,38 @@ for img in $IMAGES; do
     exit 1
   fi
   echo "Promovida: $img:$STABLE_TAG ($new_digest)"
+  echo "$img $new_digest" >> "$AUDIT_FILE"
 done
 '''
         }
     }
+
+    if (!dryRun) {
+        writeAuditRecord(version, rcTag, tree, namespace)
+    }
+}
+
+/**
+ * promotion-<versión>.json, archivado en el build de main: qué digest quedó bajo cada tag estable,
+ * de qué release candidate, commit y árbol de código salió. Junto con las etiquetas de la imagen
+ * (imageLabels) es la evidencia para una auditoría de QA. Promover no cambia ningún digest.
+ */
+def writeAuditRecord(String version, String rcTag, String tree, String namespace) {
+    String digests = readFile("${env.WORKSPACE}/.promotion-digests").trim()
+    def images = digests ? digests.split('\n').collect { line ->
+        def parts = line.trim().split(' ')
+        [image: "${namespace}/${parts[0]}", stableTag: version, releaseCandidateTag: rcTag, digest: parts[1]]
+    } : []
+    String file = "promotion-${version}.json"
+    writeFile file: file, text: groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson([
+        version         : version,
+        releaseCandidate: rcTag,
+        commit          : env.GIT_COMMIT ?: '',
+        sourceTree      : tree,
+        promotedAt      : new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC')),
+        build           : env.BUILD_URL ?: '',
+        images          : images
+    ])) + '\n'
+    archiveArtifacts artifacts: file, fingerprint: true
+    echo "promoteRelease: registro de auditoría archivado en ${file}"
 }

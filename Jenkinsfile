@@ -325,21 +325,12 @@ pipeline {
                     // SNAPSHOT publishes only the affected components. A promotion PR (or a
                     // release branch) publishes the full set: the RC is what main promotes.
                     String sourceBranch = env.CHANGE_BRANCH ?: env.BRANCH_NAME
-                    if (!promotionPr && sourceBranch == 'dev') {
-                        for (String service : changed.services) {
-                            dockerPublish(service: service, version: prereleaseVersion)
-                        }
-                        if (changed.web) {
-                            dockerPublish(image: 'web-client', dockerfile: 'mobile/Dockerfile',
-                                    context: 'mobile', version: prereleaseVersion)
-                        }
-                    } else {
-                        for (String service : SERVICES) {
-                            dockerPublish(service: service, version: prereleaseVersion)
-                        }
-                        dockerPublish(image: 'web-client', dockerfile: 'mobile/Dockerfile',
-                                context: 'mobile', version: prereleaseVersion)
-                    }
+                    boolean onlyChanged = !promotionPr && sourceBranch == 'dev'
+                    publishImages(
+                        onlyChanged ? changed.services : SERVICES,
+                        onlyChanged ? changed.web : true,
+                        prereleaseVersion
+                    )
 
                     // Before the merge: checks that main will be able to find this RC (read only).
                     if (promotionPr) {
@@ -616,5 +607,28 @@ pipeline {
         cleanup {
             cleanWs()
         }
+    }
+}
+
+// Publishes the images in parallel batches of MAX_PARALLEL_SERVICES. Each image is built from the
+// JAR of the Compile stage, so a batch is mostly the push to the registry.
+def publishImages(List<String> services, boolean web, String version) {
+    int maxParallel = Math.max((env.MAX_PARALLEL_SERVICES ?: '3') as int, 1)
+    def jobs = [:]
+    services.each { service ->
+        jobs[service] = { dockerPublish(service: service, version: version) }
+    }
+    if (web) {
+        jobs['web-client'] = {
+            dockerPublish(image: 'web-client', dockerfile: 'mobile/Dockerfile', context: 'mobile', version: version)
+        }
+    }
+    List<String> names = jobs.keySet() as List
+    for (int i = 0; i < names.size(); i += maxParallel) {
+        def batch = [:]
+        names.subList(i, Math.min(i + maxParallel, names.size())).each { name ->
+            batch["Publish ${name}"] = jobs[name]
+        }
+        parallel batch
     }
 }

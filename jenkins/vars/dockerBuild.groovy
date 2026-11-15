@@ -11,12 +11,14 @@ def call(Map config = [:]) {
         error('dockerBuild: indique "dockerfile" cuando no usa "service"')
     }
 
-    String buildContext = config.context ?: '.'
+    String buildContext = config.context ?: (service ? serviceContext(service) : '.')
     String namespace = config.namespace ?: (env.IMAGE_NAMESPACE ?: 'circleguard')
     String revision = env.GIT_COMMIT ?: sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+    String sourceTree = sh(script: 'git rev-parse HEAD^{tree}', returnStdout: true).trim()
+    String labels = imageLabels(image: image, version: version, revision: revision, sourceTree: sourceTree)
     String imageRef = "${namespace}/${image}:${version}"
     String pullFlag = (config.pull == false) ? '' : '--pull'
-    // The build only proves that the image builds: dockerPublish rebuilds it on main.
+    // The build only proves that the image builds: dockerPublish builds the published one.
     // Keeping it would leave one image per service and build on the CI disk.
     boolean keep = config.keep == true
 
@@ -28,14 +30,14 @@ def call(Map config = [:]) {
         "REVISION=${revision}",
         "DOCKER_PULL=${pullFlag}"
     ]) {
-        sh '''
-            docker build $DOCKER_PULL \
-              -f "$DOCKERFILE" \
-              --build-arg VERSION="$IMAGE_VERSION" \
-              --label org.opencontainers.image.revision="$REVISION" \
-              -t "$IMAGE_REF" \
-              "$BUILD_CONTEXT"
-        '''
+        sh """
+            docker build \$DOCKER_PULL \\
+              -f "\$DOCKERFILE" \\
+              --build-arg VERSION="\$IMAGE_VERSION" \\
+              ${labels} \\
+              -t "\$IMAGE_REF" \\
+              "\$BUILD_CONTEXT"
+        """
         echo "dockerBuild: imagen construida ${imageRef}"
         if (!keep) {
             sh 'docker image rm "$IMAGE_REF" >/dev/null'
@@ -44,4 +46,18 @@ def call(Map config = [:]) {
     }
 
     return imageRef
+}
+
+/**
+ * Docker build context of a service: build/docker, where the Gradle task dockerContext (run by
+ * assemble in the Compile stage) leaves the boot JAR as app.jar. The image packages the JAR the
+ * pipeline compiled and tested instead of compiling again inside Docker.
+ */
+String serviceContext(String service) {
+    String dir = "services/${service}/build/docker"
+    if (!fileExists("${dir}/app.jar")) {
+        error("${dir}/app.jar no existe: la imagen empaqueta el JAR de la etapa Compile " +
+                "(./gradlew :services:${service}:assemble). ¿Se compiló este servicio en este build?")
+    }
+    return dir
 }

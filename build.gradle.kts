@@ -57,6 +57,21 @@ subprojects {
         useJUnitPlatform()
     }
 
+    // Docker build context: the boot JAR compiled and tested by the pipeline, copied to
+    // build/docker/app.jar. The service Dockerfile packages it instead of compiling again.
+    plugins.withId("org.springframework.boot") {
+        val dockerContext = tasks.register<Copy>("dockerContext") {
+            description = "Copies the boot JAR to build/docker/app.jar for the Docker image."
+            group = "build"
+            from(tasks.named("bootJar"))
+            into(layout.buildDirectory.dir("docker"))
+            rename { "app.jar" }
+        }
+        tasks.named("assemble") {
+            dependsOn(dockerContext)
+        }
+    }
+
     // HU-19: integration tests use Testcontainers and stay out of the unit-test task.
     val sourceSets = the<SourceSetContainer>()
     val integrationTestSourceSet = sourceSets.create("integrationTest")
