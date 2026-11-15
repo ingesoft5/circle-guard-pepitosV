@@ -27,6 +27,10 @@ services:
       E2E_USERNAME: ${E2E_USERNAME:-}
       E2E_PASSWORD: ${E2E_PASSWORD:-}
       NEXUS_REGISTRY: ${NEXUS_REGISTRY:-localhost:5000}
+      # Split CI: SonarQube and Nexus run on the tools host. The defaults keep the
+      # single-host layout, where they are reachable by container name.
+      NEXUS_REGISTRY_API: ${NEXUS_REGISTRY_API:-http://nexus:5000}
+      SONAR_HOST_URL: ${SONAR_HOST_URL:-http://sonarqube:9000}
       IMAGE_NAMESPACE: ${IMAGE_NAMESPACE:-circleguard}
       DEPLOY_HOST_DEV: ${DEPLOY_HOST_DEV:-}
       DEPLOY_HOST_STAGE: ${DEPLOY_HOST_STAGE:-}
@@ -88,6 +92,8 @@ services:
       - sonar_logs:/opt/sonarqube/logs
     networks:
       - ci
+    # Web, Compute Engine and Elasticsearch JVMs (~2 GB in use): the cap only stops a runaway.
+    mem_limit: ${SONAR_MEM_LIMIT:-4g}
     ulimits:
       nofile:
         soft: 65536
@@ -106,6 +112,12 @@ services:
     ports:
       - "${NEXUS_PORT:-8081}:8081"
       - "${NEXUS_REGISTRY_PORT:-5000}:5000"
+    environment:
+      # Same heap and direct memory as the image default (2.7 GB each), now written down so it
+      # can be tuned. Nexus got OOM-killed when it shared the CI host with the builds; on the
+      # tools host it has room, and the container cap keeps a leak from taking the host.
+      INSTALL4J_ADD_VM_PARAMS: "${NEXUS_JVM_OPTS:--Xms2703m -Xmx2703m -XX:MaxDirectMemorySize=2703m} -Djava.util.prefs.userRoot=/nexus-data/javaprefs"
+    mem_limit: ${NEXUS_MEM_LIMIT:-6g}
     volumes:
       - nexus_data:/nexus-data
     networks:

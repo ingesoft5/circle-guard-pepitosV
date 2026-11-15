@@ -61,6 +61,12 @@ main() {
     warn "SONAR_TOKEN no está configurado; el análisis de SonarQube fallará"
   fi
 
+  # Split CI: the registry lives on the tools host over plain HTTP, so the Docker daemon that
+  # Jenkins drives through docker.sock must trust it. localhost is trusted by default.
+  if [[ "${NEXUS_REGISTRY}" != localhost:* && "${NEXUS_REGISTRY}" != 127.0.0.1:* ]]; then
+    ensure_registry_trust "${NEXUS_REGISTRY}"
+  fi
+
   info "Aprovisionando Jenkins en el proyecto ${CI_PROJECT}"
   ensure_network "${CI_NETWORK}"
   ensure_volume "${CI_PROJECT}-jenkins-home"

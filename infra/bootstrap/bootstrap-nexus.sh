@@ -150,6 +150,39 @@ ensure_registry_users() {
   ensure_user "${NEXUS_PULL_USER}" "${NEXUS_PULL_PASSWORD}" "circleguard-docker-pull"
 }
 
+# Daily image retention (nexus-retention.sh) as a systemd timer. Nexus OSS has no API for
+# cleanup policies, so the rules are versioned in that script. Rewriting the units is idempotent.
+ensure_retention_timer() {
+  if ! command -v systemctl >/dev/null 2>&1; then
+    warn "systemd is not available: run ${SCRIPT_DIR}/nexus-retention.sh by hand"
+    return 0
+  fi
+  run_as_root tee /etc/systemd/system/circleguard-nexus-retention.service >/dev/null <<UNIT
+[Unit]
+Description=CircleGuard: Nexus image retention
+After=docker.service
+
+[Service]
+Type=oneshot
+Environment=KEEP_PRERELEASES=${KEEP_PRERELEASES:-5}
+ExecStart=${SCRIPT_DIR}/nexus-retention.sh
+UNIT
+  run_as_root tee /etc/systemd/system/circleguard-nexus-retention.timer >/dev/null <<UNIT
+[Unit]
+Description=CircleGuard: daily Nexus image retention
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+UNIT
+  run_as_root systemctl daemon-reload
+  run_as_root systemctl enable --now circleguard-nexus-retention.timer >/dev/null 2>&1
+  info "Retention timer active: prereleases beyond the newest ${KEEP_PRERELEASES:-5} per image are deleted daily"
+}
+
 main() {
   acquire_lock /tmp/circleguard-ci-nexus.lock
   require_cmd curl
@@ -173,6 +206,7 @@ main() {
   ensure_repositories
   ensure_docker_realm
   ensure_registry_users
+  ensure_retention_timer
 
   info "Nexus listo en $(nexus_url) (usuario: ${NEXUS_ADMIN_USER})"
   info "Registro Docker: localhost:${NEXUS_REGISTRY_PORT} (imágenes: localhost:${NEXUS_REGISTRY_PORT}/${IMAGE_NAMESPACE}/<nombre>:<versión>)"
