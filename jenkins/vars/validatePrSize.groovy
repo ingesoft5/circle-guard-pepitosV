@@ -4,7 +4,7 @@
  * Por defecto: máximo 700 líneas agregadas, 300 eliminadas y 1000 en total.
  * Los límites se centralizan como variables de entorno en el Jenkinsfile.
  *
- * En builds PR-Merge se compara HEAD^1 (base) contra HEAD (merge result).
+ * En builds PR-Merge se compara la punta de la rama destino (HEAD^2, ver prDiffBase) contra HEAD.
  * En builds PR-Head se usa el merge-base con la rama destino.
  */
 def call(Map config = [:]) {
@@ -28,8 +28,7 @@ def call(Map config = [:]) {
         error('validatePrSize: los límites no pueden ser negativos.')
     }
 
-    String base = sh(script: 'git rev-parse --verify HEAD^1 2>/dev/null || true',
-            returnStdout: true).trim()
+    String base = prDiffBase()
     if (!base) {
         String target = (env.CHANGE_TARGET ?: '').trim()
         if (!target) {
