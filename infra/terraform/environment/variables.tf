@@ -58,3 +58,60 @@ variable "tools_security_group_name" {
   type    = string
   default = "circleguard-tools-sg"
 }
+
+variable "service_names" {
+  description = "Services with their own ECR repository and CloudWatch log group."
+  type        = list(string)
+  default = [
+    "auth",
+    "identity",
+    "promotion",
+    "notification",
+    "form",
+    "file",
+    "gateway",
+    "dashboard",
+  ]
+}
+
+variable "registry_keep_last_images" {
+  description = "Images kept per ECR repository by the lifecycle policy."
+  type        = number
+  default     = 30
+}
+
+variable "storage_force_destroy" {
+  description = "Delete the storage bucket contents on destroy. Enable only in dev."
+  type        = bool
+  default     = false
+}
+
+variable "storage_versioning_enabled" {
+  description = "Keep previous versions of the objects in the storage bucket."
+  type        = bool
+  default     = true
+}
+
+variable "storage_noncurrent_version_expiration_days" {
+  description = "Days after which a noncurrent object version is expired."
+  type        = number
+  default     = 30
+}
+
+variable "log_retention_days" {
+  description = "CloudWatch retention for the service log groups."
+  type        = number
+  default     = 14
+}
+
+variable "alarm_email" {
+  description = "Email subscribed to the observability alerts topic. Empty disables it."
+  type        = string
+  default     = ""
+}
+
+variable "cpu_alarm_threshold" {
+  description = "CPU percentage that triggers the node alarm."
+  type        = number
+  default     = 80
+}

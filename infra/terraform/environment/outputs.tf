@@ -14,3 +14,18 @@ output "instance_id" {
 output "vpc_id" {
   value = module.network.vpc_id
 }
+
+output "registry_host" {
+  description = "ECR registry host for the environment images."
+  value       = module.registry.registry_host
+}
+
+output "storage_bucket" {
+  description = "S3 bucket for the file service attachments and backups."
+  value       = module.storage.bucket_id
+}
+
+output "observability_topic_arn" {
+  description = "SNS topic that receives the observability alarms."
+  value       = module.observability.alarm_topic_arn
+}
