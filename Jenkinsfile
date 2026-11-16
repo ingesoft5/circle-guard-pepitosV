@@ -73,6 +73,21 @@ pipeline {
             }
         }
 
+        stage('Secret scan') {
+            when { expression { !alreadyMerged } }
+            steps {
+                script {
+                    def currentStage = 'Secret scan'
+                    try {
+                        secretScan()
+                    } catch (Exception e) {
+                        failedStage = currentStage
+                        throw e
+                    }
+                }
+            }
+        }
+
         stage('PR size policy') {
             steps {
                 script {
