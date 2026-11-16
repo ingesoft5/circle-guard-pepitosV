@@ -98,6 +98,7 @@ pipeline {
         }
 
         stage('Dependency scan') {
+            when { expression { !alreadyMerged } }
             steps {
                 script {
                     trivyFsScan()
