@@ -21,4 +21,33 @@ management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health,metrics,circuitbreakers
+  endpoint:
+    health:
+      show-details: always
+  health:
+    circuitbreakers:
+      enabled: true
+
+resilience4j:
+  circuitbreaker:
+    # Outer aspect: one failed call is counted after retries are exhausted.
+    circuitBreakerAspectOrder: 1
+    instances:
+      redisHealth:
+        registerHealthIndicator: true
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 6
+        minimumNumberOfCalls: 4
+        failureRateThreshold: 50
+        waitDurationInOpenState: 5s
+        permittedNumberOfCallsInHalfOpenState: 1
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+  retry:
+    retryAspectOrder: 2
+    instances:
+      redisHealth:
+        maxAttempts: 2
+        waitDuration: 50ms
+        retryExceptions:
+          - org.springframework.dao.DataAccessException
