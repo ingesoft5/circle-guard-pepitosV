@@ -4,6 +4,24 @@ Todas las versiones de CircleGuard. Este archivo lo genera el pipeline de Jenkin
 los Conventional Commits (HU-22): no se edita a mano.
 Esquema de versiones: [docs/release-notes/etiquetado.md](docs/release-notes/etiquetado.md).
 
+## [0.5.0](https://github.com/ingesoft5/circle-guard-pepitosV/compare/v0.4.0...v0.5.0) (2026-11-15)
+
+### Features
+
+- **infra:** provision one k3s cluster per environment with terraform ([#71](https://github.com/ingesoft5/circle-guard-pepitosV/pull/71)) ([43c67c9](https://github.com/ingesoft5/circle-guard-pepitosV/commit/43c67c97930e1a456dc74f5d84a281448629ea48))
+- **jenkins:** give jenkins access to the k3s clusters ([#70](https://github.com/ingesoft5/circle-guard-pepitosV/pull/70)) ([498cffc](https://github.com/ingesoft5/circle-guard-pepitosV/commit/498cffce7652c6c5cddf6e924bf46d4e50ca9f78))
+- **infra:** split the CI stack into jenkins and tools hosts ([#66](https://github.com/ingesoft5/circle-guard-pepitosV/pull/66)) ([b71c99f](https://github.com/ingesoft5/circle-guard-pepitosV/commit/b71c99fc53fcae394e0c99cdf78890e5f2901a65))
+
+### Fixes
+
+- **jenkins:** diff pull requests against the target branch ([#70](https://github.com/ingesoft5/circle-guard-pepitosV/pull/70)) ([06faf10](https://github.com/ingesoft5/circle-guard-pepitosV/commit/06faf106643cfee45a6f89431755dae5dd7e6f83))
+- **jenkins:** skip the size policy on dev to main promotion PRs ([#70](https://github.com/ingesoft5/circle-guard-pepitosV/pull/70)) ([613f12a](https://github.com/ingesoft5/circle-guard-pepitosV/commit/613f12a5b7092bc24b8be091fb20041d642ec721))
+- **semver:** use latest stable release from main as version baseline ([#60](https://github.com/ingesoft5/circle-guard-pepitosV/pull/60)) ([e8b9286](https://github.com/ingesoft5/circle-guard-pepitosV/commit/e8b9286e4e801331f794e972cf751f370ad11044))
+
+### Performance
+
+- **jenkins:** build service images from the tested jar ([#70](https://github.com/ingesoft5/circle-guard-pepitosV/pull/70)) ([b47d235](https://github.com/ingesoft5/circle-guard-pepitosV/commit/b47d23575c76a54b58e1000b728bb7b52ac35a50))
+
 ## [0.4.0](https://github.com/ingesoft5/circle-guard-pepitosV/compare/v0.3.0...v0.4.0) (2026-11-08)
 
 ### Features
