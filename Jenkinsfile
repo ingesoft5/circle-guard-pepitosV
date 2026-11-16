@@ -74,6 +74,7 @@ pipeline {
         }
 
         stage('Secret scan') {
+            when { expression { !alreadyMerged } }
             steps {
                 script {
                     def currentStage = 'Secret scan'
