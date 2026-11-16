@@ -23,3 +23,9 @@ spring:
 circleguard:
   cors:
     allowed-origins: http://localhost:8081
+  features:
+    qr-diagnostics: false
+
+qr:
+  secret: "test-qr-secret-key-with-at-least-32-bytes"
+  expiration: 60000
