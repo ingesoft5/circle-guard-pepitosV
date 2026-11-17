@@ -2,7 +2,7 @@
 # observability. They share the same code for dev, stage and prod; only the tfvars change.
 
 module "registry" {
-  source = "../modules/registry"
+  source = "../../modules/registry"
 
   environment      = var.environment
   name_prefix      = local.name
@@ -11,7 +11,7 @@ module "registry" {
 }
 
 module "storage" {
-  source = "../modules/storage"
+  source = "../../modules/storage"
 
   environment                        = var.environment
   name_prefix                        = local.name
@@ -21,7 +21,7 @@ module "storage" {
 }
 
 module "observability" {
-  source = "../modules/observability"
+  source = "../../modules/observability"
 
   environment         = var.environment
   name_prefix         = local.name
