@@ -34,4 +34,4 @@ Cómputo de un ambiente: un clúster k3s de un solo nodo (servidor y cargas) con
 
 - `user_data_replace_on_change = true`: cambiar `k3s_version` o `registry` recrea el nodo y el clúster se reconstruye desde el código, no se parchea a mano.
 - `ignore_changes = [ami]`: una AMI más nueva en SSM no recrea un clúster en ejecución.
-- Las etiquetas `Project`, `Environment` y `ManagedBy` las pone `default_tags` del provider en el root de `environment/`.
+- Las etiquetas `Project`, `Environment` y `ManagedBy` las pone `default_tags` del provider en el root de `envs/<ambiente>/`.
