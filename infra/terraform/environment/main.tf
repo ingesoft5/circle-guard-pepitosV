@@ -60,7 +60,7 @@ module "network" {
 }
 
 module "k3s" {
-  source = "../modules/k3s-node"
+  source = "../modules/cluster"
 
   name              = local.name
   subnet_id         = module.network.subnet_id
