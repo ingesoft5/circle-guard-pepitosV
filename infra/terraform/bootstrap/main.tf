@@ -1,6 +1,6 @@
 # Remote state for the CircleGuard environments: one S3 bucket (versioned, encrypted, private)
 # and one DynamoDB table for state locking. Applied once with local state; everything else
-# uses this backend (see ../environment/*.s3.tfbackend). Its own state lives in the same bucket.
+# uses this backend (see ../envs/<env>/backend.hcl). Its own state lives in the same bucket.
 
 terraform {
   required_version = ">= 1.9.0"

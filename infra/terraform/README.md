@@ -7,8 +7,15 @@ infra/terraform/
 ├── bootstrap/          # bucket S3 del estado y tabla DynamoDB de bloqueo (una sola vez)
 ├── modules/
 │   ├── network/        # VPC, subred pública, IGW, peering con la VPC de CI y Security Group
-│   └── k3s-node/       # EC2 + Elastic IP; k3s se instala en el primer arranque (user_data)
-└── environment/        # root de un ambiente: <env>.tfvars y <env>.s3.tfbackend
+│   ├── cluster/        # EC2 + Elastic IP; k3s se instala en el primer arranque (user_data)
+│   ├── registry/       # repositorios ECR por servicio, escaneo y ciclo de vida
+│   ├── storage/        # bucket S3 de adjuntos y respaldos, versionado y cifrado
+│   └── observability/  # log groups de CloudWatch, alarmas del nodo y topic SNS
+└── envs/
+    ├── shared/         # main.tf, platform.tf, variables.tf, outputs.tf, versions.tf
+    ├── dev/            # symlinks a ../shared/*.tf + backend.hcl + terraform.tfvars
+    ├── stage/          # mismos symlinks; solo cambian backend.hcl y terraform.tfvars
+    └── prod/
 ```
 
 ## Qué crea cada ambiente
@@ -24,6 +31,42 @@ infra/terraform/
 - Peering con la VPC de CI: Jenkins llega al API server por IP privada y el nodo descarga imágenes del registro de Nexus (host `tools`, puerto 5000), que queda declarado en `/etc/rancher/k3s/registries.yaml`.
 - Reglas: 80 y 443 públicos (Ingress); 22 y 6443 solo desde Jenkins y desde las IP que cada integrante autoriza con `infra/cloud/aws/hosts.sh allow`. Las reglas son recursos sueltos, no inline, para que un `apply` no borre las que agrega `hosts.sh`.
 - Todo lleva las etiquetas `Project=CircleGuard`, `Environment` y `ManagedBy=terraform`: la política IAM del equipo permite encender, apagar y autorizar IP por esa etiqueta.
+
+## Módulos reutilizables
+
+Los tres roots enlazan con symlinks los mismos `.tf` de `envs/shared/`, que invocan los cinco módulos. Así no se copian recursos ni configuración: lo único que cambia por ambiente es `backend.hcl` (la `key` del estado) y `terraform.tfvars` (los valores). Los symlinks requieren Linux/macOS o Git con `core.symlinks=true` en Windows.
+
+| Módulo | Responsabilidad | README |
+|:---|:---|:---|
+| `network` | VPC, subred, IGW, peering con CI y Security Groups. | [`modules/network`](modules/network/README.md) |
+| `cluster` | EC2 + Elastic IP y k3s por `user_data` (antes `k3s-node`). | [`modules/cluster`](modules/cluster/README.md) |
+| `registry` | Un repositorio ECR por servicio, con escaneo y lifecycle. | [`modules/registry`](modules/registry/README.md) |
+| `storage` | Bucket S3 de adjuntos y respaldos, versionado y cifrado. | [`modules/storage`](modules/storage/README.md) |
+| `observability` | Log groups, alarmas del nodo y topic SNS. | [`modules/observability`](modules/observability/README.md) |
+
+Diferencias por ambiente (el resto usa los valores por defecto del módulo):
+
+| Variable | dev | stage | prod |
+|:---|:---|:---|:---|
+| `registry_keep_last_images` | 10 | 20 | 50 |
+| `log_retention_days` | 7 | 14 | 30 |
+| `storage_force_destroy` | `true` | `false` | `false` |
+
+El módulo de cómputo se llamaba `k3s-node`. Se renombró a `cluster` para cumplir el criterio de HU-26 sin mover el estado: la dirección sigue siendo `module.k3s`, porque el nombre del bloque no cambió, solo el `source`.
+
+Validar cualquier módulo:
+
+```bash
+for d in infra/terraform/modules/*/; do
+  ( cd "$d" && terraform init -backend=false -input=false >/dev/null && \
+    terraform fmt -check && terraform validate ) || exit 1
+done
+
+for e in dev stage prod; do
+  ( cd "infra/terraform/envs/$e" && terraform init -backend=false -input=false >/dev/null && \
+    terraform fmt -check && terraform validate ) || exit 1
+done
+```
 
 ## Uso
 
@@ -43,13 +86,17 @@ Requisitos: Terraform ≥ 1.9 y una cuenta con permisos de EC2, S3 (`circleguard
 2. Cada ambiente, cambiando `dev` por `stage` o `prod`:
 
    ```bash
-   cd infra/terraform/environment
-   terraform init -reconfigure -backend-config=dev.s3.tfbackend
-   terraform plan -var-file=dev.tfvars -out=dev.tfplan
+   cd infra/terraform/envs/dev
+   terraform init -reconfigure -backend-config=backend.hcl
+   terraform plan -out=dev.tfplan
    terraform apply dev.tfplan
    ```
 
-   Un segundo `plan` sin cambios en el código debe responder `No changes` (idempotencia). Mientras alguien aplica, la tabla DynamoDB bloquea el estado de ese ambiente.
+   Los tres roots comparten los mismos `.tf`; solo cambian `backend.hcl` (la `key` del
+   estado) y `terraform.tfvars` (valores). Conserva las `key` existentes para no perder
+   el estado. Un segundo `plan` sin cambios en el código debe responder `No changes`
+   (idempotencia). Mientras alguien aplica, la tabla DynamoDB bloquea el estado de ese
+   ambiente.
 
 3. Dar acceso a la IP propia y leer las IP (`hosts.sh` también enciende y apaga los nodos: `start k3s`, `stop k3s`):
 
