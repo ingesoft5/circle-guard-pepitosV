@@ -30,19 +30,22 @@ def call(Map config = [:]) {
         "REVISION=${revision}",
         "DOCKER_PULL=${pullFlag}"
     ]) {
-        sh """
-            docker build \$DOCKER_PULL \\
-              -f "\$DOCKERFILE" \\
-              --build-arg VERSION="\$IMAGE_VERSION" \\
-              ${labels} \\
-              -t "\$IMAGE_REF" \\
-              "\$BUILD_CONTEXT"
-        """
-        echo "dockerBuild: imagen construida ${imageRef}"
-        trivyImageScan(image: imageRef)
-        if (!keep) {
-            sh 'docker image rm "$IMAGE_REF" >/dev/null'
-            echo "dockerBuild: removed ${imageRef} from the CI host"
+        try {
+            sh """
+                docker build \$DOCKER_PULL \\
+                  -f "\$DOCKERFILE" \\
+                  --build-arg VERSION="\$IMAGE_VERSION" \\
+                  ${labels} \\
+                  -t "\$IMAGE_REF" \\
+                  "\$BUILD_CONTEXT"
+            """
+            echo "dockerBuild: imagen construida ${imageRef}"
+            trivyImageScan(image: imageRef)
+        } finally {
+            if (!keep) {
+                sh 'docker image rm "$IMAGE_REF" >/dev/null 2>&1 || true'
+                echo "dockerBuild: removed ${imageRef} from the CI host"
+            }
         }
     }
 
