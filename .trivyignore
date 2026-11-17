@@ -1,3 +1,12 @@
 # Accepted vulnerabilities need an id, a reason and a review date.
 # Example:
 # CVE-2024-00000  # expires 2026-12-01, no fixed release, not reachable in this service
+
+# Open-source fixes for these three are Spring Framework 7.0.9 only.
+# Review when the services move to Spring Boot 4.
+# XsltView is not registered and there is no catch-all view resolver.
+CVE-2026-47884 exp:2027-02-17
+# No server-sent event endpoint renders a fragment.
+CVE-2026-47890 exp:2027-02-17
+# WebFlux is used as a client. There is no functional router with a header predicate.
+CVE-2026-47892 exp:2027-02-17
