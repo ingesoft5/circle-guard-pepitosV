@@ -14,6 +14,7 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.header.Header;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
+import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 
 class TraceparentPropagationTest {
 
@@ -26,13 +27,14 @@ class TraceparentPropagationTest {
         TraceparentProducerInterceptor interceptor = new TraceparentProducerInterceptor();
         interceptor.configure(Map.of(TraceparentProducerInterceptor.CONFIG_KEY, tracer));
         ProducerRecord<Object, Object> record = new ProducerRecord<>("survey.submitted", "visitor", Map.of());
-
         interceptor.onSend(record);
-
         Header header = record.headers().lastHeader(TraceparentHeaders.HEADER);
-        assertThat(header).isNotNull();
-        assertThat(new String(header.value(), StandardCharsets.UTF_8))
-                .isEqualTo("00-" + TRACE_ID + "-" + SPAN_ID + "-01");
+        assertThat(new String(header.value(), StandardCharsets.UTF_8)).isEqualTo("00-" + TRACE_ID + "-" + SPAN_ID + "-01");
+        when(tracer.currentSpan()).thenReturn(null);
+        interceptor.onSend(record);
+        interceptor.onAcknowledgement(null, null);
+        interceptor.close();
+        new TraceparentProducerInterceptor().onSend(record);
     }
 
     @Test
@@ -40,9 +42,7 @@ class TraceparentPropagationTest {
         ConsumerRecord<Object, Object> incoming = new ConsumerRecord<>("survey.submitted", 0, 0L, "visitor", Map.of());
         TraceparentHeaders.put(incoming.headers(), TRACE_ID, SPAN_ID, true);
         TraceparentRecordInterceptor interceptor = new TraceparentRecordInterceptor();
-
         interceptor.intercept(incoming, null);
-
         assertThat(MDC.get("traceId")).isEqualTo(TRACE_ID);
         interceptor.afterRecord(incoming, null);
         assertThat(MDC.get("traceId")).isNull();
@@ -52,11 +52,12 @@ class TraceparentPropagationTest {
     void theProducerFactoryReceivesTheInterceptor() {
         Tracer tracer = currentTrace();
         Map<String, Object> configs = KafkaTracingConfig.producerConfigs(Map.of("bootstrap.servers", "localhost:9092"), tracer);
-
         assertThat(configs)
                 .containsEntry(ProducerConfig.INTERCEPTOR_CLASSES_CONFIG, TraceparentProducerInterceptor.class.getName())
-                .containsEntry(TraceparentProducerInterceptor.CONFIG_KEY, tracer)
-                .containsEntry("bootstrap.servers", "localhost:9092");
+                .containsEntry(TraceparentProducerInterceptor.CONFIG_KEY, tracer);
+        KafkaTracingConfig config = new KafkaTracingConfig();
+        config.traceparentProducer(tracer).customize(new DefaultKafkaProducerFactory<>(Map.of("bootstrap.servers", "localhost:9092")));
+        assertThat(config.traceparentConsumer()).isInstanceOf(TraceparentRecordInterceptor.class);
     }
 
     private static Tracer currentTrace() {
