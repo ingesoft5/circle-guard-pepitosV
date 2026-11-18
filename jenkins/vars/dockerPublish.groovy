@@ -78,8 +78,9 @@ def call(Map config = [:]) {
                       ${labels} \\
                       -t "\$IMAGE_REF" \\
                       "\$BUILD_CONTEXT"
-                    docker push "\$IMAGE_REF"
                 """
+                trivyImageScan(image: ref)
+                sh 'docker push "$IMAGE_REF"'
                 echo "dockerPublish: publicada ${ref}"
             }
         } finally {
