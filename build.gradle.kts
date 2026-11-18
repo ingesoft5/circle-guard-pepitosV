@@ -48,8 +48,8 @@ subprojects {
 
     // The dependency plugin registers its version rule while this project is
     // configured, so this rule has to be added afterwards or the BOM wins.
-    // Boot 3.5.16 still ships Tomcat, Jackson, Netty and PostgreSQL builds
-    // that the image gate rejects.
+    // Boot 3.5.16 still ships Tomcat, Jackson, Netty, PostgreSQL and lz4
+    // builds that the image gate rejects.
     afterEvaluate {
         configurations.configureEach {
             resolutionStrategy.eachDependency {
@@ -87,6 +87,10 @@ subprojects {
                     group == "org.apache.logging.log4j" && (name == "log4j-api" || name == "log4j-to-slf4j") -> {
                         useVersion("2.25.5")
                         because("Log4j API 2.24.3 has a CVE fixed in 2.25.5")
+                    }
+                    group == "at.yawk.lz4" && name == "lz4-java" -> {
+                        useVersion("1.14.1")
+                        because("lz4-java 1.10.1 has a high CVE fixed in 1.11.4")
                     }
                 }
             }
