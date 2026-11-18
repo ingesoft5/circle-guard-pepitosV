@@ -42,6 +42,7 @@ subprojects {
         "testCompileOnly"("org.projectlombok:lombok")
         "testAnnotationProcessor"("org.projectlombok:lombok")
         "implementation"("org.jetbrains.kotlin:kotlin-reflect")
+        "implementation"("net.logstash.logback:logstash-logback-encoder:7.4")
         "testImplementation"("org.springframework.boot:spring-boot-starter-test")
         "testRuntimeOnly"("com.h2database:h2")
     }
