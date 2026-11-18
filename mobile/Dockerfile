@@ -25,8 +25,14 @@ ENV EXPO_PUBLIC_API_PREFIX=${EXPO_PUBLIC_API_PREFIX}
 
 RUN npx expo export --platform web --output-dir dist
 
-# Etapa 2 · runtime: solo los estáticos + nginx sin privilegios (UID 101, :8080)
-FROM nginxinc/nginx-unprivileged:1.27-alpine AS runtime
+# Etapa 2 · runtime: solo los estáticos + nginx sin privilegios (UID 101, :8080).
+# 1.27-alpine es Alpine 3.21 y el gate rechaza sus librerías. 1.31.7 es Alpine 3.24,
+# la misma línea que las imágenes de los servicios. El upgrade toma los parches
+# publicados después de construir esa etiqueta.
+FROM nginxinc/nginx-unprivileged:1.31.7-alpine3.24 AS runtime
+
+USER root
+RUN apk upgrade --no-cache
 
 ARG VERSION=dev
 LABEL org.opencontainers.image.title="circleguard-web-client" \
