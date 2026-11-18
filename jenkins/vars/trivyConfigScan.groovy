@@ -12,7 +12,15 @@ def call(Map config = [:]) {
         echo "trivyConfigScan: aún no existen ${paths.join(' ni ')}; el escaneo de IaC queda pendiente."
         return
     }
-    String mounted = present.withIndex().collect { path, index -> "/scan${index + 1}" }.join(' ')
+    // withIndex() loses the index under the pipeline CPS transform, so the
+    // counter stays a plain integer.
+    List<String> mounts = []
+    int index = 1
+    for (String path : present) {
+        mounts.add("/scan${index}")
+        index = index + 1
+    }
+    String mounted = mounts.join(' ')
     String report = config.report ?: 'build/reports/trivy-config.json'
     try {
         withEnv(["TRIVY_CONFIG_PATHS=${mounted}", "TRIVY_CONFIG_REPORT=${report}", "TRIVY_HOST_PATHS=${present.join(' ')}"]) {

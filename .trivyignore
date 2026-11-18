@@ -10,3 +10,16 @@ CVE-2026-47884 exp:2027-02-17
 CVE-2026-47890 exp:2027-02-17
 # WebFlux is used as a client. There is no functional router with a header predicate.
 CVE-2026-47892 exp:2027-02-17
+
+# The k3s node installs from the internet and pulls images, so egress stays open.
+# Review if the node no longer needs outbound internet.
+AVD-AWS-0104 exp:2027-02-17
+# State and file buckets are private and encrypted with AES256.
+# A customer managed key waits until the platform rotates keys itself.
+AVD-AWS-0132 exp:2027-02-17
+# Dev reuses image tags, so the registry module stays MUTABLE.
+# Review when prod publishes immutable tags only.
+AVD-AWS-0031 exp:2027-02-17
+# The alert topic carries CPU and status alarms, not customer data.
+# Review with the observability story.
+AVD-AWS-0095 exp:2027-02-17
