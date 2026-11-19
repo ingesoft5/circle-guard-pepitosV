@@ -20,9 +20,9 @@ resource "aws_internet_gateway" "this" {
 }
 
 resource "aws_subnet" "public" {
-  vpc_id                  = aws_vpc.this.id
-  cidr_block              = cidrsubnet(var.vpc_cidr, 8, 1)
-  availability_zone       = coalesce(var.availability_zone, data.aws_availability_zones.available.names[0])
+  vpc_id            = aws_vpc.this.id
+  cidr_block        = cidrsubnet(var.vpc_cidr, 8, 1)
+  availability_zone = coalesce(var.availability_zone, data.aws_availability_zones.available.names[0])
   # The node address comes from its Elastic IP, so the subnet does not assign another one.
   map_public_ip_on_launch = false
   tags                    = { Name = "${var.name}-public" }

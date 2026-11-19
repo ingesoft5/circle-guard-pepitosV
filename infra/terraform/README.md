@@ -82,6 +82,9 @@ Requisitos: Terraform ≥ 1.9 y una cuenta con permisos de EC2, S3 (`circleguard
    ```
 
    Ya está hecho en la cuenta del equipo: basta `terraform init -backend-config=bootstrap.s3.tfbackend`.
+   El stack (bucket versionado y cifrado, tabla de lock, primer apply y migración) está documentado en
+   [`bootstrap/README.md`](bootstrap/README.md), y la prueba de bloqueo concurrente en
+   [`../../docs/operaciones/terraform-state-lock.md`](../../docs/operaciones/terraform-state-lock.md).
 
 2. Cada ambiente, cambiando `dev` por `stage` o `prod`:
 

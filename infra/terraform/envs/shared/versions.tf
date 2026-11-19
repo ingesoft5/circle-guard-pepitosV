@@ -7,8 +7,8 @@ terraform {
     }
   }
 
-  # Partial configuration: bucket, key and lock table come from <env>.s3.tfbackend,
-  #   terraform init -reconfigure -backend-config=dev.s3.tfbackend
+  # Partial configuration: bucket, key and lock table come from backend.hcl,
+  #   terraform init -reconfigure -backend-config=backend.hcl
   backend "s3" {}
 }
 
