@@ -1,7 +1,7 @@
 # One CircleGuard environment (dev, stage or prod): its network and its single-node k3s cluster.
-# The same code serves the three environments; only <env>.tfvars and <env>.s3.tfbackend change.
-#   terraform init -reconfigure -backend-config=dev.s3.tfbackend
-#   terraform plan -var-file=dev.tfvars
+# The same code serves the three environments; only terraform.tfvars and backend.hcl change.
+#   terraform init -reconfigure -backend-config=backend.hcl
+#   terraform plan -var-file=terraform.tfvars
 
 # The CI and tools hosts were created by infra/cloud/aws/provision-ci-hosts.sh (Part 1);
 # here they are only read, to peer with their VPC and open the registry to the cluster.
