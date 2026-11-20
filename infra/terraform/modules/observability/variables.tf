@@ -40,3 +40,40 @@ variable "instance_id" {
   description = "EC2 instance of the cluster to monitor."
   type        = string
 }
+
+variable "prometheus_ssh_host" {
+  description = "Host used to reach the node: the public Elastic IP from a workstation, the private IP from Jenkins."
+  type        = string
+}
+
+variable "install_prometheus" {
+  description = "Install kube-prometheus-stack inside the cluster (HU-26/HU-39 dependency)."
+  type        = bool
+  default     = true
+}
+
+variable "prometheus_namespace" {
+  description = "Namespace of kube-prometheus-stack."
+  type        = string
+  default     = "monitoring"
+}
+
+variable "prometheus_chart_version" {
+  description = "Pinned version of the kube-prometheus-stack Helm chart."
+  type        = string
+  default     = "65.5.1"
+}
+
+variable "prometheus_grafana_admin_password" {
+  description = "Grafana admin password. Empty keeps the chart default; pass it with TF_VAR_ and never commit it."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "prometheus_ssh_private_key" {
+  description = "Private key used to reach the node. Empty uses the SSH agent."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
