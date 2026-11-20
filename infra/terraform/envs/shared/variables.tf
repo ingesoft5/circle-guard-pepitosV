@@ -115,3 +115,41 @@ variable "cpu_alarm_threshold" {
   type        = number
   default     = 80
 }
+
+variable "install_prometheus" {
+  description = "Install kube-prometheus-stack in the cluster (HU-26/HU-39 dependency)."
+  type        = bool
+  default     = true
+}
+
+variable "prometheus_ssh_host" {
+  description = "Host used to reach the k3s node. Empty uses the public Elastic IP; Jenkins sets the private IP."
+  type        = string
+  default     = ""
+}
+
+variable "prometheus_namespace" {
+  description = "Namespace of kube-prometheus-stack."
+  type        = string
+  default     = "monitoring"
+}
+
+variable "prometheus_chart_version" {
+  description = "Pinned version of the kube-prometheus-stack Helm chart."
+  type        = string
+  default     = "65.5.1"
+}
+
+variable "prometheus_grafana_admin_password" {
+  description = "Grafana admin password. Empty keeps the chart default; pass it with TF_VAR_ and never commit it."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "prometheus_ssh_private_key" {
+  description = "Private key used to reach the k3s node. Empty uses the SSH agent."
+  type        = string
+  sensitive   = true
+  default     = ""
+}

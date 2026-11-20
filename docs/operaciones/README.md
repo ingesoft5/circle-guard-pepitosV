@@ -10,6 +10,7 @@ El detalle de cada pieza está en:
 - [infra/compose/ci/README.md](../../infra/compose/ci/README.md): stack de CI, costos y diagnóstico.
 - [infra/security/security-groups.md](../../infra/security/security-groups.md): qué puerto se expone y desde dónde.
 - [jenkins-pipeline.md](jenkins-pipeline.md): job multibranch, webhook, release y rollback.
+- [observability.md](observability.md): Prometheus, Grafana y Alertmanager en el clúster (HU-26 → HU-39/40/41).
 - [../release-notes/etiquetado.md](../release-notes/etiquetado.md): cómo se calcula la versión.
 - [../release-notes/politica-cambios.md](../release-notes/politica-cambios.md): quién aprueba cada ambiente.
 

@@ -17,3 +17,8 @@ output "status_check_alarm_name" {
   description = "Name of the EC2 status check alarm."
   value       = aws_cloudwatch_metric_alarm.status_check.alarm_name
 }
+
+output "monitoring_namespace" {
+  description = "Namespace of kube-prometheus-stack, or null when it is not installed."
+  value       = var.install_prometheus ? var.prometheus_namespace : null
+}
