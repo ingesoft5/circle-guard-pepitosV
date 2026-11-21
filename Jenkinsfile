@@ -73,6 +73,21 @@ pipeline {
             }
         }
 
+        stage('Secret scan') {
+            when { expression { !alreadyMerged } }
+            steps {
+                script {
+                    def currentStage = 'Secret scan'
+                    try {
+                        secretScan()
+                    } catch (Exception e) {
+                        failedStage = currentStage
+                        throw e
+                    }
+                }
+            }
+        }
+
         stage('PR size policy') {
             steps {
                 script {
@@ -93,6 +108,15 @@ pipeline {
                     echo "Base del diff: ${changed.base ?: 'sin base'}"
                     echo "Servicios seleccionados: ${changed.services ?: 'ninguno'}"
                     echo "Cliente web: ${changed.web}"
+                }
+            }
+        }
+
+        stage('Dependency scan') {
+            when { expression { !alreadyMerged } }
+            steps {
+                script {
+                    trivyFsScan()
                 }
             }
         }
@@ -301,6 +325,15 @@ pipeline {
             }
         }
 
+        stage('IaC scan') {
+            when { expression { !alreadyMerged } }
+            steps {
+                script {
+                    trivyConfigScan()
+                }
+            }
+        }
+
         stage('Integration tests') {
             when {
                 expression {
@@ -370,7 +403,7 @@ pipeline {
                 }
             }
             steps {
-                deployCompose(environment: 'stage', version: prereleaseVersion)
+                deployK8s(environment: 'stage', version: prereleaseVersion)
             }
         }
 
@@ -387,7 +420,7 @@ pipeline {
                     usernameVariable: 'E2E_USERNAME',
                     passwordVariable: 'E2E_PASSWORD'
                 )]) {
-                    withEnv(["E2E_BASE_URL=http://${env.DEPLOY_HOST_STAGE}"]) {
+                    withEnv(["E2E_BASE_URL=http://${env.K8S_HOST_STAGE}"]) {
                         sh 'bash tests/e2e-playwright/run-e2e.sh'
                     }
                 }
@@ -470,7 +503,7 @@ pipeline {
                 }
             }
             steps {
-                deployCompose(environment: 'dev', version: releaseVersion)
+                deployK8s(environment: 'dev', version: releaseVersion)
             }
         }
 
@@ -507,7 +540,7 @@ pipeline {
                     usernameVariable: 'E2E_USERNAME',
                     passwordVariable: 'E2E_PASSWORD'
                 )]) {
-                    withEnv(["E2E_BASE_URL=http://${env.DEPLOY_HOST_DEV}"]) {
+                    withEnv(["E2E_BASE_URL=http://${env.K8S_HOST_DEV}"]) {
                         sh 'bash tests/e2e-playwright/run-e2e.sh'
                     }
                 }
@@ -536,7 +569,7 @@ pipeline {
                 }
             }
             steps {
-                deployCompose(environment: 'stage', version: releaseVersion)
+                deployK8s(environment: 'stage', version: releaseVersion)
             }
         }
 
@@ -571,7 +604,7 @@ pipeline {
                 }
             }
             steps {
-                deployCompose(environment: 'prod', version: releaseVersion)
+                deployK8s(environment: 'prod', version: releaseVersion)
             }
         }
     }

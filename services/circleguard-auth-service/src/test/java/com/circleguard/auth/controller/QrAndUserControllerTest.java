@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.circleguard.auth.config.FeatureProperties;
+import com.circleguard.auth.config.QrProperties;
 import com.circleguard.auth.model.LocalUser;
 import com.circleguard.auth.repository.LocalUserRepository;
 import com.circleguard.auth.service.QrTokenService;
@@ -11,21 +13,44 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 
 class QrAndUserControllerTest {
+
+    private static final String SECRET = "test-qr-secret-key-with-at-least-32-bytes";
 
     @Test
     void qrTokenIsGeneratedForTheAuthenticatedAnonymousId() {
         QrTokenService qrService = mock(QrTokenService.class);
         UUID anonymousId = UUID.randomUUID();
         when(qrService.generateQrToken(anonymousId)).thenReturn("qr-jwt");
-        var controller = new QrTokenController(qrService);
+        when(qrService.expirationMillis()).thenReturn(60_000L);
+        var controller = new QrTokenController(qrService, new FeatureProperties(false));
 
         var response = controller.generateToken(
                 new UsernamePasswordAuthenticationToken(anonymousId.toString(), null, List.of()));
 
         assertThat(response.getBody()).containsEntry("qrToken", "qr-jwt").containsEntry("expiresIn", "60");
+    }
+
+    @Test
+    void diagnosticsAreHiddenWhenTheToggleIsOff() {
+        QrTokenService qrService = new QrTokenService(new QrProperties(SECRET, 60_000L));
+        var controller = new QrTokenController(qrService, new FeatureProperties(false));
+
+        assertThat(controller.diagnostics().getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void diagnosticsPublishTheConfiguredLifetimeWhenTheToggleIsOn() {
+        QrTokenService qrService = new QrTokenService(new QrProperties(SECRET, 120_000L));
+        var controller = new QrTokenController(qrService, new FeatureProperties(true));
+
+        assertThat(controller.diagnostics().getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(controller.diagnostics().getBody())
+                .containsEntry("expirationMillis", "120000")
+                .containsEntry("expiresIn", "120");
     }
 
     @Test

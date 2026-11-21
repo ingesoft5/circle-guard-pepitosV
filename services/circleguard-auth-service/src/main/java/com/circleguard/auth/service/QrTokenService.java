@@ -1,9 +1,9 @@
 package com.circleguard.auth.service;
 
+import com.circleguard.auth.config.QrProperties;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import java.security.Key;
 import java.util.Date;
@@ -14,10 +14,13 @@ public class QrTokenService {
     private final Key key;
     private final long expiration;
 
-    public QrTokenService(@Value("${qr.secret}") String secret, 
-                         @Value("${qr.expiration:60000}") long expiration) {
-        this.key = Keys.hmacShaKeyFor(secret.getBytes());
-        this.expiration = expiration;
+    public QrTokenService(QrProperties properties) {
+        this.key = Keys.hmacShaKeyFor(properties.getSecret().getBytes());
+        this.expiration = properties.getExpiration();
+    }
+
+    public long expirationMillis() {
+        return expiration;
     }
 
     public String generateQrToken(UUID anonymousId) {

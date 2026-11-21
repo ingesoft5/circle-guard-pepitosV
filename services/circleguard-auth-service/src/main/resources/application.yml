@@ -24,7 +24,7 @@ jwt:
 
 qr:
   secret: "my-qr-secret-key-for-dev-1234567890"
-  # Milliseconds. Matches the 60 s that QrTokenController reports and the client rotation.
+  # Milliseconds. Env QR_EXPIRATION or a profile overrides this without a new image.
   expiration: 60000
 
 server:

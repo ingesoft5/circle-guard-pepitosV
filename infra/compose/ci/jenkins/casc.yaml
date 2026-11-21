@@ -48,6 +48,13 @@ jenkins:
             value: "${DEPLOY_HOST_STAGE:-}"
           - key: "DEPLOY_HOST_PROD"
             value: "${DEPLOY_HOST_PROD:-}"
+          # Private IP of each k3s node (Ingress), used by the deployK8s step and the E2E tests
+          - key: "K8S_HOST_DEV"
+            value: "${K8S_HOST_DEV:-}"
+          - key: "K8S_HOST_STAGE"
+            value: "${K8S_HOST_STAGE:-}"
+          - key: "K8S_HOST_PROD"
+            value: "${K8S_HOST_PROD:-}"
           # Branch the rollback job takes its pipeline and the shared library from (HU-17)
           - key: "ROLLBACK_BRANCH"
             value: "${ROLLBACK_BRANCH:-main}"

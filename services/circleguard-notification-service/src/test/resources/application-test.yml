@@ -1,0 +1,6 @@
+# The tests mock JavaMailSender, which is not a JavaMailSenderImpl.
+# Actuator then refuses to build the mail health indicator.
+management:
+  health:
+    mail:
+      enabled: false
