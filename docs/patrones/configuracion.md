@@ -1,6 +1,6 @@
 # Patrón de configuración externa y feature toggle
 
-Un parámetro de negocio y una funcionalidad se cambian por ambiente sin reconstruir la imagen. Auth-service lee ambos al arrancar. En Kubernetes el mismo efecto lo da un ConfigMap montado como variables de entorno y un reinicio del Deployment; esa prueba en el clúster espera a que existan los ConfigMaps (CGR-140).
+Un parámetro de negocio y una funcionalidad se cambian por ambiente sin reconstruir la imagen. Auth-service lee ambos al arrancar. En el clúster el ConfigMap `auth-config` inyecta `QR_EXPIRATION` y `CIRCLEGUARD_FEATURES_QR_DIAGNOSTICS`. El chart trae 60 s y el diagnóstico apagado; `values-dev` los deja en 120 s y encendido, y `values-stage` y `values-prod` en 30 s y apagado. Un cambio de esos valores entra al reiniciar el Deployment.
 
 ## TTL del QR
 
