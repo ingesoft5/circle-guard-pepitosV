@@ -1,0 +1,288 @@
+# Base values shared by dev, stage and prod. Each values-<env>.yaml only overrides sizes,
+# replicas and the public host; the image is the same in every environment (image.tag).
+environment: dev
+
+image:
+  # Private registry (tools host, reached through the VPC peering). The pipeline sets both:
+  #   --set image.registry=<tools-private-ip>:5000 --set image.tag=<version>
+  registry: ""
+  tag: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# Created outside the chart (deploy/k8s/scripts/apply-secrets.sh); never versioned.
+secretName: circleguard-secrets
+
+ingress:
+  enabled: true
+  className: traefik
+  # Empty host answers on any name (the node's public IP); set it to a DNS name per environment.
+  host: ""
+
+# Browser origins allowed by the services that check CORS.
+corsAllowedOrigins: "http://localhost:8080"
+
+# Defaults applied to every Spring Boot service (spring: true).
+spring:
+  config:
+    MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true"
+    MANAGEMENT_HEALTH_LIVENESSSTATE_ENABLED: "true"
+    MANAGEMENT_HEALTH_READINESSSTATE_ENABLED: "true"
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {memory: 768Mi}
+  probes:
+    startup:
+      httpGet: {path: /actuator/health/liveness, port: http}
+      periodSeconds: 5
+      failureThreshold: 60
+    liveness:
+      httpGet: {path: /actuator/health/liveness, port: http}
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+    readiness:
+      httpGet: {path: /actuator/health/readiness, port: http}
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 3
+
+# Application workloads. `image` is relative to <registry>/circleguard/. `secrets` maps an
+# environment variable to a key of the Secret; `config` goes to the workload's ConfigMap.
+# `readinessGroup` lists the health indicators that take the pod out of the Service when DOWN.
+services:
+  identity:
+    spring: true
+    image: identity-service
+    port: 8083
+    readinessGroup: readinessState,db
+    config:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/circleguard_identity
+    secrets:
+      SPRING_DATASOURCE_USERNAME: POSTGRES_USER
+      SPRING_DATASOURCE_PASSWORD: POSTGRES_PASSWORD
+      VAULT_SECRET: VAULT_SECRET
+      VAULT_SALT: VAULT_SALT
+      VAULT_HASHSALT: VAULT_HASH_SALT
+      JWT_SECRET: JWT_SECRET
+  auth:
+    spring: true
+    image: auth-service
+    port: 8180
+    readinessGroup: readinessState,db
+    config:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/circleguard_auth
+      SPRING_LDAP_URLS: ldap://openldap:389
+      IDENTITY_URL: http://identity:8083
+    secrets:
+      SPRING_DATASOURCE_USERNAME: POSTGRES_USER
+      SPRING_DATASOURCE_PASSWORD: POSTGRES_PASSWORD
+      SPRING_LDAP_PASSWORD: LDAP_ADMIN_PASSWORD
+      JWT_SECRET: JWT_SECRET
+      QR_SECRET: QR_SECRET
+  promotion:
+    spring: true
+    image: promotion-service
+    port: 8088
+    readinessGroup: readinessState,db,redis
+    config:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/circleguard_promotion
+      SPRING_NEO4J_URI: bolt://neo4j:7687
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_DATA_REDIS_HOST: redis
+    secrets:
+      SPRING_DATASOURCE_USERNAME: POSTGRES_USER
+      SPRING_DATASOURCE_PASSWORD: POSTGRES_PASSWORD
+      SPRING_NEO4J_AUTHENTICATION_USERNAME: NEO4J_USER
+      SPRING_NEO4J_AUTHENTICATION_PASSWORD: NEO4J_PASSWORD
+      SPRING_DATA_REDIS_PASSWORD: REDIS_PASSWORD
+      JWT_SECRET: JWT_SECRET
+  form:
+    spring: true
+    image: form-service
+    port: 8086
+    readinessGroup: readinessState,db
+    config:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/circleguard_form
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    secrets:
+      SPRING_DATASOURCE_USERNAME: POSTGRES_USER
+      SPRING_DATASOURCE_PASSWORD: POSTGRES_PASSWORD
+    hpa: {minReplicas: 1, maxReplicas: 3, cpuUtilization: 70}
+  gateway:
+    spring: true
+    image: gateway-service
+    port: 8087
+    readinessGroup: readinessState,redis
+    config:
+      SPRING_DATA_REDIS_HOST: redis
+    secrets:
+      SPRING_DATA_REDIS_PASSWORD: REDIS_PASSWORD
+      JWT_SECRET: JWT_SECRET
+      QR_SECRET: QR_SECRET
+    hpa: {minReplicas: 1, maxReplicas: 3, cpuUtilization: 70}
+  notification:
+    spring: true
+    image: notification-service
+    port: 8082
+    readinessGroup: readinessState
+    config:
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      AUTH_API_URL: http://auth:8180
+    secrets:
+      JWT_SECRET: JWT_SECRET
+      QR_SECRET: QR_SECRET
+  file:
+    spring: true
+    image: file-service
+    port: 8085
+    readinessGroup: readinessState
+  dashboard:
+    spring: true
+    image: dashboard-service
+    port: 8084
+    readinessGroup: readinessState,db
+    config:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/circleguard_dashboard
+    secrets:
+      SPRING_DATASOURCE_USERNAME: POSTGRES_USER
+      SPRING_DATASOURCE_PASSWORD: POSTGRES_PASSWORD
+  web:
+    image: web-client
+    port: 8080
+    # nginx forwards /svc/<service>/ to these Services. Its resolver ignores the search domains,
+    # so the names are fully qualified (config values go through tpl).
+    config:
+      AUTH_UPSTREAM: "auth.{{ .Release.Namespace }}.svc.cluster.local:8180"
+      IDENTITY_UPSTREAM: "identity.{{ .Release.Namespace }}.svc.cluster.local:8083"
+      PROMOTION_UPSTREAM: "promotion.{{ .Release.Namespace }}.svc.cluster.local:8088"
+      FORM_UPSTREAM: "form.{{ .Release.Namespace }}.svc.cluster.local:8086"
+      GATEWAY_UPSTREAM: "gateway.{{ .Release.Namespace }}.svc.cluster.local:8087"
+    resources:
+      requests: {cpu: 20m, memory: 32Mi}
+      limits: {memory: 128Mi}
+    probes:
+      readiness:
+        httpGet: {path: /healthz, port: http}
+        periodSeconds: 10
+      liveness:
+        httpGet: {path: /healthz, port: http}
+        periodSeconds: 20
+
+# Middleware, same versions as Compose. `storage` turns the workload into a StatefulSet with a
+# PersistentVolumeClaim (k3s local-path).
+middleware:
+  postgres:
+    externalImage: postgres:16
+    port: 5432
+    storage: {size: 2Gi, mountPath: /var/lib/postgresql/data}
+    initSql: true
+    config:
+      POSTGRES_DB: circleguard
+      PGDATA: /var/lib/postgresql/data/pgdata
+    secrets:
+      POSTGRES_USER: POSTGRES_USER
+      POSTGRES_PASSWORD: POSTGRES_PASSWORD
+    resources:
+      requests: {cpu: 50m, memory: 128Mi}
+      limits: {memory: 512Mi}
+    probes:
+      readiness:
+        exec: {command: [sh, -c, 'pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d circleguard']}
+        periodSeconds: 5
+      liveness:
+        exec: {command: [sh, -c, 'pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d circleguard']}
+        initialDelaySeconds: 30
+        periodSeconds: 20
+  neo4j:
+    externalImage: neo4j:5.26
+    port: 7687
+    storage: {size: 2Gi, mountPath: /data}
+    config:
+      NEO4J_server_memory_heap_initial__size: 256m
+      NEO4J_server_memory_heap_max__size: 512m
+      NEO4J_server_memory_pagecache_size: 128m
+    # Not NEO4J_*: the image turns every NEO4J_* variable into a server setting.
+    secrets:
+      CG_NEO4J_USER: NEO4J_USER
+      CG_NEO4J_PASSWORD: NEO4J_PASSWORD
+    env:
+      - {name: NEO4J_AUTH, value: "$(CG_NEO4J_USER)/$(CG_NEO4J_PASSWORD)"}
+    resources:
+      requests: {cpu: 50m, memory: 512Mi}
+      limits: {memory: 1Gi}
+    probes:
+      readiness:
+        tcpSocket: {port: http}
+        periodSeconds: 10
+      startup:
+        tcpSocket: {port: http}
+        periodSeconds: 5
+        failureThreshold: 36
+  zookeeper:
+    externalImage: confluentinc/cp-zookeeper:7.6.0
+    port: 2181
+    config:
+      ZOOKEEPER_CLIENT_PORT: "2181"
+      ZOOKEEPER_TICK_TIME: "2000"
+      KAFKA_HEAP_OPTS: -Xms64m -Xmx128m
+    resources:
+      requests: {cpu: 20m, memory: 128Mi}
+      limits: {memory: 256Mi}
+    probes:
+      readiness:
+        tcpSocket: {port: http}
+        periodSeconds: 10
+  kafka:
+    externalImage: confluentinc/cp-kafka:7.6.0
+    port: 9092
+    config:
+      KAFKA_BROKER_ID: "1"
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_HEAP_OPTS: -Xms256m -Xmx512m
+    resources:
+      requests: {cpu: 50m, memory: 512Mi}
+      limits: {memory: 768Mi}
+    probes:
+      readiness:
+        tcpSocket: {port: http}
+        periodSeconds: 10
+      startup:
+        tcpSocket: {port: http}
+        periodSeconds: 5
+        failureThreshold: 36
+  redis:
+    externalImage: redis:7.2
+    port: 6379
+    secrets:
+      REDISCLI_AUTH: REDIS_PASSWORD
+    args: ["--requirepass", "$(REDISCLI_AUTH)", "--save", "", "--appendonly", "no"]
+    resources:
+      requests: {cpu: 20m, memory: 32Mi}
+      limits: {memory: 128Mi}
+    probes:
+      readiness:
+        exec: {command: [sh, -c, 'redis-cli ping | grep -q PONG']}
+        periodSeconds: 5
+  openldap:
+    externalImage: osixia/openldap:1.5.0
+    port: 389
+    # slapd reserves memory per file descriptor: without this limit it exhausts the container.
+    command: [sh, -c, "ulimit -n 1024 && exec /container/tool/run"]
+    config:
+      LDAP_ORGANISATION: CircleGuard
+      LDAP_DOMAIN: circleguard.edu
+      LDAP_TLS: "false"
+    secrets:
+      LDAP_ADMIN_PASSWORD: LDAP_ADMIN_PASSWORD
+    resources:
+      requests: {cpu: 20m, memory: 64Mi}
+      limits: {memory: 256Mi}
+    probes:
+      readiness:
+        exec: {command: [sh, -c, 'ldapsearch -x -H ldap://localhost -D cn=admin,dc=circleguard,dc=edu -w "$LDAP_ADMIN_PASSWORD" -b dc=circleguard,dc=edu -s base >/dev/null']}
+        periodSeconds: 10

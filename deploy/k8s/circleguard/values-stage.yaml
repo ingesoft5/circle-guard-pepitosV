@@ -1,0 +1,4 @@
+environment: stage
+middleware:
+  postgres:
+    storage: {size: 3Gi}
