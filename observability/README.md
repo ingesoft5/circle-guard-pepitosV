@@ -28,7 +28,8 @@ observability/
 `kube-prometheus-stack` en el namespace `monitoring` de cada ambiente:
 Prometheus, Grafana, Alertmanager, node-exporter y kube-state-metrics. Los
 paneles y las reglas de alerta quedan vacíos a propósito para que HU-40 y
-HU-41 los agreguen como código.
+HU-41 los agreguen como código. El mismo módulo instala Loki y Promtail y
+aplica el datasource que abre el `traceId` de una línea en Jaeger.
 
 Grafana se publica en `http://<ip>/grafana` con su login. Prometheus y
 Alertmanager se publican en `/prometheus` y `/alertmanager` detrás del middleware
