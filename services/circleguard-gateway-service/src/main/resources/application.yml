@@ -21,7 +21,11 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,metrics,circuitbreakers
+        include: health,metrics,circuitbreakers,prometheus
+  metrics:
+    tags:
+      # Same value in every metric, so dashboards can filter by service.
+      application: ${spring.application.name}
   endpoint:
     health:
       show-details: always

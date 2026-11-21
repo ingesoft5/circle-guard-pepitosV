@@ -1,5 +1,6 @@
 package com.circleguard.form.service;
 
+import com.circleguard.form.metrics.SurveyMetrics;
 import com.circleguard.form.model.HealthSurvey;
 import com.circleguard.form.model.Questionnaire;
 import com.circleguard.form.model.ValidationStatus;
@@ -21,6 +22,7 @@ public class HealthSurveyService {
     private final QuestionnaireService questionnaireService;
     private final SymptomMapper symptomMapper;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final SurveyMetrics surveyMetrics;
 
     private static final String TOPIC_SURVEY_SUBMITTED = "survey.submitted";
     private static final String TOPIC_CERTIFICATE_VALIDATED = "certificate.validated";
@@ -50,6 +52,7 @@ public class HealthSurveyService {
         event.put("hasSymptoms", hasSymptoms);
         event.put("timestamp", System.currentTimeMillis());
         kafkaTemplate.send(TOPIC_SURVEY_SUBMITTED, saved.getAnonymousId().toString(), event);
+        surveyMetrics.recordSubmitted(hasSymptoms);
         
         return saved;
     }

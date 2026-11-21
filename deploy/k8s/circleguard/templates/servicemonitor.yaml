@@ -1,0 +1,44 @@
+{{- /*
+One ServiceMonitor for the Spring Boot services of the release (the entries of .Values.services
+with spring: true). Prometheus scrapes every pod through the Service port named http, so the
+metrics never go through the web client's nginx. Middleware and the web client are left out:
+they do not expose Micrometer metrics.
+
+The resource needs the Prometheus Operator CRDs. They come with kube-prometheus-stack
+(infra/terraform/modules/observability), so a cluster without the stack skips this file instead
+of failing the release. With `helm template`, add --api-versions monitoring.coreos.com/v1/ServiceMonitor.
+*/ -}}
+{{- $monitor := .Values.metrics.serviceMonitor -}}
+{{- if and $monitor.enabled (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1/ServiceMonitor") }}
+{{- $names := list }}
+{{- range $name, $spec := .Values.services }}
+{{- if $spec.spring }}{{ $names = append $names $name }}{{ end }}
+{{- end }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: circleguard-services
+  labels:
+    {{- include "circleguard.labels" (dict "root" . "name" "circleguard-services") | nindent 4 }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/part-of: circleguard
+      app.kubernetes.io/instance: {{ .Release.Name }}
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: {{ $names | sortAlpha | toJson }}
+  endpoints:
+    - port: http
+      path: {{ $monitor.path }}
+      interval: {{ $monitor.interval | quote }}
+      scrapeTimeout: {{ $monitor.scrapeTimeout | quote }}
+      relabelings:
+        - targetLabel: environment
+          replacement: {{ .Values.environment | quote }}
+{{- end }}

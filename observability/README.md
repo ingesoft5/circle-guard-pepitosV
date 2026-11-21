@@ -23,7 +23,9 @@ HU-41 los agreguen como código.
 ## Qué queda para HU-39, HU-40 y HU-41
 
 - **HU-39:** dependencia `micrometer-registry-prometheus` en los 8 servicios,
-  endpoint `/actuator/prometheus`, contadores de negocio y ServiceMonitors.
+  endpoint `/actuator/prometheus`, contadores de negocio y el ServiceMonitor, que vive en
+  el chart de la aplicación (`deploy/k8s/circleguard/templates/servicemonitor.yaml`)
+  porque su namespace y sus servicios cambian por ambiente.
 - **HU-40:** dashboards JSON en `observability/grafana/` y su ConfigMap.
 - **HU-41:** reglas en `observability/alerts/` y la notificación de Alertmanager.
 

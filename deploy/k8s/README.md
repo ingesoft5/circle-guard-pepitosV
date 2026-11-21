@@ -16,6 +16,7 @@ deploy/k8s/
 │   └── templates/
 │       ├── workloads.yaml     # ConfigMap + Deployment/StatefulSet + Service por componente
 │       ├── hpa.yaml
+│       ├── servicemonitor.yaml  # scraping de /actuator/prometheus (HU-39)
 │       └── ingress.yaml
 └── scripts/apply-secrets.sh   # crea el Secret del ambiente sin versionar valores
 ```
@@ -67,6 +68,15 @@ la base no reinicie todos los servicios en cadena.
 
 `gateway` y `form` tienen HPA por CPU (70 % del `request`), de 1 a 3 réplicas (2 a 4 en prod).
 k3s ya trae metrics-server. Tras la carga, el HPA reduce réplicas a los 2 minutos.
+
+## Métricas (HU-39)
+
+`templates/servicemonitor.yaml` crea un ServiceMonitor con los servicios `spring: true`, para que
+el Prometheus del namespace `monitoring` lea `/actuator/prometheus` de cada pod. Solo se genera si
+el clúster tiene los CRD de Prometheus Operator; `--set metrics.serviceMonitor.enabled=false` lo
+quita y `helm template` necesita `--api-versions monitoring.coreos.com/v1/ServiceMonitor`. Las
+métricas, sus etiquetas y cómo verificarlas están en
+[`docs/operaciones/observability.md`](../../docs/operaciones/observability.md).
 
 ## Desplegar a mano
 
