@@ -17,6 +17,11 @@ trap 'rm -f "${TMP_FILE}"' EXIT
 
 die() { echo "apply-secrets: $*" >&2; exit 1; }
 
+# 48 hex characters, like gen_password in infra/bootstrap/lib/common.sh.
+gen_password() {
+  if command -v openssl >/dev/null; then openssl rand -hex 24; else od -An -tx1 -N24 /dev/urandom | tr -d ' \n'; fi
+}
+
 generate_env_file() {
   local example="$1" target="$2" line
   [[ -r "${example}" ]] || die "Template not found: ${example}"
@@ -25,7 +30,7 @@ generate_env_file() {
     umask 077
     while IFS= read -r line || [[ -n "${line}" ]]; do
       while [[ "${line}" == *"__GENERATE__"* ]]; do
-        line="${line/__GENERATE__/$(openssl rand -hex 24)}"
+        line="${line/__GENERATE__/$(gen_password)}"
       done
       printf '%s\n' "${line}"
     done < "${example}" > "${target}"
@@ -39,7 +44,6 @@ main() {
   env_file="${2:-${HOME}/.circleguard/k8s-${env_name}.env}"
   namespace="circleguard-${env_name}"
   command -v kubectl >/dev/null || die "kubectl is required"
-  command -v openssl >/dev/null || die "openssl is required"
 
   [[ -f "${env_file}" ]] || generate_env_file "${REPO_ROOT}/deploy/compose/${env_name}/.env.example" "${env_file}"
 
