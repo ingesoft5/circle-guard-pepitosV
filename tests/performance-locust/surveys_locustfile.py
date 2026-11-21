@@ -1,6 +1,6 @@
-"""Survey load and the stress ramp. Pass the stage host with --host.
+"""Survey load and the stress ramp. Pass the ingress with --host.
 
-    locust -f tests/performance-locust/surveys_locustfile.py --host http://STAGE
+    locust -f tests/performance-locust/surveys_locustfile.py --host http://INGRESS
 """
 
 import uuid
@@ -14,7 +14,7 @@ class SurveyUser(HttpUser):
     @task
     def submit_survey(self):
         self.client.post(
-            "/api/v1/surveys",
+            "/svc/form/api/v1/surveys",
             json={
                 "anonymousId": str(uuid.uuid4()),
                 "hasFever": False,

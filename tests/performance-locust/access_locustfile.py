@@ -1,6 +1,6 @@
-"""Check-in load. Pass the stage host with --host; this file does not set one.
+"""Check-in load. Pass the ingress with --host; this file does not set one.
 
-    locust -f tests/performance-locust/access_locustfile.py --host http://STAGE
+    locust -f tests/performance-locust/access_locustfile.py --host http://INGRESS
 """
 
 from locust import HttpUser, between, task
@@ -12,7 +12,7 @@ class GateCheckInUser(HttpUser):
     @task
     def validate_qr(self):
         self.client.post(
-            "/api/v1/gate/validate",
+            "/svc/gateway/api/v1/gate/validate",
             json={"token": "load-test-token"},
             name="/api/v1/gate/validate",
         )
