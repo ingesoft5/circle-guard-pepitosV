@@ -10,5 +10,6 @@ dependencies {
     testImplementation(platform("org.springframework.boot:spring-boot-dependencies:3.5.16"))
 
     implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
 }
