@@ -228,3 +228,25 @@ jobs:
           }
         }
       }
+  - script: |
+      pipelineJob('circleguard-prod-image-scan') {
+        description('Scans the stable images that prod runs and notifies Discord on a high or critical finding')
+        triggers {
+          cron('H 6 * * *')
+        }
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote {
+                  url("https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}.git")
+                  credentials('github-pat')
+                }
+                branch('*/dev')
+              }
+            }
+            scriptPath('jenkins/image-scan.Jenkinsfile')
+            lightweight(false)
+          }
+        }
+      }
