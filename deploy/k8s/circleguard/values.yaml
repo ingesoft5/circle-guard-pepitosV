@@ -28,6 +28,8 @@ spring:
     MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true"
     MANAGEMENT_HEALTH_LIVENESSSTATE_ENABLED: "true"
     MANAGEMENT_HEALTH_READINESSSTATE_ENABLED: "true"
+  # The root filesystem is read-only; Tomcat and the JVM write only here.
+  writablePaths: [/tmp]
   resources:
     requests: {cpu: 100m, memory: 256Mi}
     limits: {memory: 768Mi}
@@ -136,6 +138,8 @@ services:
     spring: true
     image: file-service
     port: 8085
+    # Uploads go to ./uploads (working directory /app); an emptyDir until the storage module is wired.
+    writablePaths: [/tmp, /app/uploads]
     readinessGroup: readinessState
   dashboard:
     spring: true
@@ -150,6 +154,8 @@ services:
   web:
     image: web-client
     port: 8080
+    # nginx renders its config from templates at start and keeps its pid and caches in /tmp.
+    writablePaths: [/tmp, /etc/nginx/conf.d]
     # nginx forwards /svc/<service>/ to these Services. Its resolver ignores the search domains,
     # so the names are fully qualified (config values go through tpl).
     config:
@@ -177,6 +183,7 @@ middleware:
     port: 5432
     storage: {size: 2Gi, mountPath: /var/lib/postgresql/data}
     initSql: true
+    writablePaths: [/var/run/postgresql, /tmp]
     config:
       POSTGRES_DB: circleguard
       PGDATA: /var/lib/postgresql/data/pgdata
@@ -196,6 +203,9 @@ middleware:
         periodSeconds: 20
   neo4j:
     externalImage: neo4j:5.26
+    # Neo4j, the Confluent images and OpenLDAP write their configuration at start
+    # (accepted in .trivyignore.rego).
+    writableRoot: true
     port: 7687
     storage: {size: 2Gi, mountPath: /data}
     config:
@@ -221,6 +231,7 @@ middleware:
         failureThreshold: 36
   zookeeper:
     externalImage: confluentinc/cp-zookeeper:7.6.0
+    writableRoot: true
     port: 2181
     config:
       ZOOKEEPER_CLIENT_PORT: "2181"
@@ -235,6 +246,7 @@ middleware:
         periodSeconds: 10
   kafka:
     externalImage: confluentinc/cp-kafka:7.6.0
+    writableRoot: true
     port: 9092
     config:
       KAFKA_BROKER_ID: "1"
@@ -257,6 +269,7 @@ middleware:
         failureThreshold: 36
   redis:
     externalImage: redis:7.2
+    writablePaths: [/data]
     port: 6379
     secrets:
       REDISCLI_AUTH: REDIS_PASSWORD
@@ -270,6 +283,7 @@ middleware:
         periodSeconds: 5
   openldap:
     externalImage: osixia/openldap:1.5.0
+    writableRoot: true
     port: 389
     # slapd reserves memory per file descriptor: without this limit it exhausts the container.
     command: [sh, -c, "ulimit -n 1024 && exec /container/tool/run"]
