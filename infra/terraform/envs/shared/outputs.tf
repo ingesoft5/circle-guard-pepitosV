@@ -29,3 +29,8 @@ output "observability_topic_arn" {
   description = "SNS topic that receives the observability alarms."
   value       = module.observability.alarm_topic_arn
 }
+
+output "monitoring_namespace" {
+  description = "Namespace of kube-prometheus-stack, or null when it is not installed."
+  value       = module.observability.monitoring_namespace
+}

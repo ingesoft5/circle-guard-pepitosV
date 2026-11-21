@@ -10,7 +10,7 @@ infra/terraform/
 │   ├── cluster/        # EC2 + Elastic IP; k3s se instala en el primer arranque (user_data)
 │   ├── registry/       # repositorios ECR por servicio, escaneo y ciclo de vida
 │   ├── storage/        # bucket S3 de adjuntos y respaldos, versionado y cifrado
-│   └── observability/  # log groups de CloudWatch, alarmas del nodo y topic SNS
+│   └── observability/  # CloudWatch/SNS y kube-prometheus-stack en el clúster
 └── envs/
     ├── shared/         # main.tf, platform.tf, variables.tf, outputs.tf, versions.tf
     ├── dev/            # symlinks a ../shared/*.tf + backend.hcl + terraform.tfvars
@@ -42,7 +42,7 @@ Los tres roots enlazan con symlinks los mismos `.tf` de `envs/shared/`, que invo
 | `cluster` | EC2 + Elastic IP y k3s por `user_data` (antes `k3s-node`). | [`modules/cluster`](modules/cluster/README.md) |
 | `registry` | Un repositorio ECR por servicio, con escaneo y lifecycle. | [`modules/registry`](modules/registry/README.md) |
 | `storage` | Bucket S3 de adjuntos y respaldos, versionado y cifrado. | [`modules/storage`](modules/storage/README.md) |
-| `observability` | Log groups, alarmas del nodo y topic SNS. | [`modules/observability`](modules/observability/README.md) |
+| `observability` | CloudWatch, alarmas, SNS y `kube-prometheus-stack` dentro del clúster. | [`modules/observability`](modules/observability/README.md) |
 
 Diferencias por ambiente (el resto usa los valores por defecto del módulo):
 
@@ -81,7 +81,10 @@ Requisitos: Terraform ≥ 1.9 y una cuenta con permisos de EC2, S3 (`circleguard
    terraform init -migrate-state -backend-config=bootstrap.s3.tfbackend
    ```
 
-   Ya está hecho en la cuenta del equipo: basta `terraform init -backend-config=bootstrap.s3.tfbackend`.
+   Si el bootstrap ya existe en la cuenta, basta `terraform init -backend-config=bootstrap.s3.tfbackend`.
+   El stack (bucket versionado y cifrado, tabla de lock, primer apply y migración) está documentado en
+   [`bootstrap/README.md`](bootstrap/README.md), y la prueba de bloqueo concurrente en
+   [`../../docs/operaciones/terraform-state-lock.md`](../../docs/operaciones/terraform-state-lock.md).
 
 2. Cada ambiente, cambiando `dev` por `stage` o `prod`:
 
@@ -106,6 +109,45 @@ Requisitos: Terraform ≥ 1.9 y una cuenta con permisos de EC2, S3 (`circleguard
    ```
 
 El host de CI y el host `tools` (Jenkins, SonarQube y Nexus) se crearon en la Parte 1 con `infra/cloud/aws/provision-ci-hosts.sh`. Terraform solo los lee (`data`) para el peering y la regla del registro.
+
+## Observabilidad dentro del clúster
+
+El módulo `observability` instala `kube-prometheus-stack` (Prometheus, Grafana y Alertmanager)
+en el namespace `monitoring` mediante `terraform_data`: sube
+`observability/prometheus/values.yaml` y `infra/bootstrap/install-observability.sh` al nodo y
+ejecuta `helm upgrade --install`. HU-39 configura la recolección, HU-40 los dashboards y HU-41
+las alertas.
+
+Antes de aplicar, el clúster debe estar encendido y accesible por SSH desde donde se ejecuta
+Terraform:
+
+```bash
+infra/cloud/aws/hosts.sh start k3s
+infra/cloud/aws/hosts.sh allow
+export TF_VAR_prometheus_ssh_private_key="$(cat ../circleguard-admin-key.pem)"
+export TF_VAR_prometheus_grafana_admin_password='<contraseña-de-grafana>'
+# Desde Jenkins, usar la IP privada del nodo:
+# export TF_VAR_prometheus_ssh_host="$(terraform output -raw node_private_ip)"
+cd infra/terraform/envs/dev
+terraform init -reconfigure -backend-config=backend.hcl
+terraform plan -out=dev.tfplan
+terraform apply dev.tfplan
+```
+
+La instalación se puede repetir sin efectos secundarios. Si el clúster está apagado, el
+`apply` falla al conectar por SSH; enciéndelo primero. La contraseña de Grafana se pasa por
+`TF_VAR_` y nunca se versiona. Para cambiar solo la contraseña, usa `helm upgrade` o edita el
+secreto del namespace.
+
+Verificación:
+
+```bash
+terraform output node_public_ip
+ssh ubuntu@<node_public_ip> 'sudo k3s kubectl -n monitoring get pods,svc'
+```
+
+La guía de operación completa está en
+[`../../docs/operaciones/observability.md`](../../docs/operaciones/observability.md).
 
 ## Cambios que recrean el nodo
 

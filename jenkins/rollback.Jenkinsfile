@@ -1,11 +1,25 @@
-// Rollback (HU-17): redeploys a version that is already in the registry to one environment.
+// Rollback (HU-17, HU-52): takes one environment back on its k3s cluster.
 // Job "circleguard-rollback", declared in infra/compose/ci/jenkins/casc.yaml.
+//   VERSION empty -> helm rollback to the previous revision (the usual case after a bad release).
+//   VERSION set   -> redeploy that version, which must already be in the registry.
 library "circleguard-shared-library@${env.ROLLBACK_BRANCH ?: 'main'}"
 
 // Set while the pipeline runs; used for the build description and the summary.
 String targetVersion = null
+String targetRevision = null
 String currentVersion = null
 String requestedBy = null
+
+// Image tag the environment runs now, or of one Helm revision.
+String releaseImageTag(String namespace, String revision = null) {
+    withEnv(["NS=${namespace}", "REV=${revision ?: ''}"]) {
+        return sh(
+            script: 'helm -n "$NS" get values circleguard --all ${REV:+--revision "$REV"} ' +
+                    '| awk \'/^image:/{f=1; next} f && /^  tag:/{print $2; exit} /^[^ ]/{f=0}\'',
+            returnStdout: true
+        ).trim()
+    }
+}
 
 pipeline {
     agent any
@@ -20,28 +34,56 @@ pipeline {
         choice(name: 'ENVIRONMENT', choices: ['stage', 'dev', 'prod'],
                 description: 'Environment to roll back')
         string(name: 'VERSION', defaultValue: '',
-                description: 'Version already published in Nexus, e.g. 0.1.0 or v0.1.0')
+                description: 'Empty: previous Helm revision. Or a version already in Nexus, e.g. 0.1.0 or v0.1.0')
+    }
+
+    environment {
+        NAMESPACE = "circleguard-${params.ENVIRONMENT}"
     }
 
     stages {
+        stage('Read current release') {
+            steps {
+                script {
+                    def cause = currentBuild.getBuildCauses('hudson.model.Cause$UserIdCause')
+                    requestedBy = cause ? "${cause[0].userName} (${cause[0].userId})" : 'unknown'
+
+                    withCredentials([file(credentialsId: "kubeconfig-${params.ENVIRONMENT}", variable: 'KUBECONFIG')]) {
+                        sh 'helm -n "$NAMESPACE" history circleguard --max 10'
+                        currentVersion = releaseImageTag(env.NAMESPACE) ?: 'none'
+                        if (!params.VERSION.trim()) {
+                            // Last superseded revision older than the deployed one.
+                            targetRevision = sh(
+                                script: 'helm -n "$NAMESPACE" history circleguard --max 50 ' +
+                                        '| awk -F \'\\t\' \'$1 + 0 > 0 && $3 ~ /superseded/ {r = $1 + 0} END {if (r) print r}\'',
+                                returnStdout: true
+                            ).trim()
+                            if (!targetRevision) {
+                                error("No previous Helm revision in ${env.NAMESPACE}; pass a VERSION instead")
+                            }
+                            targetVersion = releaseImageTag(env.NAMESPACE, targetRevision)
+                        }
+                    }
+                }
+            }
+        }
+
         stage('Validate version') {
+            when { expression { params.VERSION.trim() } }
             steps {
                 script {
                     targetVersion = params.VERSION.trim().replaceFirst(/^v/, '')
                     if (!(targetVersion ==~ /\d+\.\d+\.\d+/)) {
                         error("VERSION must be MAJOR.MINOR.PATCH, got '${params.VERSION}'")
                     }
-                    def cause = currentBuild.getBuildCauses('hudson.model.Cause$UserIdCause')
-                    requestedBy = cause ? "${cause[0].userName} (${cause[0].userId})" : 'unknown'
-
-                    // Every image the environment runs, read from the stack definition.
+                    // Every application image of the chart.
                     List<String> images = sh(
-                        script: "grep -oE 'circleguard/[a-z-]+:[\$][{]IMAGE_TAG' deploy/compose/stack.yml " +
-                                "| cut -d: -f1 | sort -u",
+                        script: "awk '/^services:/{f=1} /^middleware:/{f=0} f && /^    image: /{print \"circleguard/\" \$2}' " +
+                                'deploy/k8s/circleguard/values.yaml | sort -u',
                         returnStdout: true
                     ).trim().split('\n').findAll { it }
                     if (!images) {
-                        error('No application images found in deploy/compose/stack.yml')
+                        error('No application images found in deploy/k8s/circleguard/values.yaml')
                     }
 
                     // Registry API inside the CI network; nothing is pulled to the CI disk.
@@ -74,31 +116,6 @@ pipeline {
             }
         }
 
-        stage('Read current version') {
-            steps {
-                script {
-                    String host = env."DEPLOY_HOST_${params.ENVIRONMENT.toUpperCase()}"
-                    if (!host) {
-                        error("Set DEPLOY_HOST_${params.ENVIRONMENT.toUpperCase()} in infra/compose/ci/.env")
-                    }
-                    withEnv(["DEPLOY_TARGET=deploy@${host}",
-                             "ENV_FILE=/opt/circleguard/deploy/compose/${params.ENVIRONMENT}/.env",
-                             'SSH_OPTS=-o StrictHostKeyChecking=accept-new -o ConnectTimeout=15']) {
-                        sshagent(credentials: ["deploy-ssh-${params.ENVIRONMENT}"]) {
-                            currentVersion = sh(
-                                script: 'ssh $SSH_OPTS "$DEPLOY_TARGET" "grep -E \'^IMAGE_TAG=\' $ENV_FILE | tail -n 1 | cut -d= -f2-"',
-                                returnStdout: true
-                            ).trim() ?: 'none'
-                        }
-                    }
-                    currentBuild.description = "${params.ENVIRONMENT}: ${currentVersion} -> ${targetVersion} " +
-                            "by ${requestedBy}"
-                    echo "Rollback of ${params.ENVIRONMENT} from ${currentVersion} to ${targetVersion}, " +
-                            "requested by ${requestedBy}"
-                }
-            }
-        }
-
         stage('Approve production') {
             when { expression { params.ENVIRONMENT == 'prod' } }
             steps {
@@ -108,11 +125,28 @@ pipeline {
             }
         }
 
-        stage('Redeploy') {
+        stage('Roll back') {
             steps {
-                // deploy.sh pulls first (a failed pull changes nothing), then waits for every
-                // service to be healthy and runs the smoke test through the web client.
-                deployCompose(environment: params.ENVIRONMENT, version: targetVersion)
+                script {
+                    String target = targetRevision ? "revision ${targetRevision} (${targetVersion})" : targetVersion
+                    currentBuild.description = "${params.ENVIRONMENT}: ${currentVersion} -> ${target} by ${requestedBy}"
+                    echo "Rollback of ${params.ENVIRONMENT} from ${currentVersion} to ${target}, requested by ${requestedBy}"
+                    if (targetRevision) {
+                        withEnv(["TARGET_REVISION=${targetRevision}"]) {
+                            withCredentials([file(credentialsId: "kubeconfig-${params.ENVIRONMENT}", variable: 'KUBECONFIG')]) {
+                                sh '''
+                                    helm -n "$NAMESPACE" rollback circleguard "$TARGET_REVISION" --wait --timeout 10m
+                                    kubectl -n "$NAMESPACE" get pods -o wide
+                                    helm -n "$NAMESPACE" history circleguard --max 5
+                                '''
+                            }
+                        }
+                        k8sSmokeTest(environment: params.ENVIRONMENT)
+                    } else {
+                        // Helm upgrade with --atomic, rollout wait and smoke test.
+                        deployK8s(environment: params.ENVIRONMENT, version: targetVersion)
+                    }
+                }
             }
         }
     }
@@ -120,7 +154,7 @@ pipeline {
     post {
         success {
             echo "ROLLBACK OK | environment=${params.ENVIRONMENT} | from=${currentVersion} | " +
-                    "to=${targetVersion} | by=${requestedBy}"
+                    "to=${targetVersion} | revision=${targetRevision ?: 'new'} | by=${requestedBy}"
         }
         failure {
             echo "ROLLBACK FAILED | environment=${params.ENVIRONMENT} | from=${currentVersion ?: 'unknown'} | " +

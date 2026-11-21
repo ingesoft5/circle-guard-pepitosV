@@ -1,0 +1,7 @@
+apiVersion: v2
+name: circleguard
+description: CircleGuard microservices, web client and middleware for one environment namespace
+type: application
+version: 0.1.0
+# The application version is the image tag, set per release with --set image.tag=<version>.
+appVersion: "0.5.0"

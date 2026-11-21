@@ -30,4 +30,11 @@ module "observability" {
   alarm_email         = var.alarm_email
   cpu_alarm_threshold = var.cpu_alarm_threshold
   instance_id         = module.k3s.instance_id
+  prometheus_ssh_host = var.prometheus_ssh_host != "" ? var.prometheus_ssh_host : module.k3s.public_ip
+
+  install_prometheus                = var.install_prometheus
+  prometheus_namespace              = var.prometheus_namespace
+  prometheus_chart_version          = var.prometheus_chart_version
+  prometheus_grafana_admin_password = var.prometheus_grafana_admin_password
+  prometheus_ssh_private_key        = var.prometheus_ssh_private_key
 }

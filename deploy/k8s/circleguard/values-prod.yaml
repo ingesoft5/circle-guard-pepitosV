@@ -1,0 +1,11 @@
+environment: prod
+middleware:
+  postgres:
+    storage: {size: 5Gi}
+  neo4j:
+    storage: {size: 3Gi}
+services:
+  gateway:
+    hpa: {minReplicas: 2, maxReplicas: 4}
+  form:
+    hpa: {minReplicas: 2, maxReplicas: 4}

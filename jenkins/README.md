@@ -11,10 +11,12 @@ jenkins/
 └── vars/
     ├── calculateVersion.groovy
     ├── deployCompose.groovy
+    ├── deployK8s.groovy
     ├── detectChangedServices.groovy
     ├── dockerBuild.groovy
     ├── dockerPublish.groovy
     ├── gradleBuild.groovy
+    ├── k8sSmokeTest.groovy
     ├── notifyDiscord.groovy
     ├── openChangelogPr.groovy
     ├── publishCoverage.groovy
@@ -346,17 +348,34 @@ Comportamiento:
 - Borra la imagen al terminar, porque solo comprueba que la imagen se construye. Sin esto cada build de PR dejaba una imagen por servicio (unos 3 GB) en el disco de CI. Un paso que necesite la imagen después, por ejemplo un escaneo, usa `keep: true` y la borra al terminar.
 - Las capas quedan en la caché de Docker, así que el siguiente build sigue siendo rápido. La caché de más de 24 horas se limpia en cada release de `main`.
 
+### `deployK8s`
+
+Despliega una versión ya publicada en el clúster k3s de un ambiente con el chart de Helm (HU-34):
+
+```groovy
+deployK8s(environment: 'dev', version: '1.4.0')
+deployK8s(environment: 'stage', version: '1.4.0-rc.a83f21c', timeout: '15m')
+```
+
+- Las mismas reglas de versión que tenía `deployCompose`: estables en todos los ambientes y RC solo en `stage`.
+- Crea o actualiza el Secret con `deploy/k8s/scripts/apply-secrets.sh` y ejecuta `helm upgrade --install --atomic --wait` en `circleguard-<ambiente>`, con `image.registry=$NEXUS_REGISTRY` e `image.tag=<versión>`.
+- Si un rollout no termina en el tiempo límite (10 minutos por defecto), Helm vuelve a la revisión anterior y el paso falla después de mostrar pods, eventos e historial.
+- Termina con `k8sSmokeTest`.
+- Necesita la credencial `kubeconfig-<ambiente>` y la variable `K8S_HOST_<AMBIENTE>`.
+
+### `k8sSmokeTest`
+
+`k8sSmokeTest(environment: 'stage')` comprueba por el Ingress (`K8S_HOST_<AMBIENTE>`) que el cliente web responde en `/healthz` y que `auth`, `identity`, `promotion`, `form` y `gateway` reportan `UP` en `/svc/<servicio>/actuator/health`. Lo usan `deployK8s` y el job de rollback.
+
 ### `deployCompose`
 
-Despliega una versión ya publicada en un ambiente, por SSH:
+Despliegue de la Parte 1 en los hosts de Compose, por SSH. El pipeline ya no lo usa; queda como respaldo.
 
 ```groovy
 deployCompose(environment: 'dev', version: '1.4.0')
 ```
 
 - Copia `deploy/compose` al host, sin tocar su `.env`, y ejecuta `deploy/compose/deploy.sh`.
-- `deploy.sh` descarga las imágenes primero: si la versión no existe, el ambiente no cambia.
-- Después espera a que los servicios queden `healthy` y prueba su salud a través del cliente web.
 - Necesita la variable `DEPLOY_HOST_<AMBIENTE>` en `infra/compose/ci/.env` y la credencial `deploy-ssh-<ambiente>`.
 
 ### `notifyDiscord`

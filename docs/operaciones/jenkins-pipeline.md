@@ -176,27 +176,27 @@ Para los RC, `Deploy RC to stage` despliega la imagen preliminar en stage antes 
 
 `Approve production` es un `input` de 15 minutos. Solo el usuario `admin` puede aprobarlo (`submitter: 'admin'`, HU-21); el usuario `dev` no puede. Ver la [política de cambios](../release-notes/politica-cambios.md). Al aprobar, `Deploy to prod` despliega la misma versión en `prod`; si se rechaza o expira, prod no cambia.
 
-El despliegue reutiliza `deployCompose`, `deploy/compose` y `deploy.sh`; no hay pasos nuevos de despliegue. El smoke test y la espera de servicios `healthy` siguen dentro de `deploy.sh`.
+Desde la HU-34 todos los despliegues usan `deployK8s`: `helm upgrade --install --atomic --wait` del chart `deploy/k8s/circleguard` en el clúster k3s del ambiente, y después `k8sSmokeTest` por el Ingress. Las E2E corren contra `K8S_HOST_<ENV>`. Si un rollout no termina en 10 minutos, Helm restaura la revisión anterior, la etapa falla y `post { failure }` avisa a Discord.
 
 Jenkins tiene un solo ejecutor: mientras el `input` espera aprobación, los demás builds quedan en cola. El timeout global del pipeline sigue en 60 minutos y el `input` tiene un límite de 15.
 
-## Rollback (HU-17)
+## Rollback (HU-17, HU-52)
 
-El job `circleguard-rollback` (fuera del multibranch, declarado en `casc.yaml`) vuelve a desplegar en un ambiente una versión que ya está en Nexus. Se lanza desde Jenkins con **Build with Parameters**:
+El job `circleguard-rollback` (fuera del multibranch, declarado en `casc.yaml`) vuelve atrás un ambiente en su clúster k3s. Se lanza desde Jenkins con **Build with Parameters**:
 
 | Parámetro | Valores |
 |:---|:---|
 | `ENVIRONMENT` | `stage`, `dev` o `prod` |
-| `VERSION` | Versión publicada, con o sin `v` (`0.1.0` o `v0.1.0`) |
+| `VERSION` | Vacío: `helm rollback` a la revisión anterior. O una versión publicada, con o sin `v` (`0.1.0` o `v0.1.0`) |
 
 Etapas:
 
-1. **Validate version:** comprueba en el registro de Nexus que existen todas las imágenes de `deploy/compose/stack.yml` con esa versión. Si falta alguna, el job falla **antes de conectarse al ambiente**.
-2. **Read current version:** lee por SSH el `IMAGE_TAG` que corre el ambiente.
-3. **Approve production:** solo en `prod`, un paso `input` pide confirmación antes de tocar el ambiente.
-4. **Redeploy:** usa `deployCompose`, el mismo paso del despliegue normal. `deploy.sh` descarga primero las imágenes (si falla, no cambia nada), espera a que todos los servicios estén `healthy` y corre el smoke test por el cliente web.
+1. **Read current release:** muestra `helm history`, lee la versión que corre y, si `VERSION` está vacío, la última revisión `superseded` y su versión.
+2. **Validate version:** solo con `VERSION`. Comprueba en Nexus que existen las 9 imágenes de la aplicación (`deploy/k8s/circleguard/values.yaml`) con esa versión. Si falta alguna, el job falla **antes de tocar el ambiente**.
+3. **Approve production:** solo en `prod`, un paso `input` que solo `admin` puede aprobar.
+4. **Roll back:** `helm rollback --wait` a la revisión elegida, o `deployK8s` con la versión pedida. En ambos casos termina con `k8sSmokeTest`.
 
-Evidencia: la descripción del build queda como `stage: 0.2.0 -> 0.1.0 by <usuario>` y el log termina con una línea `ROLLBACK OK` o `ROLLBACK FAILED` con ambiente, versión origen, versión destino y quién lo lanzó.
+Evidencia: la descripción del build queda como `stage: 0.6.0 -> revision 7 (0.5.0) by <usuario>` y el log termina con `ROLLBACK OK` o `ROLLBACK FAILED`. El plan completo está en [rollback.md](rollback.md).
 
 El job toma su pipeline y la Shared Library de la rama `ROLLBACK_BRANCH` del `.env` de CI (por defecto `main`, la versión estable). Solo se cambia para probar el job desde otra rama, y se vuelve a `main` después.
 
