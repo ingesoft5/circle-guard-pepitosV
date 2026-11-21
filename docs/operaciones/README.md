@@ -10,6 +10,7 @@ El detalle de cada pieza está en:
 - [infra/compose/ci/README.md](../../infra/compose/ci/README.md): stack de CI, costos y diagnóstico.
 - [infra/security/security-groups.md](../../infra/security/security-groups.md): qué puerto se expone y desde dónde.
 - [jenkins-pipeline.md](jenkins-pipeline.md): job multibranch, webhook, release y rollback.
+- [rollback.md](rollback.md): plan de rollback en Kubernetes.
 - [observability.md](observability.md): Prometheus, Grafana y Alertmanager en el clúster (HU-26 → HU-39/40/41).
 - [../release-notes/etiquetado.md](../release-notes/etiquetado.md): cómo se calcula la versión.
 - [../release-notes/politica-cambios.md](../release-notes/politica-cambios.md): quién aprueba cada ambiente.
@@ -393,27 +394,26 @@ En `main`, si los commits desde el último tag incluyen `feat`, `fix`, `perf` o 
 
 El job `circleguard-rollback` sigue disponible para redesplegar una versión ya publicada en cualquiera de los tres ambientes: **Build with Parameters**, `ENVIRONMENT` en `dev`, `stage` o `prod`, y `VERSION` con o sin `v` (`0.1.0` o `v0.1.0`). En `prod` el job se detiene en **Approve production** hasta que alguien confirma. Solo el usuario `admin` puede confirmar, como en el `input` del pipeline (ver [política de cambios](../release-notes/politica-cambios.md)).
 
-El despliegue copia `deploy/compose` al host sin tocar su `.env` y ejecuta `deploy/compose/deploy.sh`. Ese script descarga las imágenes primero: si el registro no tiene la versión, el ambiente no cambia. Después espera a que los servicios queden `healthy` y prueba el cliente web en el puerto `HTTP_PORT`.
+Desde la Parte 2 los despliegues van a Kubernetes: el paso `deployK8s` de la librería crea o actualiza el Secret del ambiente (`deploy/k8s/scripts/apply-secrets.sh`) y aplica el chart `deploy/k8s/circleguard` con `helm upgrade --install --atomic --wait` en el namespace `circleguard-<env>` del clúster k3s del ambiente. Si algún rollout no termina en 10 minutos, Helm vuelve a la revisión anterior, el build queda `FAILED` y se notifica a Discord. Después corre el smoke test por el Ingress (`/healthz` y `/svc/<servicio>/actuator/health`). El detalle del chart está en [`deploy/k8s/README.md`](../../deploy/k8s/README.md).
 
-También se puede lanzar a mano, en el host del ambiente y como usuario `deploy`:
+Jenkins necesita, por ambiente, la credencial `kubeconfig-<env>` (se carga con `infra/bootstrap/load-kubeconfig.sh`) y la variable `K8S_HOST_<ENV>` en `infra/compose/ci/.env` con la IP privada del nodo k3s. Las credenciales del ambiente se generan la primera vez en `/var/jenkins_home/.circleguard/k8s-<env>.env` y se reutilizan.
+
+Despliegue a mano, desde una máquina con el kubeconfig del clúster:
 
 ```bash
-cd /opt/circleguard/deploy/compose
-./deploy.sh dev 1.4.0
+deploy/k8s/scripts/apply-secrets.sh dev
+helm upgrade --install circleguard deploy/k8s/circleguard -n circleguard-dev --create-namespace \
+  -f deploy/k8s/circleguard/values-dev.yaml \
+  --set image.registry=<ip-privada-tools>:5000 --set image.tag=1.4.0
 ```
 
-`1.4.0` tiene que existir en el registro. La promoción automática a `stage` después de las E2E y el `input` de producción ya están en el `Jenkinsfile`; `Deploy to dev` sigue siendo el primer despliegue de cada versión y `stage` y `prod` reciben el mismo tag.
+`1.4.0` tiene que existir en el registro. Los hosts de Compose de la Parte 1 (`deploy/compose`) quedan como respaldo y ya no los usa el pipeline.
 
 ## Rollback
 
-El mismo job `circleguard-rollback` vuelve a una versión anterior. La versión tiene que estar completa en el registro: si falta una imagen de `deploy/compose/stack.yml`, el job falla antes de abrir SSH.
+El job `circleguard-rollback` vuelve un ambiente atrás con `helm rollback` a la revisión anterior (parámetro `VERSION` vacío) o redespliega una versión concreta que ya esté completa en el registro. En `prod` espera la aprobación de `admin`. El plan completo, con cuándo revertir, los comandos manuales y la verificación, está en [rollback.md](rollback.md).
 
-1. Abrir `circleguard-rollback` → **Build with Parameters**.
-2. Elegir el ambiente y la versión de destino.
-3. En `prod`, confirmar el paso **Approve production**.
-4. El build deja en la descripción `stage: 0.2.0 -> 0.1.0 by <usuario>` (con el ambiente que se haya elegido) y el log termina en `ROLLBACK OK` o `ROLLBACK FAILED`, con la versión de origen, la de destino y quién lo lanzó.
-
-El job lee su pipeline de `ROLLBACK_BRANCH` (por defecto `main`). No hace falta apagar el ambiente ni borrar volúmenes: `deploy.sh` sustituye el `IMAGE_TAG` y recrea los contenedores. Los datos de PostgreSQL y Neo4j se conservan.
+El job lee su pipeline de `ROLLBACK_BRANCH` (por defecto `main`). Los datos de PostgreSQL y Neo4j se conservan: están en volúmenes persistentes que el rollback no toca.
 
 ## Operación diaria
 
