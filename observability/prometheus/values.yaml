@@ -40,6 +40,9 @@ prometheus:
     annotations:
       traefik.ingress.kubernetes.io/router.middlewares: monitoring-basic-auth@kubernetescrd
   prometheusSpec:
+    # The external URL needs the /prometheus path: without it, the root redirect goes to
+    # /graph, which is not a Prometheus route and falls into the web client's 404.
+    externalUrl: /prometheus
     routePrefix: /prometheus
     retention: 7d
     # Selectors empty so ServiceMonitors and rules from the application namespaces are discovered.
