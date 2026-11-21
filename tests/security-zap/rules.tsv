@@ -1,0 +1,3 @@
+# Rule id	Action (IGNORE, INFO, WARN, FAIL)	Reason
+# High alerts fail the stage. Add an IGNORE line only after the finding is accepted.
+# The pipeline passes -I, so WARN does not fail the build.
