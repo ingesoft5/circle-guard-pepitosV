@@ -13,7 +13,10 @@ resource "aws_eip" "this" {
 }
 
 resource "aws_instance" "this" {
-  ami                         = var.ami_id != null ? var.ami_id : data.aws_ssm_parameter.ubuntu.value
+  ami = var.ami_id != null ? var.ami_id : data.aws_ssm_parameter.ubuntu.value
+  # The first line of user-data.sh.tftpl keeps the historical "module k3s-node" name on
+  # purpose: any cosmetic edit changes the user_data hash and would replace a live cluster
+  # (and its local-path volumes). Rename it only together with a planned node replacement.
   instance_type               = var.instance_type
   subnet_id                   = var.subnet_id
   vpc_security_group_ids      = [var.security_group_id]

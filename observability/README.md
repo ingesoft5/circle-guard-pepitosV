@@ -9,6 +9,8 @@ HU-39, HU-40 y HU-41.
 observability/
 ├── prometheus/
 │   └── values.yaml     # valores base de kube-prometheus-stack (HU-26)
+├── ingress/
+│   └── basic-auth-middleware.yaml  # BasicAuth de Prometheus y Alertmanager
 ├── loki/
 │   └── values.yaml     # Loki de un solo binario
 ├── promtail/
@@ -25,6 +27,11 @@ Prometheus, Grafana, Alertmanager, node-exporter y kube-state-metrics. Los
 paneles y las reglas de alerta quedan vacíos a propósito para que HU-40 y
 HU-41 los agreguen como código. El mismo módulo instala Loki y Promtail y
 aplica el datasource que abre el `traceId` de una línea en Jaeger.
+
+Grafana se publica en `http://<ip>/grafana` con su login. Prometheus y
+Alertmanager se publican en `/prometheus` y `/alertmanager` detrás del middleware
+`monitoring-basic-auth`; el secreto se crea fuera de Git con
+`infra/bootstrap/load-monitoring-auth.sh`. El TLS es HU-47.
 
 ## Qué queda para HU-39, HU-40 y HU-41
 

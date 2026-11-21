@@ -85,6 +85,9 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/circleguard_auth
       SPRING_LDAP_URLS: ldap://openldap:389
       IDENTITY_URL: http://identity:8083
+      # Business parameters. Dev, stage and prod override these in their values files.
+      QR_EXPIRATION: "60000"
+      CIRCLEGUARD_FEATURES_QR_DIAGNOSTICS: "false"
     secrets:
       SPRING_DATASOURCE_USERNAME: POSTGRES_USER
       SPRING_DATASOURCE_PASSWORD: POSTGRES_PASSWORD
@@ -101,6 +104,7 @@ services:
       SPRING_NEO4J_URI: bolt://neo4j:7687
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       SPRING_DATA_REDIS_HOST: redis
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318/v1/traces
     secrets:
       SPRING_DATASOURCE_USERNAME: POSTGRES_USER
       SPRING_DATASOURCE_PASSWORD: POSTGRES_PASSWORD
@@ -116,6 +120,7 @@ services:
     config:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/circleguard_form
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318/v1/traces
     secrets:
       SPRING_DATASOURCE_USERNAME: POSTGRES_USER
       SPRING_DATASOURCE_PASSWORD: POSTGRES_PASSWORD
@@ -140,6 +145,7 @@ services:
     config:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       AUTH_API_URL: http://auth:8180
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318/v1/traces
     secrets:
       JWT_SECRET: JWT_SECRET
       QR_SECRET: QR_SECRET
@@ -308,4 +314,21 @@ middleware:
     probes:
       readiness:
         exec: {command: [sh, -c, 'ldapsearch -x -H ldap://localhost -D cn=admin,dc=circleguard,dc=edu -w "$LDAP_ADMIN_PASSWORD" -b dc=circleguard,dc=edu -s base >/dev/null']}
+        periodSeconds: 10
+  jaeger:
+    externalImage: jaegertracing/all-in-one:1.57
+    port: 4318
+    extraPorts:
+      - {name: ui, port: 16686}
+    writablePaths: [/tmp]
+    config:
+      COLLECTOR_OTLP_ENABLED: "true"
+      SPAN_STORAGE_TYPE: memory
+      MEMORY_MAX_TRACES: "2000"
+    resources:
+      requests: {cpu: 50m, memory: 128Mi}
+      limits: {memory: 512Mi}
+    probes:
+      readiness:
+        tcpSocket: {port: http}
         periodSeconds: 10
