@@ -51,6 +51,11 @@ spec:
     - name: http
       port: {{ $spec.port }}
       targetPort: http
+    {{- range $extra := $spec.extraPorts }}
+    - name: {{ $extra.name }}
+      port: {{ $extra.port }}
+      targetPort: {{ $extra.name }}
+    {{- end }}
 ---
 apiVersion: apps/v1
 kind: {{ if $spec.storage }}StatefulSet{{ else }}Deployment{{ end }}
@@ -104,6 +109,10 @@ spec:
           ports:
             - name: http
               containerPort: {{ $spec.port }}
+            {{- range $extra := $spec.extraPorts }}
+            - name: {{ $extra.name }}
+              containerPort: {{ $extra.port }}
+            {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ $name }}-config
