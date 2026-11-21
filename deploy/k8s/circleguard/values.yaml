@@ -13,6 +13,15 @@ imagePullSecrets: []
 # Created outside the chart (deploy/k8s/scripts/apply-secrets.sh); never versioned.
 secretName: circleguard-secrets
 
+# Prometheus scraping (HU-39). The ServiceMonitor is created only when the cluster has the
+# Prometheus Operator CRDs (kube-prometheus-stack in the monitoring namespace), so the chart
+# still installs on a cluster without monitoring.
+metrics:
+  serviceMonitor:
+    enabled: true
+    path: /actuator/prometheus
+    interval: 30s
+
 ingress:
   enabled: true
   className: traefik
