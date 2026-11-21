@@ -16,8 +16,11 @@ deploy/k8s/
 │   └── templates/
 │       ├── workloads.yaml     # ConfigMap + Deployment/StatefulSet + Service por componente
 │       ├── hpa.yaml
-│       └── ingress.yaml
-└── scripts/apply-secrets.sh   # crea el Secret del ambiente sin versionar valores
+│       ├── ingress.yaml
+│       └── rbac.yaml          # deployer y viewer del namespace
+└── scripts/
+    ├── apply-secrets.sh       # crea el Secret del ambiente sin versionar valores
+    └── check-rbac.sh          # kubectl auth can-i del deployer y del viewer
 ```
 
 ## Cómo está organizado
