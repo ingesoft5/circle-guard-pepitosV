@@ -9,6 +9,7 @@ Observabilidad de un ambiente: por un lado, lo que vive en AWS (log group de Clo
 - `aws_cloudwatch_metric_alarm` para CPU alta del nodo (por encima de `cpu_alarm_threshold`).
 - `aws_cloudwatch_metric_alarm` para `StatusCheckFailed` de EC2.
 - `terraform_data.prometheus`: sube `observability/prometheus/values.yaml` y `infra/bootstrap/install-observability.sh` al nodo y ejecuta `helm upgrade --install` de `kube-prometheus-stack` en el namespace configurado.
+- `terraform_data.loki`: instala Loki y Promtail con el mismo mecanismo y aplica el ConfigMap de datasources de Grafana (Loki y el enlace al trace de Jaeger).
 
 ## Variables
 
@@ -24,7 +25,9 @@ Observabilidad de un ambiente: por un lado, lo que vive en AWS (log group de Clo
 | `prometheus_ssh_host` | string | — | Host de la conexión SSH: IP pública desde un portátil, IP privada desde Jenkins. |
 | `install_prometheus` | bool | `true` | Instala `kube-prometheus-stack` en el clúster. |
 | `prometheus_namespace` | string | `monitoring` | Namespace del stack. |
-| `prometheus_chart_version` | string | `65.5.1` | Versión fija del chart. |
+| `prometheus_chart_version` | string | `65.5.1` | Versión fija del chart de Prometheus. |
+| `loki_chart_version` | string | `6.55.0` | Versión fija del chart de Loki. |
+| `promtail_chart_version` | string | `6.17.1` | Versión fija del chart de Promtail. |
 | `prometheus_grafana_admin_password` | string (sensitive) | `""` | Contraseña de Grafana; se pasa con `TF_VAR_`, nunca en Git. |
 | `prometheus_ssh_private_key` | string (sensitive) | `""` | Llave para SSH; vacía usa el agente SSH. |
 

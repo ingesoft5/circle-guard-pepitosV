@@ -9,7 +9,12 @@ HU-39, HU-40 y HU-41.
 observability/
 ├── prometheus/
 │   └── values.yaml     # valores base de kube-prometheus-stack (HU-26)
-├── grafana/            # dashboards JSON versionados y aprovisionados (HU-40)
+├── loki/
+│   └── values.yaml     # Loki de un solo binario
+├── promtail/
+│   └── values.yaml     # envío de logs de los pods a Loki
+├── grafana/
+│   └── datasources.yaml  # Loki y el enlace de una línea al trace de Jaeger
 └── alerts/             # reglas de Alertmanager (HU-41)
 ```
 
@@ -18,7 +23,8 @@ observability/
 `kube-prometheus-stack` en el namespace `monitoring` de cada ambiente:
 Prometheus, Grafana, Alertmanager, node-exporter y kube-state-metrics. Los
 paneles y las reglas de alerta quedan vacíos a propósito para que HU-40 y
-HU-41 los agreguen como código.
+HU-41 los agreguen como código. El mismo módulo instala Loki y Promtail y
+aplica el datasource que abre el `traceId` de una línea en Jaeger.
 
 ## Qué queda para HU-39, HU-40 y HU-41
 
