@@ -75,6 +75,7 @@ def call(Map config = [:]) {
                     docker build --pull \\
                       -f "\$DOCKERFILE" \\
                       --build-arg VERSION="\$IMAGE_VERSION" \\
+                      --build-arg PACKAGES_DATE="\$(date -u +%F)" \\
                       ${labels} \\
                       -t "\$IMAGE_REF" \\
                       "\$BUILD_CONTEXT"

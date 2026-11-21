@@ -32,7 +32,10 @@ RUN npx expo export --platform web --output-dir dist
 FROM nginxinc/nginx-unprivileged:1.31.7-alpine3.24 AS runtime
 
 USER root
-RUN apk upgrade --no-cache
+# A new date (passed by the pipeline) invalidates this layer once a day, so the upgrade
+# picks up the patches published since the cached layer was built.
+ARG PACKAGES_DATE=unset
+RUN echo "packages refreshed on ${PACKAGES_DATE}" && apk upgrade --no-cache
 
 ARG VERSION=dev
 LABEL org.opencontainers.image.title="circleguard-web-client" \
