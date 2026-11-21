@@ -1,0 +1,27 @@
+{{- /*
+Single entry point of the environment. The web client's nginx serves the app and forwards
+/svc/<service>/ to the internal Services, so only the web Service is published.
+*/ -}}
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: circleguard
+  labels:
+    {{- include "circleguard.labels" (dict "root" . "name" "circleguard") | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - {{- with .Values.ingress.host }}
+      host: {{ . | quote }}
+      {{- end }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  name: http
+{{- end }}

@@ -4,6 +4,11 @@
  *
  * Uses the same shared vulnerability cache as the image scan, and copies only
  * the directories that exist. A bind mount of the Jenkins workspace is empty.
+ *
+ * trivy config takes a single directory, so every path is copied under /scan.
+ * Helm charts are rendered with placeholder image values (the chart refuses to
+ * render without them); otherwise Trivy skips the chart and reports nothing.
+ * .trivyignore.rego holds the exceptions that need to name a resource.
  */
 def call(Map config = [:]) {
     List<String> paths = config.paths ?: ['infra/terraform', 'deploy/k8s']
@@ -12,18 +17,9 @@ def call(Map config = [:]) {
         echo "trivyConfigScan: aún no existen ${paths.join(' ni ')}; el escaneo de IaC queda pendiente."
         return
     }
-    // withIndex() loses the index under the pipeline CPS transform, so the
-    // counter stays a plain integer.
-    List<String> mounts = []
-    int index = 1
-    for (String path : present) {
-        mounts.add("/scan${index}")
-        index = index + 1
-    }
-    String mounted = mounts.join(' ')
     String report = config.report ?: 'build/reports/trivy-config.json'
     try {
-        withEnv(["TRIVY_CONFIG_PATHS=${mounted}", "TRIVY_CONFIG_REPORT=${report}", "TRIVY_HOST_PATHS=${present.join(' ')}"]) {
+        withEnv(["TRIVY_CONFIG_REPORT=${report}", "TRIVY_HOST_PATHS=${present.join(' ')}"]) {
             sh '''
                 mkdir -p "$(dirname "$TRIVY_CONFIG_REPORT")"
                 exec 9>/tmp/trivy-scan.lock
@@ -35,15 +31,21 @@ def call(Map config = [:]) {
                     --exit-code 1 \
                     --severity HIGH,CRITICAL \
                     --ignorefile /trivyignore \
+                    --ignore-policy /trivyignore.rego \
+                    --helm-set image.registry=registry.scan:5000,image.tag=0.0.0 \
                     --format json \
                     --output /tmp/trivy-config.json \
-                    $TRIVY_CONFIG_PATHS)"
+                    /scan)"
                 cleanup() { docker rm "$cid" >/dev/null 2>&1 || true; }
                 trap cleanup EXIT
                 docker cp .trivyignore "$cid":/trivyignore
+                docker cp .trivyignore.rego "$cid":/trivyignore.rego
+                empty="$(mktemp -d)"
+                docker cp "$empty" "$cid":/scan
+                rmdir "$empty"
                 index=1
                 for path in $TRIVY_HOST_PATHS; do
-                    docker cp "$path" "$cid":/scan"$index"
+                    docker cp "$path" "$cid":/scan/scan"$index"
                     index=$((index + 1))
                 done
                 rc=0

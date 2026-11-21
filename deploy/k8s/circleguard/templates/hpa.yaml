@@ -1,0 +1,30 @@
+{{- /* CPU-based autoscaling; k3s ships metrics-server, which the HPA reads. */ -}}
+{{- range $name, $spec := .Values.services }}
+{{- with $spec.hpa }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "circleguard.labels" (dict "root" $ "name" $name) | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ $name }}
+  minReplicas: {{ .minReplicas }}
+  maxReplicas: {{ .maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .cpuUtilization }}
+  behavior:
+    scaleDown:
+      # Scale in after 2 minutes of low load instead of the default 5, so a test shows both ways.
+      stabilizationWindowSeconds: 120
+{{- end }}
+{{- end }}
