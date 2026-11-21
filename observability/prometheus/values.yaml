@@ -5,8 +5,9 @@
 grafana:
   enabled: true
   # Published through the cluster's Traefik on the already open port 80, at /grafana, so no
-  # extra port is opened in the security group. Grafana keeps its own login; Prometheus and
-  # Alertmanager have none and stay internal (kubectl port-forward). HU-47 adds TLS.
+  # extra port is opened in the security group. Grafana keeps its own login. Prometheus and
+  # Alertmanager are published at /prometheus and /alertmanager behind the Traefik BasicAuth
+  # middleware (monitoring-basic-auth). HU-47 adds TLS.
   ingress:
     enabled: true
     ingressClassName: traefik
@@ -27,7 +28,19 @@ grafana:
       searchNamespace: ALL
 
 prometheus:
+  # Published through the cluster's Traefik at /prometheus on the already open port 80.
+  # The BasicAuth middleware is created by infra/bootstrap/load-monitoring-auth.sh.
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    pathType: Prefix
+    paths:
+      - /prometheus
+    hosts: []
+    annotations:
+      traefik.ingress.kubernetes.io/router.middlewares: monitoring-basic-auth@kubernetescrd
   prometheusSpec:
+    routePrefix: /prometheus
     retention: 7d
     # Selectors empty so ServiceMonitors and rules from the application namespaces are discovered.
     serviceMonitorSelectorNilUsesHelmValues: false
@@ -45,7 +58,19 @@ prometheus:
 
 alertmanager:
   enabled: true
+  # Published through the cluster's Traefik at /alertmanager on the already open port 80.
+  # The BasicAuth middleware is created by infra/bootstrap/load-monitoring-auth.sh.
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    pathType: Prefix
+    paths:
+      - /alertmanager
+    hosts: []
+    annotations:
+      traefik.ingress.kubernetes.io/router.middlewares: monitoring-basic-auth@kubernetescrd
   alertmanagerSpec:
+    routePrefix: /alertmanager
     resources:
       requests:
         cpu: 50m
