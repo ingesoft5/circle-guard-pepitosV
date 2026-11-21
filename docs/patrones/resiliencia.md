@@ -20,11 +20,13 @@ Fallar cerrado protege el campus: sin el estado de salud no se puede distinguir 
 
 ## Cómo se ve el estado
 
-Sin Prometheus todavía, el estado queda en el propio servicio:
+Prometheus lee `GET /actuator/prometheus`. El medidor queda como `resilience4j_circuitbreaker_state` con las etiquetas `name=redisHealth` y `state`. Grafana carga el panel `redisHealth circuit` desde el ConfigMap del chart.
+
+También se puede consultar el propio servicio:
 
 - `GET /actuator/circuitbreakers`
 - `GET /actuator/metrics/resilience4j.circuitbreaker.state?tag=name:redisHealth`
 
 La prueba `RedisHealthCircuitBreakerTest` tumba Redis con un doble, comprueba que el circuito abre y que la llamada siguiente no toca Redis, espera el tiempo configurado y comprueba que una lectura correcta lo cierra. El medidor `resilience4j.circuitbreaker.state` pasa de `open` a `closed`.
 
-El panel de Grafana queda para cuando Prometheus recolecte esas métricas (CGR-149).
+El panel `CircleGuard redisHealth circuit` muestra si el circuito está abierto y la tasa de fallo.

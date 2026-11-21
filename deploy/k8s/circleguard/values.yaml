@@ -85,6 +85,9 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/circleguard_auth
       SPRING_LDAP_URLS: ldap://openldap:389
       IDENTITY_URL: http://identity:8083
+      # Business parameters. Dev, stage and prod override these in their values files.
+      QR_EXPIRATION: "60000"
+      CIRCLEGUARD_FEATURES_QR_DIAGNOSTICS: "false"
     secrets:
       SPRING_DATASOURCE_USERNAME: POSTGRES_USER
       SPRING_DATASOURCE_PASSWORD: POSTGRES_PASSWORD

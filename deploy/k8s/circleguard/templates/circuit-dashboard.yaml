@@ -1,0 +1,14 @@
+{{- /*
+Grafana's sidecar loads every ConfigMap labelled grafana_dashboard. The panel shows the
+redisHealth circuit that gateway publishes on /actuator/prometheus.
+*/ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: circleguard-redis-health
+  labels:
+    {{- include "circleguard.labels" (dict "root" $ "name" "redis-health") | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  redis-health.json: |
+{{ .Files.Get "files/redis-health.json" | indent 4 }}
