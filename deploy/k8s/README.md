@@ -68,6 +68,17 @@ la base no reinicie todos los servicios en cadena.
 `gateway` y `form` tienen HPA por CPU (70 % del `request`), de 1 a 3 réplicas (2 a 4 en prod).
 k3s ya trae metrics-server. Tras la carga, el HPA reduce réplicas a los 2 minutos.
 
+## Métricas para Prometheus (HU-39)
+
+Los Services de los 8 servicios Spring llevan la etiqueta `circleguard.io/metrics: "true"` y el
+chart crea un ServiceMonitor, `circleguard-services`, que lee `/actuator/prometheus` en el puerto
+`http` cada 30 s y agrega la etiqueta `environment`. Se configura en `metrics.serviceMonitor` de
+`values.yaml`.
+
+El ServiceMonitor solo se crea si el clúster tiene las CRD del Prometheus Operator (namespace
+`monitoring`, instalado por `infra/terraform/modules/observability`). En un clúster sin monitoreo
+el chart se instala igual, sin ese recurso, y lo crea en el siguiente despliegue.
+
 ## Desplegar a mano
 
 ```bash

@@ -40,6 +40,9 @@ metadata:
   name: {{ $name }}
   labels:
     {{- include "circleguard.labels" $ctx | nindent 4 }}
+    {{- if $spec.spring }}
+    circleguard.io/metrics: "true"
+    {{- end }}
 spec:
   type: ClusterIP
   selector:

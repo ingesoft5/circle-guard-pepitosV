@@ -1,0 +1,27 @@
+{{- /*
+One ServiceMonitor for every Spring Boot service (Services labelled circleguard.io/metrics).
+Prometheus reads /actuator/prometheus on the http port; the endpoint exists once the service
+has micrometer-registry-prometheus and exposes "prometheus" in management.endpoints.
+*/ -}}
+{{- $sm := .Values.metrics.serviceMonitor -}}
+{{- if and $sm.enabled (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1/ServiceMonitor") }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: circleguard-services
+  labels:
+    {{- include "circleguard.labels" (dict "root" $ "name" "circleguard-services") | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/part-of: circleguard
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      circleguard.io/metrics: "true"
+  endpoints:
+    - port: http
+      path: {{ $sm.path }}
+      interval: {{ $sm.interval }}
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_service_label_circleguard_io_environment]
+          targetLabel: environment
+{{- end }}

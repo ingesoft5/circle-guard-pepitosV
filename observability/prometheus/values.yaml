@@ -4,6 +4,19 @@
 
 grafana:
   enabled: true
+  # Published through the cluster's Traefik on the already open port 80, at /grafana, so no
+  # extra port is opened in the security group. Grafana keeps its own login; Prometheus and
+  # Alertmanager have none and stay internal (kubectl port-forward). HU-47 adds TLS.
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    path: /grafana
+    pathType: Prefix
+    hosts: []
+  grafana.ini:
+    server:
+      root_url: "%(protocol)s://%(domain)s/grafana/"
+      serve_from_sub_path: true
   sidecar:
     dashboards:
       enabled: true

@@ -70,7 +70,10 @@ ssh ubuntu@<node_public_ip> 'sudo k3s kubectl -n monitoring get pods,svc'
 ```
 
 Espera `Running` en Prometheus, Grafana, Alertmanager, node-exporter y kube-state-metrics.
-Para abrir las interfaces sin Ingress:
+
+Grafana se publica por el Traefik del clúster en `http://<node_public_ip>/grafana` (usuario
+`admin`). Usa el puerto 80, que ya está abierto, así que no se abre ningún puerto extra en el
+Security Group. Prometheus y Alertmanager no tienen login y no se publican; se abren con un túnel:
 
 ```bash
 ssh -L 9090:127.0.0.1:9090 ubuntu@<node_public_ip> \
@@ -80,8 +83,12 @@ ssh -L 3000:127.0.0.1:80 ubuntu@<node_public_ip> \
   'sudo k3s kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80'
 ```
 
-En Prometheus, la página de *targets* muestra los servicios en `UP` cuando HU-39 aplica los
-ServiceMonitors. En Grafana, el datasource de Prometheus queda configurado por el chart.
+Con un kubeconfig del clúster, el túnel también se abre con
+`kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 9090:9090`.
+
+El chart de la aplicación crea el ServiceMonitor `circleguard-services` (ver
+`deploy/k8s/README.md`). En Prometheus, la página de *targets* muestra los 8 servicios con la
+etiqueta `environment`; pasan a `UP` cuando cada servicio expone `/actuator/prometheus` (HU-39). En Grafana, el datasource de Prometheus queda configurado por el chart.
 
 ## Ejecutar la instalación sin Terraform
 
