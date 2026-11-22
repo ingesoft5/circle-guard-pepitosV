@@ -1,6 +1,8 @@
 jenkins:
   systemMessage: "CircleGuard CI — Jenkins"
-  numExecutors: 1
+  # Two executors: a light build (docs, already merged branch, scans) no longer waits behind a
+  # full one. The host has 8 GB plus 4 GB of swap and one full build uses about 1.7 GB.
+  numExecutors: 2
   mode: NORMAL
   securityRealm:
     local:
