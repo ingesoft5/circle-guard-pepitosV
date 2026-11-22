@@ -14,8 +14,16 @@ source "${SCRIPT_DIR}/lib/common.sh"
 readonly NAMESPACE="monitoring"
 readonly SECRET_NAME="alertmanager-discord"
 
+# Global, not local to main: the EXIT trap runs after main returns.
+tmp=""
+cleanup() {
+  [[ -n "${tmp}" ]] && rm -f "${tmp}"
+  return 0
+}
+trap cleanup EXIT
+
 main() {
-  local url tmp
+  local url
   local -a kubectl
 
   url="$(tr -d '[:space:]')"
@@ -31,7 +39,6 @@ main() {
   fi
 
   tmp="$(mktemp)"
-  trap 'rm -f "${tmp}"' EXIT
   (umask 077; printf '%s' "${url}" >"${tmp}")
 
   "${kubectl[@]}" get namespace "${NAMESPACE}" >/dev/null 2>&1 \
