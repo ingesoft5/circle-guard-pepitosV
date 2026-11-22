@@ -1,0 +1,79 @@
+# CircleGuard alerts (HU-41). Prometheus loads every PrometheusRule (ruleSelector is empty in
+# observability/prometheus/values.yaml) and Alertmanager sends the ones labelled
+# project=circleguard to the team's Discord channel. Thresholds and how to trigger each alert on
+# purpose are in docs/operaciones/observability.md.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: circleguard-alerts
+  labels:
+    app.kubernetes.io/part-of: circleguard
+spec:
+  groups:
+    - name: circleguard.availability
+      rules:
+        - alert: ServiceDown
+          # One series per scraped pod; the target disappears only when the pod is deleted.
+          expr: up{namespace=~"circleguard-.+"} == 0
+          for: 1m
+          labels:
+            severity: critical
+            project: circleguard
+          annotations:
+            summary: "{{ $labels.service }} no responde en {{ $labels.namespace }}"
+            description: >-
+              Prometheus no puede leer /actuator/prometheus del pod {{ $labels.pod }} desde hace
+              más de 1 minuto. Revisa el pod con kubectl -n {{ $labels.namespace }} describe pod
+              {{ $labels.pod }}.
+
+    - name: circleguard.http
+      rules:
+        - alert: HighErrorRate
+          # More than 5 % of 5xx over 5 minutes, with at least 3 requests per minute so a single
+          # failed request on an idle service does not page anyone.
+          expr: |
+            (
+              sum by (namespace, environment, service) (
+                rate(http_server_requests_seconds_count{namespace=~"circleguard-.+", uri!~"/actuator.*", outcome="SERVER_ERROR"}[5m])
+              )
+              /
+              sum by (namespace, environment, service) (
+                rate(http_server_requests_seconds_count{namespace=~"circleguard-.+", uri!~"/actuator.*"}[5m])
+              )
+            ) > 0.05
+            and
+            sum by (namespace, environment, service) (
+              rate(http_server_requests_seconds_count{namespace=~"circleguard-.+", uri!~"/actuator.*"}[5m])
+            ) > 0.05
+          for: 2m
+          labels:
+            severity: critical
+            project: circleguard
+          annotations:
+            summary: "{{ $labels.service }} responde con errores 5xx en {{ $labels.namespace }}"
+            description: >-
+              {{ $value | humanizePercentage }} de las respuestas de los últimos 5 minutos son 5xx
+              (umbral 5 %). Revisa los logs del servicio en Grafana (Loki).
+
+        - alert: HighLatencyP95
+          # p95 above 1 s for 5 minutes. It uses the HTTP buckets from 25 ms to 5 s (HU-40).
+          expr: |
+            histogram_quantile(0.95,
+              sum by (namespace, environment, service, le) (
+                rate(http_server_requests_seconds_bucket{namespace=~"circleguard-.+", uri!~"/actuator.*"}[5m])
+              )
+            ) > 1
+            and
+            sum by (namespace, environment, service) (
+              rate(http_server_requests_seconds_count{namespace=~"circleguard-.+", uri!~"/actuator.*"}[5m])
+            ) > 0.05
+          for: 5m
+          labels:
+            severity: warning
+            project: circleguard
+          annotations:
+            summary: "{{ $labels.service }} está lento en {{ $labels.namespace }}"
+            description: >-
+              El percentil 95 de las respuestas HTTP es {{ $value | humanizeDuration }} desde hace
+              5 minutos (umbral 1 s). Suele venir de una dependencia lenta: base de datos, Neo4j,
+              Redis o Kafka.

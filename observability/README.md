@@ -20,7 +20,9 @@ observability/
 │   ├── kustomization.yaml          # dashboards (HU-40): un ConfigMap por dashboard en monitoring
 │   ├── format_dashboard.py         # deja un panel por línea antes del commit
 │   └── dashboards/                 # JSON: Servicios y Negocio
-└── alerts/             # reglas de Alertmanager (HU-41)
+└── alerts/             # alertas como código (HU-41)
+    ├── kustomization.yaml          # aplica las reglas en monitoring
+    └── circleguard-rules.yaml      # ServiceDown, HighErrorRate y HighLatencyP95
 ```
 
 ## Qué instala HU-26
@@ -35,10 +37,6 @@ Grafana se publica en `http://<ip>/grafana` con su login. Prometheus y
 Alertmanager se publican en `/prometheus` y `/alertmanager` detrás del middleware
 `monitoring-basic-auth`; el secreto se crea fuera de Git con
 `infra/bootstrap/load-monitoring-auth.sh`. El TLS es HU-47.
-
-## Qué queda para HU-41
-
-- **HU-41:** reglas en `observability/alerts/` y la notificación de Alertmanager.
 
 La guía de operación y verificación está en
 [`docs/operaciones/observability.md`](../docs/operaciones/observability.md).
