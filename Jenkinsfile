@@ -450,6 +450,23 @@ pipeline {
             }
         }
 
+        stage('ZAP baseline on stage') {
+            when {
+                expression {
+                    prereleaseVersion != null &&
+                        (promotionPr || (((env.CHANGE_BRANCH ?: env.BRANCH_NAME) ?: '') ==~ /release\/\d+\.\d+\.\d+/))
+                }
+            }
+            steps {
+                zapBaseline()
+            }
+            post {
+                failure {
+                    script { failedStage = failedStage ?: 'ZAP baseline on stage' }
+                }
+            }
+        }
+
         stage('Release version') {
             when {
                 branch 'main'
@@ -621,6 +638,23 @@ pipeline {
             }
             steps {
                 deployK8s(environment: 'stage', version: releaseVersion)
+            }
+        }
+
+        stage('ZAP baseline after stage deploy') {
+            when {
+                allOf {
+                    branch 'main'
+                    expression { releaseVersion != null }
+                }
+            }
+            steps {
+                zapBaseline()
+            }
+            post {
+                failure {
+                    script { failedStage = failedStage ?: 'ZAP baseline after stage deploy' }
+                }
             }
         }
 
