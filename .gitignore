@@ -65,3 +65,7 @@ infra/compose/ci-agent/secrets/
 *.tfstate.*
 crash.log
 *.tfplan
+
+# Bytecode de Python (Locust y scripts locales)
+__pycache__/
+*.pyc
