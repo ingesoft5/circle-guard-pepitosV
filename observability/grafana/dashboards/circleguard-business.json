@@ -1,0 +1,78 @@
+{
+  "uid": "circleguard-business",
+  "title": "CircleGuard · Negocio",
+  "description": "Promociones, cuestionarios, check-ins y tiempo de contención (HU-40).",
+  "tags": [
+    "circleguard",
+    "hu-40"
+  ],
+  "timezone": "browser",
+  "editable": true,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "label": "Datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0,
+        "refresh": 1,
+        "regex": "",
+        "options": []
+      },
+      {
+        "name": "namespace",
+        "label": "Ambiente",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "query": {
+          "query": "label_values(circleguard_promotions_total, namespace)",
+          "refId": "namespace"
+        },
+        "definition": "label_values(circleguard_promotions_total, namespace)",
+        "refresh": 2,
+        "sort": 1,
+        "hide": 0,
+        "current": {},
+        "options": [],
+        "regex": ""
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "links": [],
+  "panels": [
+    {"id": 1, "type": "row", "title": "Resumen del rango", "collapsed": false, "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0}, "panels": []},
+    {"type": "stat", "title": "Promociones", "description": "Usuarios cuyo estado subió (casos y contactos) en el rango elegido.", "targets": [{"refId": "A", "expr": "sum(increase(circleguard_promotions_total{namespace=\"$namespace\"}[$__range]))", "datasource": {"type": "prometheus", "uid": "${datasource}"}}], "fieldConfig": {"defaults": {"unit": "short", "decimals": 0}, "overrides": []}, "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}}, "id": 2, "gridPos": {"h": 4, "w": 4, "x": 0, "y": 1}, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
+    {"type": "stat", "title": "Contactos por caso", "description": "Contactos promovidos por cada usuario que inició una cascada.", "targets": [{"refId": "A", "expr": "sum(increase(circleguard_promotions_total{namespace=\"$namespace\", origin=\"contact\"}[$__range])) / sum(increase(circleguard_promotions_total{namespace=\"$namespace\", origin=\"source\", status!=\"RECOVERED\"}[$__range]))", "datasource": {"type": "prometheus", "uid": "${datasource}"}}], "fieldConfig": {"defaults": {"unit": "short", "decimals": 1}, "overrides": []}, "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}}, "id": 3, "gridPos": {"h": 4, "w": 4, "x": 4, "y": 1}, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
+    {"type": "stat", "title": "Cuestionarios", "description": "Cuestionarios de salud enviados en el rango.", "targets": [{"refId": "A", "expr": "sum(increase(circleguard_surveys_total{namespace=\"$namespace\"}[$__range]))", "datasource": {"type": "prometheus", "uid": "${datasource}"}}], "fieldConfig": {"defaults": {"unit": "short", "decimals": 0}, "overrides": []}, "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}}, "id": 4, "gridPos": {"h": 4, "w": 4, "x": 8, "y": 1}, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
+    {"type": "stat", "title": "Check-ins", "description": "Validaciones de QR en el acceso en el rango.", "targets": [{"refId": "A", "expr": "sum(increase(circleguard_checkins_total{namespace=\"$namespace\"}[$__range]))", "datasource": {"type": "prometheus", "uid": "${datasource}"}}], "fieldConfig": {"defaults": {"unit": "short", "decimals": 0}, "overrides": []}, "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}}, "id": 5, "gridPos": {"h": 4, "w": 4, "x": 12, "y": 1}, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
+    {"type": "stat", "title": "Contención p95", "description": "Percentil 95 del tiempo de una promoción. Objetivo NFR-1: menos de 1 s.", "targets": [{"refId": "A", "expr": "histogram_quantile(0.95, sum by (le) (increase(circleguard_containment_duration_seconds_bucket{namespace=\"$namespace\", status!~\"ACTIVE|OTHER\"}[$__range])))", "datasource": {"type": "prometheus", "uid": "${datasource}"}}], "fieldConfig": {"defaults": {"unit": "s", "decimals": 2, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}, "color": {"mode": "thresholds"}}, "overrides": []}, "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}}, "id": 6, "gridPos": {"h": 4, "w": 4, "x": 16, "y": 1}, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
+    {"type": "stat", "title": "Contención bajo 1 s", "description": "Porcentaje de promociones que terminaron en menos de 1 s.", "targets": [{"refId": "A", "expr": "sum(increase(circleguard_containment_duration_seconds_bucket{namespace=\"$namespace\", status!~\"ACTIVE|OTHER\", le=\"1.0\"}[$__range])) / sum(increase(circleguard_containment_duration_seconds_count{namespace=\"$namespace\", status!~\"ACTIVE|OTHER\"}[$__range]))", "datasource": {"type": "prometheus", "uid": "${datasource}"}}], "fieldConfig": {"defaults": {"unit": "percentunit", "decimals": 1, "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "orange", "value": 0.9}, {"color": "green", "value": 0.99}]}, "color": {"mode": "thresholds"}}, "overrides": []}, "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}}, "id": 7, "gridPos": {"h": 4, "w": 4, "x": 20, "y": 1}, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
+    {"id": 8, "type": "row", "title": "Promociones", "collapsed": false, "gridPos": {"h": 1, "w": 24, "x": 0, "y": 5}, "panels": []},
+    {"type": "timeseries", "title": "Promociones por minuto", "description": "Usuarios promovidos por minuto, por estado.", "targets": [{"refId": "A", "expr": "sum by (status) (rate(circleguard_promotions_total{namespace=\"$namespace\"}[$__rate_interval])) * 60", "datasource": {"type": "prometheus", "uid": "${datasource}"}, "legendFormat": "{{status}}"}], "fieldConfig": {"defaults": {"unit": "short", "custom": {"drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false, "axisLabel": "por minuto", "stacking": {"mode": "normal", "group": "A"}}, "min": 0}, "overrides": []}, "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}, "id": 9, "gridPos": {"h": 8, "w": 12, "x": 0, "y": 6}, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
+    {"type": "timeseries", "title": "Origen de las promociones", "description": "source: el usuario que reporta o es confirmado; contact: alcanzado por la cascada.", "targets": [{"refId": "A", "expr": "sum by (origin) (rate(circleguard_promotions_total{namespace=\"$namespace\"}[$__rate_interval])) * 60", "datasource": {"type": "prometheus", "uid": "${datasource}"}, "legendFormat": "{{origin}}"}], "fieldConfig": {"defaults": {"unit": "short", "custom": {"drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false, "axisLabel": "por minuto", "stacking": {"mode": "normal", "group": "A"}}, "min": 0}, "overrides": []}, "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}, "id": 10, "gridPos": {"h": 8, "w": 12, "x": 12, "y": 6}, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
+    {"id": 11, "type": "row", "title": "Cuestionarios y check-ins", "collapsed": false, "gridPos": {"h": 1, "w": 24, "x": 0, "y": 14}, "panels": []},
+    {"type": "timeseries", "title": "Cuestionarios por minuto", "description": "Cuestionarios enviados, con y sin síntomas.", "targets": [{"refId": "A", "expr": "sum by (symptoms) (rate(circleguard_surveys_total{namespace=\"$namespace\"}[$__rate_interval])) * 60", "datasource": {"type": "prometheus", "uid": "${datasource}"}, "legendFormat": "síntomas: {{symptoms}}"}], "fieldConfig": {"defaults": {"unit": "short", "custom": {"drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false, "axisLabel": "por minuto", "stacking": {"mode": "normal", "group": "A"}}, "min": 0}, "overrides": []}, "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}, "id": 12, "gridPos": {"h": 8, "w": 12, "x": 0, "y": 15}, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
+    {"type": "timeseries", "title": "Check-ins por minuto", "description": "Validaciones de QR por resultado.", "targets": [{"refId": "A", "expr": "sum by (result) (rate(circleguard_checkins_total{namespace=\"$namespace\"}[$__rate_interval])) * 60", "datasource": {"type": "prometheus", "uid": "${datasource}"}, "legendFormat": "{{result}}"}], "fieldConfig": {"defaults": {"unit": "short", "custom": {"drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false, "axisLabel": "por minuto", "stacking": {"mode": "normal", "group": "A"}}, "min": 0}, "overrides": []}, "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}, "id": 13, "gridPos": {"h": 8, "w": 12, "x": 12, "y": 15}, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
+    {"type": "stat", "title": "Cuestionarios con síntomas", "description": "Porcentaje de cuestionarios del rango que reportan síntomas.", "targets": [{"refId": "A", "expr": "sum(increase(circleguard_surveys_total{namespace=\"$namespace\", symptoms=\"true\"}[$__range])) / sum(increase(circleguard_surveys_total{namespace=\"$namespace\"}[$__range]))", "datasource": {"type": "prometheus", "uid": "${datasource}"}}], "fieldConfig": {"defaults": {"unit": "percentunit", "decimals": 1}, "overrides": []}, "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}}, "id": 14, "gridPos": {"h": 4, "w": 12, "x": 0, "y": 23}, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
+    {"type": "stat", "title": "Check-ins permitidos", "description": "Porcentaje de validaciones del rango con acceso concedido.", "targets": [{"refId": "A", "expr": "sum(increase(circleguard_checkins_total{namespace=\"$namespace\", result=\"granted\"}[$__range])) / sum(increase(circleguard_checkins_total{namespace=\"$namespace\"}[$__range]))", "datasource": {"type": "prometheus", "uid": "${datasource}"}}], "fieldConfig": {"defaults": {"unit": "percentunit", "decimals": 1}, "overrides": []}, "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}}, "id": 15, "gridPos": {"h": 4, "w": 12, "x": 12, "y": 23}, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
+    {"id": 16, "type": "row", "title": "Tiempo de contención", "collapsed": false, "gridPos": {"h": 1, "w": 24, "x": 0, "y": 27}, "panels": []},
+    {"type": "timeseries", "title": "Tiempo de contención", "description": "Cascada en Neo4j, Redis y eventos de Kafka de cada promoción. Línea roja: 1 s (NFR-1).", "targets": [{"refId": "A", "expr": "histogram_quantile(0.50, sum by (le) (rate(circleguard_containment_duration_seconds_bucket{namespace=\"$namespace\", status!~\"ACTIVE|OTHER\"}[$__rate_interval])))", "datasource": {"type": "prometheus", "uid": "${datasource}"}, "legendFormat": "p50"}, {"refId": "B", "expr": "histogram_quantile(0.95, sum by (le) (rate(circleguard_containment_duration_seconds_bucket{namespace=\"$namespace\", status!~\"ACTIVE|OTHER\"}[$__rate_interval])))", "datasource": {"type": "prometheus", "uid": "${datasource}"}, "legendFormat": "p95"}, {"refId": "C", "expr": "histogram_quantile(0.99, sum by (le) (rate(circleguard_containment_duration_seconds_bucket{namespace=\"$namespace\", status!~\"ACTIVE|OTHER\"}[$__rate_interval])))", "datasource": {"type": "prometheus", "uid": "${datasource}"}, "legendFormat": "p99"}], "fieldConfig": {"defaults": {"unit": "s", "custom": {"drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false, "axisLabel": "", "stacking": {"mode": "none", "group": "A"}, "thresholdsStyle": {"mode": "line+area"}}, "min": 0, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}}, "overrides": []}, "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}, "id": 17, "gridPos": {"h": 8, "w": 16, "x": 0, "y": 28}, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
+    {"type": "timeseries", "title": "Contención bajo 1 s", "description": "Porcentaje de promociones que terminaron en menos de 1 s.", "targets": [{"refId": "A", "expr": "sum(rate(circleguard_containment_duration_seconds_bucket{namespace=\"$namespace\", status!~\"ACTIVE|OTHER\", le=\"1.0\"}[$__rate_interval])) / sum(rate(circleguard_containment_duration_seconds_count{namespace=\"$namespace\", status!~\"ACTIVE|OTHER\"}[$__rate_interval]))", "datasource": {"type": "prometheus", "uid": "${datasource}"}, "legendFormat": "bajo 1 s"}], "fieldConfig": {"defaults": {"unit": "percentunit", "custom": {"drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false, "axisLabel": "", "stacking": {"mode": "none", "group": "A"}}, "min": 0}, "overrides": []}, "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}, "id": 18, "gridPos": {"h": 8, "w": 8, "x": 16, "y": 28}, "datasource": {"type": "prometheus", "uid": "${datasource}"}}
+  ]
+}

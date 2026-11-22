@@ -96,6 +96,10 @@ Reglas:
 def changed = detectChangedServices(buildAll: params.BUILD_ALL ?: false, services: SERVICES)
 ```
 
+### `detectTerraformChanges`
+
+`detectTerraformChanges()` devuelve `true` si el build cambia archivos que no son `.md` bajo `infra/terraform/`. En un PR usa el diff contra la rama destino; en `main` usa `HEAD^1`, el commit anterior de la rama protegida, para que un merge solo vea lo que trajo su PR. Si no puede resolver la base, devuelve `true` para no saltarse un apply. Lo usa la etapa `Detect changes`; no reemplaza a `detectChangedServices`, que sigue decidiendo qué servicios compilar.
+
 ### `runTests`
 
 Ejecuta las pruebas y, por defecto, genera el reporte de cobertura JaCoCo, verifica el mínimo de cobertura y publica los resultados JUnit incluso cuando la tarea falla.
@@ -129,7 +133,7 @@ publishCoverage(services: ['circleguard-auth-service', 'circleguard-form-service
 
 ### `sonarScan`
 
-Ejecuta el análisis de SonarQube de un servicio dentro de `withSonarQubeEnv`. El `Jenkinsfile` lo usa en la etapa `Sonar analysis and quality gate`, seguida de `waitForQualityGate abortPipeline: true`.
+Ejecuta el análisis de SonarQube de un servicio dentro de `withSonarQubeEnv`. El `Jenkinsfile` lo usa en el carril de cada servicio (`Sonar <servicio>`) con `extraArgs: '-Dsonar.qualitygate.wait=true -Dsonar.qualitygate.timeout=600'`, de modo que el scanner espera el quality gate y falla si está en rojo.
 
 | Parámetro | Obligatorio | Valor por defecto | Descripción |
 |:---|:---|:---|:---|
@@ -366,6 +370,31 @@ deployK8s(environment: 'stage', version: '1.4.0-rc.a83f21c', timeout: '15m')
 ### `k8sSmokeTest`
 
 `k8sSmokeTest(environment: 'stage')` comprueba por el Ingress (`K8S_HOST_<AMBIENTE>`) que el cliente web responde en `/healthz` y que `auth`, `identity`, `promotion`, `form` y `gateway` reportan `UP` en `/svc/<servicio>/actuator/health`. Lo usan `deployK8s` y el job de rollback.
+
+### `terraformPlan`
+
+Ejecuta `terraform init` + `terraform plan` de un ambiente y guarda el `.tfplan` en el stash del build (HU-32):
+
+```groovy
+terraformPlan(environment: 'dev')
+```
+
+- Usa las credenciales `aws-terraform`, `prometheus-ssh-key` y `prometheus-grafana-password`.
+- Pasa `K8S_HOST_<AMBIENTE>` como `TF_VAR_prometheus_ssh_host`: es la IP privada del nodo, porque el Security Group solo abre SSH desde la IP privada de Jenkins.
+- Devuelve `[hasChanges: boolean, planFile: String]`. `hasChanges` sale de `-detailed-exitcode` (`2` = hay cambios).
+- El `.tfplan` **no se archiva**: puede contener valores sensibles. Solo se aplica con `terraformApply`.
+
+### `terraformApply`
+
+Aplica el plan guardado de un ambiente (HU-32):
+
+```groovy
+terraformApply(environment: 'dev')
+```
+
+- Hace `unstash` de `terraform-<ambiente>` y ejecuta `terraform apply` sobre ese archivo, sin volver a planear.
+- Si el state cambió después del plan, Terraform falla con `Saved plan is stale`; no aplica algo distinto a lo revisado.
+- El `.tfplan` debe haberse creado antes en la misma ejecución con `terraformPlan`.
 
 ### `deployCompose`
 

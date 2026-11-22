@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Starts, stops and lists the CircleGuard hosts, and keeps their current IPs in one file.
 # Usage: hosts.sh <status|refresh|start|stop> [ci|tools|envs|k3s|all]
-#        ci starts or stops both CI hosts: Jenkins (ci) and SonarQube/Nexus (tools).
+#        ci starts or stops the CI hosts: Jenkins (ci), SonarQube/Nexus (tools) and the two build agents.
 #        k3s are the Part 2 clusters (Terraform, infra/terraform); hosts not created yet are skipped.
 #        hosts.sh allow [public-ip] [owner]   grants the documented admin ports and replaces the
 #        rules that owner already had. Defaults: this machine's public IP and the IAM user's name.
@@ -13,7 +13,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/../../bootstrap/lib/common.sh"
 
 readonly HOSTS_FILE="${SCRIPT_DIR}/hosts.env"
-readonly ALL_HOSTS=(ci tools dev stage prod k3s-dev k3s-stage k3s-prod)
+readonly ALL_HOSTS=(ci tools ci-agent-1 ci-agent-2 dev stage prod k3s-dev k3s-stage k3s-prod)
 export AWS_DEFAULT_REGION="${AWS_REGION:-us-east-1}"
 export AWS_PAGER=""
 
@@ -23,7 +23,7 @@ usage() {
 
 hosts_of() {
   case "$1" in
-    ci) echo ci tools ;;
+    ci) echo ci tools ci-agent-1 ci-agent-2 ;;
     tools) echo tools ;;
     k3s) echo k3s-dev k3s-stage k3s-prod ;;
     envs) echo dev stage prod ;;

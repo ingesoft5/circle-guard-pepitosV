@@ -16,7 +16,10 @@ def call(Map config = [:]) {
     def publish = config.publish == null ? true : config.publish
 
     try {
-        sh "./gradlew --no-daemon ${targets.join(' ')}"
+        // JENKINS_NODE_COOKIE keeps the Gradle daemon alive after the step (see gradleBuild).
+        withEnv(['JENKINS_NODE_COOKIE=dontKillMe']) {
+            sh "./gradlew ${targets.join(' ')}"
+        }
     } finally {
         if (publish) {
             junit allowEmptyResults: true, testResults: testResults

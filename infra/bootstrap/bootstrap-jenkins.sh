@@ -81,7 +81,8 @@ main() {
 
   # --build: la imagen de Jenkins agrega el Docker CLI; Docker reutiliza la caché
   # si jenkins/Dockerfile no cambió.
-  compose --env-file "${CI_ENV_FILE}" -f "${CI_COMPOSE_FILE}" up -d --build jenkins
+  # gradle-cache: build cache node shared by the workers (GRADLE_BUILD_CACHE_URL).
+  compose --env-file "${CI_ENV_FILE}" -f "${CI_COMPOSE_FILE}" up -d --build jenkins gradle-cache
   wait_http "http://localhost:${JENKINS_PORT}/login" 60 5
 
   info "Instalando/actualizando los plugins declarados"

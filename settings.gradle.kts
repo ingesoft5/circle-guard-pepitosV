@@ -11,6 +11,20 @@ plugins {
 
 rootProject.name = "circleguard"
 
+// Shared build cache of the CI workers (gradle-cache on the CI host, infra/compose/ci). Jenkins
+// sets GRADLE_BUILD_CACHE_URL on every node and only Jenkins writes; without the variable (a
+// developer machine) Gradle keeps using its local cache only.
+val remoteBuildCacheUrl: String? = System.getenv("GRADLE_BUILD_CACHE_URL")
+if (!remoteBuildCacheUrl.isNullOrBlank()) {
+    buildCache {
+        remote<HttpBuildCache> {
+            url = uri(remoteBuildCacheUrl)
+            isAllowInsecureProtocol = true
+            isPush = System.getenv("JENKINS_URL") != null
+        }
+    }
+}
+
 // Shared Libraries (Commented out as folders are missing on disk)
 // include("libs:circleguard-common")
 // include("libs:circleguard-security")

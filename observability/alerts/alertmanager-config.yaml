@@ -1,0 +1,51 @@
+# Alertmanager routing for CircleGuard (HU-41). observability/prometheus/values.yaml points
+# alertmanagerSpec.alertmanagerConfiguration at this object, so it is the whole Alertmanager
+# configuration. The operator reads the Discord webhook from the alertmanager-discord Secret
+# (created by infra/bootstrap/load-alertmanager-discord.sh), so the URL is never in Git.
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: circleguard
+  labels:
+    app.kubernetes.io/part-of: circleguard
+spec:
+  route:
+    # Only the alerts labelled project=circleguard (circleguard-rules.yaml) go to Discord; the
+    # stack's own cluster alerts stay visible in /alertmanager without paging anyone.
+    receiver: "null"
+    groupBy: [alertname, namespace, service]
+    groupWait: 30s
+    groupInterval: 5m
+    repeatInterval: 4h
+    routes:
+      - receiver: discord
+        matchers:
+          - name: project
+            value: circleguard
+            matchType: "="
+  receivers:
+    - name: "null"
+    - name: discord
+      discordConfigs:
+        - apiURL:
+            name: alertmanager-discord
+            key: webhook-url
+          sendResolved: true
+          title: >-
+            [{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}]
+            {{ .CommonLabels.alertname }} · {{ .CommonLabels.namespace }}
+          message: |-
+            {{ range .Alerts }}**{{ .Labels.severity }}** · {{ .Annotations.summary }}
+            {{ .Annotations.description }}
+            {{ end }}
+  inhibitRules:
+    # While a service has a critical alert, its warnings are not sent.
+    - sourceMatch:
+        - name: severity
+          value: critical
+          matchType: "="
+      targetMatch:
+        - name: severity
+          value: warning
+          matchType: "="
+      equal: [namespace, service]

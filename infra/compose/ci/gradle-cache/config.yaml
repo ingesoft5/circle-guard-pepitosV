@@ -1,0 +1,11 @@
+# Gradle build cache node shared by the Jenkins workers (GRADLE_BUILD_CACHE_URL). It only listens
+# inside the VPC: circleguard-ci-sg admits port 5071 from itself (the controller and the workers).
+# Anonymous read and write: no credentials to manage, and only the CI hosts can reach it.
+# targetSize: entries are evicted (least recently used) above 4 GB.
+version: 5
+cache:
+  targetSize:
+    type: fixed
+    size: 4000
+  accessControl:
+    anonymousLevel: "readwrite"

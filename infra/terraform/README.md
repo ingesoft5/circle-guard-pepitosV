@@ -110,6 +110,18 @@ Requisitos: Terraform ≥ 1.9 y una cuenta con permisos de EC2, S3 (`circleguard
 
 El host de CI y el host `tools` (Jenkins, SonarQube y Nexus) se crearon en la Parte 1 con `infra/cloud/aws/provision-ci-hosts.sh`. Terraform solo los lee (`data`) para el peering y la regla del registro.
 
+## Pipeline (HU-32)
+
+Jenkins ejecuta el mismo `init → plan → apply` por ambiente. Un PR que toca `infra/terraform/`
+muestra los tres planes en el build; un merge a `main` aplica `dev` y luego `stage`, y `prod`
+espera la aprobación de `admin`. El `.tfplan` se aplica guardado y no se archiva.
+
+Credenciales de Jenkins: `aws-terraform`, `prometheus-ssh-key` y `prometheus-grafana-password`.
+El paso pasa `K8S_HOST_<AMBIENTE>` como `TF_VAR_prometheus_ssh_host`; debe ser la IP privada
+del nodo porque el Security Group solo abre SSH desde la IP privada de Jenkins. La carga de
+esas credenciales está en [`../../infra/compose/ci/README.md`](../../infra/compose/ci/README.md)
+y en [`../../docs/operaciones/jenkins-pipeline.md`](../../docs/operaciones/jenkins-pipeline.md).
+
 ## Observabilidad dentro del clúster
 
 El módulo `observability` instala `kube-prometheus-stack` (Prometheus, Grafana y Alertmanager)

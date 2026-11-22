@@ -1,6 +1,7 @@
 package com.circleguard.promotion.service;
 
 import com.circleguard.promotion.exception.FenceException;
+import com.circleguard.promotion.metrics.PromotionMetrics;
 import com.circleguard.promotion.repository.graph.UserNodeRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +24,7 @@ public class HealthStatusService {
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final com.circleguard.promotion.repository.jpa.SystemSettingsRepository systemSettingsRepository;
     private final com.circleguard.promotion.repository.graph.CircleNodeRepository circleNodeRepository;
+    private final PromotionMetrics metrics;
 
     private static final String STATUS_KEY_PREFIX = "user:status:";
     private static final String TOPIC_STATUS_CHANGED = "promotion.status.changed";
@@ -39,6 +41,7 @@ public class HealthStatusService {
     @CacheEvict(cacheNames = "userStatus", allEntries = true)
     public void updateStatus(String anonymousId, String status, boolean adminOverride) {
         log.info("Updating status: {} -> {} (Admin Override: {})", anonymousId, status, adminOverride);
+        var containment = metrics.startContainment();
 
         if ("ACTIVE".equals(status) && !adminOverride) {
             checkFenceWindow(anonymousId);
@@ -134,6 +137,9 @@ public class HealthStatusService {
                 
                 kafkaTemplate.send("alert.priority", anonymousId, priorityPayload);
             }
+
+            metrics.recordPromotions(status, affected);
+            metrics.stopContainment(containment, status);
         }
     }
 
@@ -281,6 +287,7 @@ public class HealthStatusService {
         // Immunize in Redis for 30 days
         redisTemplate.opsForValue().set(STATUS_KEY_PREFIX + anonymousId, "RECOVERED");
         redisTemplate.expire(STATUS_KEY_PREFIX + anonymousId, java.time.Duration.ofDays(30));
+        metrics.recordPromotion(PromotionMetrics.RECOVERED, PromotionMetrics.ORIGIN_SOURCE);
     }
     private void checkFenceWindow(String anonymousId) {
         var userOpt = userNodeRepository.findById(anonymousId);
