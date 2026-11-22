@@ -4,6 +4,54 @@ Todas las versiones de CircleGuard. Este archivo lo genera el pipeline de Jenkin
 los Conventional Commits (HU-22): no se edita a mano.
 Esquema de versiones: [docs/release-notes/etiquetado.md](docs/release-notes/etiquetado.md).
 
+## [0.6.0](https://github.com/ingesoft5/circle-guard-pepitosV/compare/v0.5.0...v0.6.0) (2026-11-22)
+
+### Features
+
+- **infra:** alert on service down, errors and latency ([#106](https://github.com/ingesoft5/circle-guard-pepitosV/pull/106)) ([6eaf1de](https://github.com/ingesoft5/circle-guard-pepitosV/commit/6eaf1dea187ce6db7cdb8723db49fd2d686c9f0a))
+- **form:** publish pending outbox events ([#107](https://github.com/ingesoft5/circle-guard-pepitosV/pull/107)) ([e68052b](https://github.com/ingesoft5/circle-guard-pepitosV/commit/e68052b3155dd60fe56e5f5b81781203bb66edd8))
+- **form:** enqueue survey events in the outbox ([#107](https://github.com/ingesoft5/circle-guard-pepitosV/pull/107)) ([dc66af3](https://github.com/ingesoft5/circle-guard-pepitosV/commit/dc66af34db3f08d020e2d279b0a1de0ff7e7cf83))
+- **form:** add transactional outbox storage ([#107](https://github.com/ingesoft5/circle-guard-pepitosV/pull/107)) ([5c8165a](https://github.com/ingesoft5/circle-guard-pepitosV/commit/5c8165a391753d8e25c06478358a2fdc5934ebcc))
+- **ci:** run terraform plan and apply in the pipeline ([#105](https://github.com/ingesoft5/circle-guard-pepitosV/pull/105)) ([b030235](https://github.com/ingesoft5/circle-guard-pepitosV/commit/b0302358dea32c81fd29ae56abbc12d5172b816d))
+- **observability:** ship json logs to loki ([#103](https://github.com/ingesoft5/circle-guard-pepitosV/pull/103)) ([7405c6e](https://github.com/ingesoft5/circle-guard-pepitosV/commit/7405c6e75c3ab7e0a35bb5fcd877afc6d747909b))
+- **repo:** add service and business dashboards to grafana ([#103](https://github.com/ingesoft5/circle-guard-pepitosV/pull/103)) ([4d09eaf](https://github.com/ingesoft5/circle-guard-pepitosV/commit/4d09eaf35dc6a152fb9c65140c287124a4429022))
+- **repo:** expose service and business metrics for Prometheus ([#102](https://github.com/ingesoft5/circle-guard-pepitosV/pull/102)) ([b08d3ad](https://github.com/ingesoft5/circle-guard-pepitosV/commit/b08d3ad3eb59fd4dd8fe49480dc9bc707a12d043))
+- **k8s:** seal cluster secrets after a clean history scan ([#104](https://github.com/ingesoft5/circle-guard-pepitosV/pull/104)) ([4d196ca](https://github.com/ingesoft5/circle-guard-pepitosV/commit/4d196ca1bf5a5de304758443c8b537e9a74d9848))
+- **observability:** publish prometheus and alertmanager ([#99](https://github.com/ingesoft5/circle-guard-pepitosV/pull/99)) ([879dcc3](https://github.com/ingesoft5/circle-guard-pepitosV/commit/879dcc3848856b03497613f5acc49bff9c7d0634))
+- **observability:** ship json logs to loki ([#98](https://github.com/ingesoft5/circle-guard-pepitosV/pull/98)) ([85c3d40](https://github.com/ingesoft5/circle-guard-pepitosV/commit/85c3d405aa2566abc739d30bd3803fef62c2891c))
+- **k8s:** run jaeger in the cluster ([#96](https://github.com/ingesoft5/circle-guard-pepitosV/pull/96)) ([0d5c1d3](https://github.com/ingesoft5/circle-guard-pepitosV/commit/0d5c1d353d2184d976e7c3d2c6f16f33ad723365))
+- **k8s:** set qr lifetime and diagnostics from the configmap ([#95](https://github.com/ingesoft5/circle-guard-pepitosV/pull/95)) ([c14a6a5](https://github.com/ingesoft5/circle-guard-pepitosV/commit/c14a6a528acafcd1885d66a14a8641b1cffe1f33))
+- **gateway:** publish the redis health circuit to grafana ([#94](https://github.com/ingesoft5/circle-guard-pepitosV/pull/94)) ([37f7ad9](https://github.com/ingesoft5/circle-guard-pepitosV/commit/37f7ad9377b75f1b1b439e0743b3135d5d086508))
+- **infra:** publish grafana through the cluster ingress ([#92](https://github.com/ingesoft5/circle-guard-pepitosV/pull/92)) ([0d437e3](https://github.com/ingesoft5/circle-guard-pepitosV/commit/0d437e3217b85d1d1a00535dc4973decf631ae2c))
+- **deploy:** let prometheus scrape the spring services ([#92](https://github.com/ingesoft5/circle-guard-pepitosV/pull/92)) ([34dfcc4](https://github.com/ingesoft5/circle-guard-pepitosV/commit/34dfcc43219078085d5e0b9e5011172b0a62aa1f))
+- **jenkins:** roll back kubernetes environments with helm ([#90](https://github.com/ingesoft5/circle-guard-pepitosV/pull/90)) ([aee30b7](https://github.com/ingesoft5/circle-guard-pepitosV/commit/aee30b79fdc7613dee84db6d206b37267b8b3778))
+- **jenkins:** deploy every environment to kubernetes with helm ([#90](https://github.com/ingesoft5/circle-guard-pepitosV/pull/90)) ([481b4bb](https://github.com/ingesoft5/circle-guard-pepitosV/commit/481b4bbd638de7078db8d817c6fb033c047ce744))
+- **deploy:** add idempotent script for the environment secret ([#89](https://github.com/ingesoft5/circle-guard-pepitosV/pull/89)) ([7aae825](https://github.com/ingesoft5/circle-guard-pepitosV/commit/7aae8258f22ee7b1cb0e25509d4f9d553c6ba9f8))
+- **deploy:** add helm chart for one environment namespace ([#89](https://github.com/ingesoft5/circle-guard-pepitosV/pull/89)) ([2abc13d](https://github.com/ingesoft5/circle-guard-pepitosV/commit/2abc13d322591259340717031d6d7fd13dfd292c))
+- **infra:** install prometheus stack from the observability module ([#88](https://github.com/ingesoft5/circle-guard-pepitosV/pull/88)) ([d4e748a](https://github.com/ingesoft5/circle-guard-pepitosV/commit/d4e748a2dd06ed7bdc3bdd98f31c5adc361b42d0))
+- **infra:** harden and document terraform remote state ([#87](https://github.com/ingesoft5/circle-guard-pepitosV/pull/87)) ([ec394ee](https://github.com/ingesoft5/circle-guard-pepitosV/commit/ec394eee5660fa122473451b46301a4dfe2cc85e))
+- **repo:** write service logs as json ([#86](https://github.com/ingesoft5/circle-guard-pepitosV/pull/86)) ([9b693cc](https://github.com/ingesoft5/circle-guard-pepitosV/commit/9b693cc47cc2ace6ed831b02c66e1561ddcf690c))
+- **infra:** wire reusable modules into environments ([#82](https://github.com/ingesoft5/circle-guard-pepitosV/pull/82)) ([3b6504e](https://github.com/ingesoft5/circle-guard-pepitosV/commit/3b6504e434470ac4f1fb0f35269695c4c1819254))
+- **infra:** add registry storage observability modules ([#82](https://github.com/ingesoft5/circle-guard-pepitosV/pull/82)) ([170bd85](https://github.com/ingesoft5/circle-guard-pepitosV/commit/170bd85386548013c89a41b47dfa9682bcb6f1c9))
+- **form:** propagate traceparent across kafka ([#81](https://github.com/ingesoft5/circle-guard-pepitosV/pull/81)) ([31bb868](https://github.com/ingesoft5/circle-guard-pepitosV/commit/31bb868530a8ef86b7d663941a46da6842f550c5))
+- **auth:** read the QR lifetime from configuration ([#76](https://github.com/ingesoft5/circle-guard-pepitosV/pull/76)) ([0c99c55](https://github.com/ingesoft5/circle-guard-pepitosV/commit/0c99c55a93ab7d752884adcb1d2479fcfd25056c))
+- **gateway:** open the circuit when redis stays down ([#75](https://github.com/ingesoft5/circle-guard-pepitosV/pull/75)) ([6651d20](https://github.com/ingesoft5/circle-guard-pepitosV/commit/6651d20fa58f65cb540ff627239f9b0f3edeb03b))
+
+### Fixes
+
+- **infra:** route alerts to discord through an AlertmanagerConfig ([#111](https://github.com/ingesoft5/circle-guard-pepitosV/pull/111)) ([383b6f8](https://github.com/ingesoft5/circle-guard-pepitosV/commit/383b6f8fcd911424198f295f9e45015fc04e02a0))
+- **deploy:** run the sealed secrets installer on a fresh cluster ([#110](https://github.com/ingesoft5/circle-guard-pepitosV/pull/110)) ([b63cbc8](https://github.com/ingesoft5/circle-guard-pepitosV/commit/b63cbc86bbe32b49a15351ed209ac6a2dbd2397d))
+- **jenkins:** stash the terraform plan and keep the ssh key out of logs ([#109](https://github.com/ingesoft5/circle-guard-pepitosV/pull/109)) ([8df9d22](https://github.com/ingesoft5/circle-guard-pepitosV/commit/8df9d22c06709e7891f928cf606546e7bad29f4a))
+- **infra:** remove the webhook temp file when the Discord script exits ([#106](https://github.com/ingesoft5/circle-guard-pepitosV/pull/106)) ([01c6d53](https://github.com/ingesoft5/circle-guard-pepitosV/commit/01c6d539bef57469e43d0045c64a2b00ea9c197a))
+- **form:** re-interrupt the outbox relay on interruption ([#107](https://github.com/ingesoft5/circle-guard-pepitosV/pull/107)) ([3788697](https://github.com/ingesoft5/circle-guard-pepitosV/commit/3788697d07a085bfbb3eb9ab42ba0d9cf90fc8d7))
+- **observability:** keep prometheus redirect under /prometheus ([#100](https://github.com/ingesoft5/circle-guard-pepitosV/pull/100)) ([b9b5a90](https://github.com/ingesoft5/circle-guard-pepitosV/commit/b9b5a906cf5acdb1b38f63afe1e6316d6a0a9039))
+- **infra:** avoid k3s node replacement on comment change ([#93](https://github.com/ingesoft5/circle-guard-pepitosV/pull/93)) ([5b944b0](https://github.com/ingesoft5/circle-guard-pepitosV/commit/5b944b004ff164e5ee5d849f9e40912413627054))
+- **deploy:** generate secrets without requiring openssl ([#90](https://github.com/ingesoft5/circle-guard-pepitosV/pull/90)) ([2a9b9ba](https://github.com/ingesoft5/circle-guard-pepitosV/commit/2a9b9bae78aaef2d86f7fec8bb4ec1cf2808c1be))
+- **deploy:** run containers with read-only root and security context ([#89](https://github.com/ingesoft5/circle-guard-pepitosV/pull/89)) ([5680186](https://github.com/ingesoft5/circle-guard-pepitosV/commit/5680186328b3db565d093e26345458b8843ce35f))
+- **jenkins:** scan terraform and helm charts in one config run ([#89](https://github.com/ingesoft5/circle-guard-pepitosV/pull/89)) ([599aac2](https://github.com/ingesoft5/circle-guard-pepitosV/commit/599aac2447f33eab93d8b7af43e6d3103af918cb))
+- **mobile:** refresh web image packages once a day ([#89](https://github.com/ingesoft5/circle-guard-pepitosV/pull/89)) ([03cdb71](https://github.com/ingesoft5/circle-guard-pepitosV/commit/03cdb71c7dcdf15f4d471603ec18d9cc06a1605e))
+- **jenkins:** copy the workspace into the scans ([#79](https://github.com/ingesoft5/circle-guard-pepitosV/pull/79)) ([8d8f288](https://github.com/ingesoft5/circle-guard-pepitosV/commit/8d8f2888c091cf9228b5a54896b3b9bf967159a1))
+
 ## [0.5.0](https://github.com/ingesoft5/circle-guard-pepitosV/compare/v0.4.0...v0.5.0) (2026-11-15)
 
 ### Features
