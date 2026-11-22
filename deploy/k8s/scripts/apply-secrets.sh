@@ -73,7 +73,7 @@ main() {
 
   kubectl create namespace "${namespace}" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
   if ! kubectl -n kube-system get deployment sealed-secrets-controller >/dev/null 2>&1; then
-    "${REPO_ROOT}/deploy/k8s/scripts/install-sealed-secrets.sh"
+    bash "${REPO_ROOT}/deploy/k8s/scripts/install-sealed-secrets.sh"
   fi
   ensure_kubeseal
 
