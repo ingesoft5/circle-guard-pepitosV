@@ -393,3 +393,9 @@ git grep -n "KAnonymityFilter" -- "services/*/src/main/*"                       
 git grep -n "new RestTemplate" -- "services/*/src/main/*"                        # P15
 git grep -n "flyway-core" -- "services/*/build.gradle.kts"                       # P16
 ```
+
+## 8. Patrones añadidos en la Parte 2
+
+- [Resiliencia con Resilience4j](resiliencia.md): circuit breaker y retry en gateway-service (HU-36).
+- [Configuración externa y feature toggle](configuracion.md): TTL del QR y toggle de diagnóstico (HU-37).
+- [Transactional Outbox](outbox.md): elimina el dual write entre PostgreSQL y Kafka en form-service (HU-38).

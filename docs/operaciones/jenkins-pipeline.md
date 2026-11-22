@@ -10,11 +10,11 @@ Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`), 
 - `infra/compose/ci/jenkins/casc.yaml` declara por JCasC el job multibranch `circleguard`, la credencial `github-pat`, la integración con GitHub y la Global Pipeline Library.
 - GitHub Branch Source escanea las ramas y los pull requests del repositorio y crea un build por rama o PR.
 - El `Jenkinsfile` de la raíz importa la Shared Library con `@Library` y usa `detectChangedServices` para calcular qué servicios y si el web client deben procesarse.
-- Cada servicio seleccionado se compila y prueba con `gradleBuild` y `runTests` dentro de un `parallel` dinámico, en lotes de 3. Después de la etapa de Sonar, los servicios se empaquetan con `dockerBuild`.
-- En cada servicio seleccionado, `Sonar analysis and quality gate` ejecuta `sonarScan` y luego `waitForQualityGate abortPipeline: true` con un timeout de 10 minutos. Si el gate falla, el pipeline no llega a `Package images`.
+- Jenkins trabaja como controlador y workers (ver [Controlador y workers](#controlador-y-workers)). La etapa `Build, test and package` abre un carril por servicio en los workers: compila (`gradleBuild`), prueba (`runTests`), analiza con Sonar y espera el quality gate (`sonarScan`), y después empaqueta (`dockerBuild`) o publica (`dockerPublish`) la imagen. Todos los carriles corren en paralelo, y a la vez el controlador ejecuta `Static checks` (escaneo de dependencias, validación de la librería, escaneo de IaC y planes de Terraform). La etapa padre, `Checks, build and package`, usa `failFast`: el primer fallo detiene el resto.
+- Si el quality gate de un servicio falla, su carril se detiene antes de empaquetar o publicar la imagen, y el build falla.
 - El web client se empaqueta solo si cambió `mobile/` o si se ejecuta con `BUILD_ALL=true`.
 - `PR size policy` valida los cambios de cada Pull Request antes de compilar: máximo predeterminado de 700 adiciones, 300 eliminaciones y 1000 líneas modificadas; excluye Markdown, `docs/`, lockfiles, build output, generated output e imágenes/PDF. Los tres límites se configuran con `PR_MAX_ADDITIONS`, `PR_MAX_DELETIONS` y `PR_MAX_CHANGED_LINES` en el bloque `environment` del `Jenkinsfile`. Se omite solo para el PR de promoción `release/X.Y.Z` hacia `main`, cuyo pipeline ejecuta la validación completa del candidato.
-- En `dev`, `Publish prerelease images` publica los componentes afectados como `X.Y.Z-SNAPSHOT.BUILD.SHA`. En el PR de promoción cuyo `CHANGE_BRANCH` es `release/X.Y.Z`, publica los 8 servicios y el cliente web como `X.Y.Z-rc.BUILD.SHA`. Los sufijos de build y SHA mantienen únicos los tags y compatibles con `allow_once` en Nexus.
+- En `dev`, el carril de cada componente afectado publica los componentes afectados como `X.Y.Z-SNAPSHOT.BUILD.SHA`. En el PR de promoción cuyo `CHANGE_BRANCH` es `release/X.Y.Z`, publica los 8 servicios y el cliente web como `X.Y.Z-rc.BUILD.SHA`. Los sufijos de build y SHA mantienen únicos los tags y compatibles con `allow_once` en Nexus.
 - En `main`, `Release version` calcula la versión con `calculateVersion` a partir de los Conventional Commits desde el último tag (sin tags: `1.0.0`). Si no hay commits `feat`, `fix`, `perf` ni incompatibles, no hay release y las etapas siguientes se omiten.
 - `Publish images` publica las imágenes de los 8 servicios y del web client con esa versión, y después `Tag release` crea y publica el tag `vX.Y.Z` en GitHub con `pushReleaseTag`. El orden garantiza que un tag en GitHub siempre tiene sus imágenes.
 - En `main`, después de `Deploy to dev`, `Release notes` (HU-22) crea el GitHub Release con las notas generadas por `releaseNotes` y abre o actualiza el PR `chore(release): update changelog for vX.Y.Z` hacia `dev` con el `CHANGELOG.md` regenerado. No hace push directo porque `main` y `dev` están protegidas. Va antes de las E2E: el tag y las imágenes ya existen, así que el release queda documentado aunque fallen las pruebas.
@@ -24,7 +24,7 @@ Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`), 
 - Cuando un build falla o queda inestable, `notifyDiscord` envía un mensaje al canal de Discord con rama, servicio, etapa, autor y enlace al build. Si el build siguiente se recupera, envía un mensaje de recuperación.
 - La librería se carga desde `jenkins/vars/` usando `libraryPath: "jenkins"`, en la versión de la misma rama que se está construyendo.
 - Jenkins publica el resultado como estado de commit en GitHub. Para builds de PR el contexto es `continuous-integration/jenkins/pr-merge`.
-- Una rama con un PR abierto se construye solo como `PR-<n>` (fusionada con su base) y no también como rama (`buildOriginBranchWithPR(false)`), porque Jenkins tiene un solo ejecutor. Las ramas sin PR, `dev` y `main` se siguen construyendo en cada push.
+- Una rama con un PR abierto se construye solo como `PR-<n>` (fusionada con su base) y no también como rama (`buildOriginBranchWithPR(false)`), para no construir dos veces el mismo cambio. Las ramas sin PR, `dev` y `main` se siguen construyendo en cada push.
 - El contenedor de Jenkins monta `/var/run/docker.sock` para que las pruebas con Testcontainers puedan iniciar contenedores y para el empaquetado posterior.
 
 ## Configuración que vive en el repositorio
@@ -108,25 +108,26 @@ Reglas de archivos:
 | Solo `docs/` o `*.md` | Nada |
 | Ruta desconocida | Los 8 servicios y web client |
 
-El `Jenkinsfile` ejecuta los servicios seleccionados en lotes de 3 (`MAX_PARALLEL_SERVICES`) para no agotar la memoria del host. Cada servicio ejecuta:
+El `Jenkinsfile` abre un carril por servicio seleccionado en un worker (`node('worker')`). Cada carril hace su propio checkout y ejecuta:
 
 ```text
-Compile <servicio> -> gradleBuild
-Test <servicio>    -> runTests(publish: false)
-Package <servicio> -> dockerBuild
+Compile <servicio>             -> gradleBuild
+Test <servicio>                -> runTests + publishCoverage
+Sonar <servicio>               -> sonarScan con -Dsonar.qualitygate.wait=true
+Package o Publish <servicio>   -> dockerBuild (PR y ramas) o dockerPublish (SNAPSHOT y RC)
 ```
 
 `runTests` también genera el reporte JaCoCo y verifica la cobertura mínima: auth, identity, promotion, form y gateway deben tener al menos 60 % de cobertura de líneas, o la etapa `Test <servicio>` falla. Las clases `*Application` y el código que genera Lombok no cuentan en la cobertura.
 
-Los resultados JUnit se publican una sola vez al final, y `publishCoverage` publica la cobertura de cada servicio seleccionado como un resultado independiente. El web client se empaqueta después de los servicios si aplica.
+Cada carril publica sus resultados JUnit y su cobertura (`publishCoverage`) como un resultado independiente. El web client tiene su propio carril si aplica.
 
-Después, la etapa `Integration tests` (HU-19, CGR-42) ejecuta `./gradlew integrationTest` cuando el build toca auth, form, promotion o gateway, o cuando el cambio obliga a procesar todos los servicios. Esa tarea es distinta de `test`: levanta Kafka, Neo4j, OpenLDAP, PostgreSQL y Redis con Testcontainers y publica sus reportes JUnit. No cuenta para el mínimo de cobertura.
+En otro carril en paralelo, `Integration tests` (HU-19, CGR-42) ejecuta `./gradlew integrationTest` cuando el build toca auth, form, promotion o gateway, o cuando el cambio obliga a procesar todos los servicios. Esa tarea es distinta de `test`: levanta Kafka, Neo4j, OpenLDAP, PostgreSQL y Redis con Testcontainers y publica sus reportes JUnit. No cuenta para el mínimo de cobertura.
 
 En `main` con tag de release, `Publish images` sigue publicando los 8 servicios y el web client con la versión semver. La ejecución selectiva aplica a los builds de PR y ramas; no reduce la publicación de un release. En el PR de promoción cuyo origen es `release/X.Y.Z`, Jenkins también procesa todos los componentes, publica el RC y lo valida en stage antes de permitir la fusión.
 
 ## Análisis SonarQube y quality gate (HU-12)
 
-La etapa `Sonar analysis and quality gate` se ejecuta después de `Build and test` y antes de `Package images`. Para cada servicio seleccionado, `sonarScan` corre `:services:<servicio>:sonar` con la credencial `sonar-token` y el servidor `SonarQube` declarados por JCasC. Después, `waitForQualityGate abortPipeline: true` espera el resultado con un timeout de 10 minutos. Si el gate falla, no se publican imágenes.
+En el carril de cada servicio, `Sonar <servicio>` se ejecuta después de las pruebas y antes de empaquetar o publicar la imagen. `sonarScan` corre `:services:<servicio>:sonar` con la credencial `sonar-token` y el servidor `SonarQube` declarados por JCasC, y con `-Dsonar.qualitygate.wait=true`: el propio scanner espera el resultado del gate (hasta 10 minutos) y falla si está en rojo. Se usa en lugar de `waitForQualityGate` porque ese paso toma el último análisis del build, y con carriles en paralelo podría leer el de otro servicio. Si el gate falla, la imagen de ese servicio no se empaqueta ni se publica.
 
 Cada servicio tiene su propio proyecto (`circleguard-<servicio>`) y `build.gradle.kts` envía a SonarQube los reportes JUnit y el XML de JaCoCo. El gate `CircleGuard Gate` se crea y se marca como predeterminado desde `bootstrap-sonarqube.sh`, que también registra el webhook `Jenkins` hacia `http://jenkins:8080/sonarqube-webhook/`.
 
@@ -178,7 +179,39 @@ Para los RC, `Deploy RC to stage` despliega la imagen preliminar en stage antes 
 
 Desde la HU-34 todos los despliegues usan `deployK8s`: `helm upgrade --install --atomic --wait` del chart `deploy/k8s/circleguard` en el clúster k3s del ambiente, y después `k8sSmokeTest` por el Ingress. Las E2E corren contra `K8S_HOST_<ENV>`. Si un rollout no termina en 10 minutos, Helm restaura la revisión anterior, la etapa falla y `post { failure }` avisa a Discord.
 
-Jenkins tiene un solo ejecutor: mientras el `input` espera aprobación, los demás builds quedan en cola. El timeout global del pipeline sigue en 60 minutos y el `input` tiene un límite de 15.
+Mientras el `input` espera aprobación ocupa un ejecutor del controlador, que tiene 4; los demás builds siguen. El timeout global del pipeline sigue en 60 minutos y el `input` tiene un límite de 15.
+
+## Terraform en el pipeline (HU-32)
+
+Cuando `detectChangedServices` detecta cambios bajo `infra/terraform/` (y no solo documentación):
+
+- **PR:** `Terraform plan (PR)` ejecuta `terraform plan` para `dev`, `stage` y `prod`; el resultado queda en el log del build. No aplica nada.
+- **Merge a `main`:** `Terraform plan (main)` genera los tres planes; `Terraform apply dev` y `Terraform apply stage` aplican solo si el plan tiene cambios.
+- **Producción:** `Approve Terraform prod` es un `input` de 15 minutos que solo `admin` puede aprobar; después, `Terraform apply prod` aplica el plan guardado.
+- Si un ambiente no tiene cambios, el `apply` de ese ambiente se omite.
+- El `.tfplan` se aplica tal cual. Si el state cambió entre el plan y el apply, Terraform falla con `Saved plan is stale` y no aplica algo distinto a lo revisado.
+- El `.tfplan` no se archiva como artefacto porque puede contener valores sensibles; viaja por `stash`/`unstash` dentro del mismo build.
+- La detección usa el diff del PR o `HEAD^1` en `main`, no el fallback de "todos los servicios": un merge solo ve los archivos de `infra/terraform/` que trajo su PR. Los `.md` no cuentan.
+
+Credenciales de Jenkins que usa (ver `casc.yaml`):
+
+| Credencial | Uso |
+|:---|:---|
+| `aws-terraform` | Archivo de credenciales AWS del usuario que aplica la infraestructura. |
+| `prometheus-ssh-key` | Llave privada para el provisioner de observability. |
+| `prometheus-grafana-password` | Contraseña de Grafana del release de observability. |
+
+El paso usa `K8S_HOST_<AMBIENTE>` como `TF_VAR_prometheus_ssh_host`. Debe ser la **IP privada** del nodo: el Security Group solo abre el puerto 22 desde la IP privada de Jenkins.
+
+Carga manual en el host de CI (una vez, o al rotar credenciales):
+
+```bash
+sudo ./infra/bootstrap/load-terraform-credential.sh aws    < ~/.aws/credentials-terraform
+sudo ./infra/bootstrap/load-terraform-credential.sh ssh    < ~/.ssh/circleguard-admin-key
+sudo ./infra/bootstrap/load-terraform-credential.sh grafana < ~/grafana-admin-password.txt
+```
+
+Cada comando escribe el archivo en `infra/compose/ci/secrets/` y recarga JCasC. El usuario AWS necesita permisos sobre el bucket/tabla del state y sobre los recursos del proyecto (EC2, ECR, S3, CloudWatch, SNS, SSM). El usuario `circleguard-terraform-ci` ya los tiene.
 
 ## Rollback (HU-17, HU-52)
 
@@ -323,3 +356,38 @@ gh api repos/ingesoft5/circle-guard-pepitosV/branches/main/protection
 ## Seguridad
 
 Montar el socket de Docker da privilegios altos al contenedor de Jenkins. Es una decisión consciente para ejecutar Testcontainers y las etapas de empaquetado; el host CI es de un solo equipo y no se expone como servicio multiusuario. No se almacenan tokens en el repositorio ni en las imágenes.
+
+## Controlador y workers
+
+Jenkins sigue el patrón controlador y workers, con tres máquinas `m7i-flex.large` (2 vCPU y 8 GB, el máximo del plan gratuito):
+
+| Máquina | Nodo en Jenkins | Etiqueta | Ejecutores | Qué corre |
+|:---|:---|:---|:---|:---|
+| `circleguard-ci` | Built-In Node | `controller` | 4 | Orquestación: checkout, escaneos, Terraform, despliegues, E2E y aprobaciones. Un ejecutor por build en curso. |
+| `circleguard-ci-agent-1` | `ci-agent-1` | `worker` | 2 | Carriles de `Build, test and package` |
+| `circleguard-ci-agent-2` | `ci-agent-2` | `worker` | 2 | Carriles de `Build, test and package` |
+
+SonarQube y Nexus siguen en `circleguard-tools`.
+
+- **Un build:** sus carriles (8 servicios, el cliente web y las pruebas de integración) se reparten entre los 4 ejecutores de los workers. Antes corrían en lotes de 3 en una sola máquina, con Sonar en serie después.
+- **Orden de la cola:** los carriles más largos piden worker primero (integración, cliente web, promotion, identity, notification…), para que un carril largo no arranque al final y alargue el build.
+- **Daemon de Gradle:** los workers reutilizan un daemon por ejecutor en lugar de arrancar una JVM en cada llamada (cada carril hace tres). Los helpers usan `JENKINS_NODE_COOKIE=dontKillMe` para que Jenkins no lo mate al terminar el paso, y `gradle.properties` lo apaga tras 30 minutos sin uso.
+- **Caché de Gradle compartida:** el servicio `gradle-cache` (Gradle Build Cache Node, en el host de CI, puerto 5071 solo dentro de `circleguard-ci-sg`) guarda compilaciones y resultados de pruebas. Jenkins publica `GRADLE_BUILD_CACHE_URL` en todos los nodos y `settings.gradle.kts` lo usa como caché remota: lo que compiló o probó un worker lo reutiliza el otro. Solo Jenkins escribe; en un equipo de desarrollo, sin la variable, Gradle usa solo su caché local. Guarda hasta 4 GB y descarta lo menos usado.
+- **Dos a cuatro builds:** cada uno ocupa un ejecutor del controlador y sus carriles se turnan en los workers. Ningún build espera a otro para empezar.
+- Los workers son `EXCLUSIVE`: solo reciben trabajo que pide la etiqueta `worker`. Cada carril hace su propio checkout y no mueve JAR entre máquinas.
+- Los despliegues y Terraform se quedan en el controlador, que es la única IP admitida por los clústeres k3s.
+
+Cada worker usa la misma imagen que el controlador (`infra/compose/ci/jenkins/Dockerfile`), iniciada como agente WebSocket por `infra/compose/ci-agent/docker-compose.yml`. Usa el Docker de su host, confía en Nexus como registro y guarda las dependencias de Gradle en su propio volumen. Para crear o recrear un worker:
+
+```bash
+# 1. Instancia (idempotente; CI_AGENT_COUNT define cuántos workers)
+CI_AGENT_COUNT=2 ADMIN_CIDR=<ip>/32 CI_SUBNET_ID=<subred> CI_KEY_NAME=<llave> \
+  infra/cloud/aws/provision-ci-hosts.sh
+# 2. En el worker, con el secreto del nodo (Manage Jenkins > Nodes > ci-agent-<n>)
+sudo JENKINS_URL=http://<ip-privada-ci>:8080/ JENKINS_AGENT_NAME=ci-agent-<n> \
+  NEXUS_REGISTRY=<ip-privada-tools>:5000 JENKINS_AGENT_SECRET=<secreto> \
+  infra/bootstrap/bootstrap-ci-agent.sh
+```
+
+Los nodos están declarados en `casc.yaml`. `hosts.sh start ci` y `hosts.sh stop ci` encienden y apagan también los workers.
+

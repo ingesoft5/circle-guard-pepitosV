@@ -74,6 +74,17 @@ alertmanager:
       traefik.ingress.kubernetes.io/router.middlewares: monitoring-basic-auth@kubernetescrd
   alertmanagerSpec:
     routePrefix: /alertmanager
+    # Notifications (HU-41): the whole Alertmanager configuration comes from the
+    # AlertmanagerConfig in observability/alerts/alertmanager-config.yaml, which reads the
+    # Discord webhook from a Secret. This operator version rejects webhook_url_file in a plain
+    # alertmanager.config, so the routing lives there instead of in this file.
+    alertmanagerConfiguration:
+      name: circleguard
+    # The chart defaults to {} (every AlertmanagerConfig), which would load circleguard a second
+    # time as a per-namespace config. No object carries this label, so none is merged.
+    alertmanagerConfigSelector:
+      matchLabels:
+        circleguard.io/alertmanager-config: per-namespace
     resources:
       requests:
         cpu: 50m

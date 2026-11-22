@@ -11,8 +11,19 @@ observability/
 │   └── values.yaml     # valores base de kube-prometheus-stack (HU-26)
 ├── ingress/
 │   └── basic-auth-middleware.yaml  # BasicAuth de Prometheus y Alertmanager
-├── grafana/            # dashboards JSON versionados y aprovisionados (HU-40)
-└── alerts/             # reglas de Alertmanager (HU-41)
+├── loki/
+│   └── values.yaml     # Loki de un solo binario
+├── promtail/
+│   └── values.yaml     # envío de logs de los pods a Loki
+├── grafana/
+│   ├── datasources.yaml            # Loki y el enlace de una línea al trace de Jaeger
+│   ├── kustomization.yaml          # dashboards (HU-40): un ConfigMap por dashboard en monitoring
+│   ├── format_dashboard.py         # deja un panel por línea antes del commit
+│   └── dashboards/                 # JSON: Servicios y Negocio
+└── alerts/             # alertas como código (HU-41)
+    ├── kustomization.yaml          # aplica reglas y ruteo en monitoring
+    ├── circleguard-rules.yaml      # ServiceDown, HighErrorRate y HighLatencyP95
+    └── alertmanager-config.yaml    # ruta y receptor de Discord de Alertmanager
 ```
 
 ## Qué instala HU-26
@@ -20,19 +31,13 @@ observability/
 `kube-prometheus-stack` en el namespace `monitoring` de cada ambiente:
 Prometheus, Grafana, Alertmanager, node-exporter y kube-state-metrics. Los
 paneles y las reglas de alerta quedan vacíos a propósito para que HU-40 y
-HU-41 los agreguen como código.
+HU-41 los agreguen como código. El mismo módulo instala Loki y Promtail y
+aplica el datasource que abre el `traceId` de una línea en Jaeger.
 
 Grafana se publica en `http://<ip>/grafana` con su login. Prometheus y
 Alertmanager se publican en `/prometheus` y `/alertmanager` detrás del middleware
 `monitoring-basic-auth`; el secreto se crea fuera de Git con
 `infra/bootstrap/load-monitoring-auth.sh`. El TLS es HU-47.
-
-## Qué queda para HU-39, HU-40 y HU-41
-
-- **HU-39:** dependencia `micrometer-registry-prometheus` en los 8 servicios,
-  endpoint `/actuator/prometheus`, contadores de negocio y ServiceMonitors.
-- **HU-40:** dashboards JSON en `observability/grafana/` y su ConfigMap.
-- **HU-41:** reglas en `observability/alerts/` y la notificación de Alertmanager.
 
 La guía de operación y verificación está en
 [`docs/operaciones/observability.md`](../docs/operaciones/observability.md).

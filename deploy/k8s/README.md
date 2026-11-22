@@ -16,6 +16,7 @@ deploy/k8s/
 │   └── templates/
 │       ├── workloads.yaml     # ConfigMap + Deployment/StatefulSet + Service por componente
 │       ├── hpa.yaml
+│       ├── servicemonitor.yaml  # scraping de /actuator/prometheus (HU-39)
 │       ├── ingress.yaml
 │       └── rbac.yaml          # deployer y viewer del namespace
 └── scripts/
@@ -43,7 +44,9 @@ deploy/k8s/
   LDAP, CORS, grupos de salud). Un cambio en el ConfigMap reinicia los pods del componente
   (anotación `checksum/config`).
 - **Secret `circleguard-secrets`:** credenciales de bases de datos, LDAP, JWT, QR y la bóveda.
-  El chart solo lo referencia. Lo crea `scripts/apply-secrets.sh`:
+  El chart solo lo referencia. `scripts/apply-secrets.sh` genera el archivo local y entrega al
+  clúster un SealedSecret. El controller de Sealed Secrets, en `kube-system`, es quien crea el
+  Secret. El texto plano no entra al repositorio ni al chart:
 
   ```bash
   export KUBECONFIG=<kubeconfig del clúster>
@@ -81,6 +84,10 @@ chart crea un ServiceMonitor, `circleguard-services`, que lee `/actuator/prometh
 El ServiceMonitor solo se crea si el clúster tiene las CRD del Prometheus Operator (namespace
 `monitoring`, instalado por `infra/terraform/modules/observability`). En un clúster sin monitoreo
 el chart se instala igual, sin ese recurso, y lo crea en el siguiente despliegue.
+
+Con `helm template`, agrega `--api-versions monitoring.coreos.com/v1/ServiceMonitor` o el recurso
+no se genera. Las métricas, sus etiquetas y cómo verificarlas están en
+[`docs/operaciones/observability.md`](../../docs/operaciones/observability.md#métricas-de-los-servicios-hu-39).
 
 ## Desplegar a mano
 
