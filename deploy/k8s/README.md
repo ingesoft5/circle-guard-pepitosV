@@ -41,7 +41,9 @@ deploy/k8s/
   LDAP, CORS, grupos de salud). Un cambio en el ConfigMap reinicia los pods del componente
   (anotación `checksum/config`).
 - **Secret `circleguard-secrets`:** credenciales de bases de datos, LDAP, JWT, QR y la bóveda.
-  El chart solo lo referencia. Lo crea `scripts/apply-secrets.sh`:
+  El chart solo lo referencia. `scripts/apply-secrets.sh` genera el archivo local y entrega al
+  clúster un SealedSecret. El controller de Sealed Secrets, en `kube-system`, es quien crea el
+  Secret. El texto plano no entra al repositorio ni al chart:
 
   ```bash
   export KUBECONFIG=<kubeconfig del clúster>
