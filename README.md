@@ -18,6 +18,9 @@ To provision Jenkins, SonarQube, the Nexus registry and the three environments f
 | Part 1 Report (PDF) | [reporte_suarez_ocampo_chicue_barrionuevo.pdf](reporte_suarez_ocampo_chicue_barrionuevo.pdf) |
 | Generative AI Usage Log | [IAG_REGISTRO.md](IAG_REGISTRO.md) |
 | Operational README | [docs/operaciones/README.md](docs/operaciones/README.md) |
+| Operations manual | [docs/operaciones/manual.md](docs/operaciones/manual.md) |
+| Infrastructure costs | [docs/costos/README.md](docs/costos/README.md) |
+| Executive summary (English) | [docs/executive-summary.md](docs/executive-summary.md) |
 | Sprints 0 and 1 | [docs/agil/sprints-0-y-1.md](docs/agil/sprints-0-y-1.md) |
 | Architecture and Pipeline Diagrams | [docs/arquitectura/](docs/arquitectura/) |
 | Jira Board | <https://circleguard.atlassian.net> (`CGR` project) |
