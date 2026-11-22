@@ -4,7 +4,7 @@ plugins {
     id("org.sonarqube") version "5.1.0.4882" apply false
     kotlin("jvm") version "1.9.25" apply false
     kotlin("plugin.spring") version "1.9.25" apply false
-    kotlin("plugin.jpa") version "1.9.25" apply false
+    kotlin("plugin.jpa") version "2.4.21" apply false
 }
 
 val coverageGatedServices = setOf(
