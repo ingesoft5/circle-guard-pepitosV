@@ -40,6 +40,8 @@ def call(Map config = [:]) {
                 "PLAN_FILE=${planFile}"
             ]) {
                 sh '''
+                    # No shell trace: it would print the key read below in the build log.
+                    set +x
                     set -euo pipefail
                     export TF_VAR_prometheus_ssh_host="$PROMETHEUS_SSH_HOST"
                     export TF_VAR_prometheus_ssh_private_key="$(cat "$PROMETHEUS_SSH_KEY_FILE")"
