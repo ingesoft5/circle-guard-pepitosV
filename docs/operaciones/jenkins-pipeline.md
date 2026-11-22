@@ -24,7 +24,7 @@ Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`), 
 - Cuando un build falla o queda inestable, `notifyDiscord` envía un mensaje al canal de Discord con rama, servicio, etapa, autor y enlace al build. Si el build siguiente se recupera, envía un mensaje de recuperación.
 - La librería se carga desde `jenkins/vars/` usando `libraryPath: "jenkins"`, en la versión de la misma rama que se está construyendo.
 - Jenkins publica el resultado como estado de commit en GitHub. Para builds de PR el contexto es `continuous-integration/jenkins/pr-merge`.
-- Una rama con un PR abierto se construye solo como `PR-<n>` (fusionada con su base) y no también como rama (`buildOriginBranchWithPR(false)`), porque Jenkins tiene un solo ejecutor. Las ramas sin PR, `dev` y `main` se siguen construyendo en cada push.
+- Una rama con un PR abierto se construye solo como `PR-<n>` (fusionada con su base) y no también como rama (`buildOriginBranchWithPR(false)`), para no construir dos veces el mismo cambio. Las ramas sin PR, `dev` y `main` se siguen construyendo en cada push.
 - El contenedor de Jenkins monta `/var/run/docker.sock` para que las pruebas con Testcontainers puedan iniciar contenedores y para el empaquetado posterior.
 
 ## Configuración que vive en el repositorio
@@ -178,7 +178,7 @@ Para los RC, `Deploy RC to stage` despliega la imagen preliminar en stage antes 
 
 Desde la HU-34 todos los despliegues usan `deployK8s`: `helm upgrade --install --atomic --wait` del chart `deploy/k8s/circleguard` en el clúster k3s del ambiente, y después `k8sSmokeTest` por el Ingress. Las E2E corren contra `K8S_HOST_<ENV>`. Si un rollout no termina en 10 minutos, Helm restaura la revisión anterior, la etapa falla y `post { failure }` avisa a Discord.
 
-Jenkins tiene un solo ejecutor: mientras el `input` espera aprobación, los demás builds quedan en cola. El timeout global del pipeline sigue en 60 minutos y el `input` tiene un límite de 15.
+Jenkins tiene dos ejecutores: mientras el `input` espera aprobación ocupa uno, y los demás builds usan el otro. El timeout global del pipeline sigue en 60 minutos y el `input` tiene un límite de 15.
 
 ## Terraform en el pipeline (HU-32)
 
