@@ -50,11 +50,12 @@ rollback and secret rotation.
 ## Cost
 
 A full month of on-demand list pricing for the running infrastructure is estimated at about
-**$390 USD** (five instances, 260 GB EBS, public IPv4, logs and supporting services). The
-actual usage from November 1–22, 2026 was **$59.72**, fully covered by **$59.72 in credits**, for
-a net of approximately **$0**. The difference comes from the partial period, stopped legacy
-hosts, empty image/S3 storage and account credits. The environments remain active for the
-evaluation; the remaining costs and the future teardown procedure are documented separately.
+**$549 USD** (seven running instances, 400 GB EBS, public IPv4, logs and supporting services).
+The actual usage from November 1–22, 2026 was **$59.72**, fully covered by **$59.72 in
+credits**, for a net of approximately **$0**. The difference comes from the partial period,
+the two Jenkins build workers added near the end of that period, stopped legacy hosts, empty
+image/S3 storage and account credits. The environments remain active for the evaluation; the
+remaining costs and the future teardown procedure are documented separately.
 
 ## Limitations and next steps
 

@@ -8,18 +8,19 @@ Documentación de la estimación y del costo real de la infraestructura del proy
 
 | Concepto | Valor |
 |:---|:---|
-| Estimación on-demand (5 instancias encendidas 24/7, 260 GB EBS, IPv4, servicios) | **≈ $390.90 USD/mes** |
+| Estimación on-demand (7 instancias encendidas 24/7, 400 GB EBS, IPv4, servicios) | **≈ $549.21 USD/mes** |
 | Uso real en Cost Explorer, 1–22 de noviembre de 2026 | **$59.72 USD** |
 | Créditos aplicados en el periodo | **−$59.72 USD** |
 | Neto del periodo | **≈ $0 USD** |
-| Instancias encendidas | 5 (`ci`, `tools`, `k3s-dev`, `k3s-stage`, `k3s-prod`) |
+| Instancias encendidas | 7 (`ci`, `ci-agent-1`, `ci-agent-2`, `tools`, `k3s-dev`, `k3s-stage`, `k3s-prod`) |
 | Hosts legacy detenidos | 3 (`dev`, `stage`, `prod` de la Parte 1) |
-| Volúmenes EBS | 8, 260 GB gp3 en total |
+| Volúmenes EBS | 11, 400 GB gp3 en total (380 GB de CircleGuard + 20 GB de `citypulse`) |
 
 La estimación es una referencia de precio de lista para un mes completo. El costo real
 depende del periodo parcial, de las instancias que estuvieron detenidas, de los descuentos y
-de los créditos de la cuenta. La explicación completa está en
-[`costos-reales.md`](costos-reales.md).
+de los créditos de la cuenta. Los dos build workers de Jenkins se agregaron el 22 de
+noviembre, por lo que el periodo real 1–22 no los cubre completos. La explicación completa
+está en [`costos-reales.md`](costos-reales.md).
 
 ## Documentos
 
