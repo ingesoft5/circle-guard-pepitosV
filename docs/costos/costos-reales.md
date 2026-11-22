@@ -42,7 +42,7 @@ Cost Explorer por tipo de cargo: **Usage $59.72**, **Credit −$59.72**, **Tax $
 ## Por qué la factura no coincide con la estimación
 
 La estimación de [`estimacion.md`](estimacion.md) es un mes completo de precio de lista
-on-demand (≈ $390), mientras que el periodo real tiene:
+on-demand (≈ $549.21), mientras que el periodo real tiene:
 
 1. **Periodo parcial:** los datos cubren 22 días, no el mes completo.
 2. **Nodos k3s creados el 15 de noviembre:** solo facturan desde esa fecha.
@@ -51,8 +51,10 @@ on-demand (≈ $390), mientras que el periodo real tiene:
 4. **Créditos de la cuenta:** los $59.72 de uso están cubiertos por créditos.
 5. **Recursos vacíos:** ECR no tiene imágenes y los buckets de archivos están vacíos, así que
    el costo variable es casi nulo.
-6. **Descuentos/free tier:** el precio efectivo puede ser menor que el precio de lista.
-7. **Transferencia y logs:** la estimación usa supuestos; la factura refleja el uso real.
+6. **Build workers nuevos:** los dos workers de Jenkins se agregaron el 22 de noviembre; el
+   periodo 1–22 no los cubre completos, así que la próxima factura reflejará su costo.
+7. **Descuentos/free tier:** el precio efectivo puede ser menor que el precio de lista.
+8. **Transferencia y logs:** la estimación usa supuestos; la factura refleja el uso real.
 
 ## Cómo reproducir los datos
 
