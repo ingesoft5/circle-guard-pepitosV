@@ -1,0 +1,93 @@
+[
+  {
+    "annotations": {
+      "description": "El percentil 95 de las respuestas HTTP es 1.815s desde hace 5 minutos (umbral 1 s). Suele venir de una dependencia lenta: base de datos, Neo4j, Redis o Kafka.",
+      "summary": "promotion está lento en circleguard-stage"
+    },
+    "endsAt": "2026-11-22T23:38:11.019Z",
+    "receivers": [
+      {
+        "name": "monitoring/circleguard/discord"
+      }
+    ],
+    "startsAt": "2026-11-22T23:34:11.019Z",
+    "status": {
+      "inhibitedBy": [
+        "b908899b469f9471"
+      ],
+      "silencedBy": [],
+      "state": "suppressed"
+    },
+    "updatedAt": "2026-11-22T23:34:11.022Z",
+    "labels": {
+      "alertname": "HighLatencyP95",
+      "environment": "stage",
+      "namespace": "circleguard-stage",
+      "project": "circleguard",
+      "prometheus": "monitoring/kube-prometheus-stack-prometheus",
+      "service": "promotion",
+      "severity": "warning"
+    }
+  },
+  {
+    "annotations": {
+      "description": "100% de las respuestas de los últimos 5 minutos son 5xx (umbral 5 %). Revisa los logs del servicio en Grafana (Loki).",
+      "summary": "promotion responde con errores 5xx en circleguard-stage"
+    },
+    "endsAt": "2026-11-22T23:38:11.019Z",
+    "receivers": [
+      {
+        "name": "monitoring/circleguard/discord"
+      }
+    ],
+    "startsAt": "2026-11-22T23:31:11.019Z",
+    "status": {
+      "inhibitedBy": [],
+      "silencedBy": [],
+      "state": "active"
+    },
+    "updatedAt": "2026-11-22T23:34:11.022Z",
+    "labels": {
+      "alertname": "HighErrorRate",
+      "environment": "stage",
+      "namespace": "circleguard-stage",
+      "project": "circleguard",
+      "prometheus": "monitoring/kube-prometheus-stack-prometheus",
+      "service": "promotion",
+      "severity": "critical"
+    }
+  },
+  {
+    "annotations": {
+      "description": "Prometheus no puede leer /actuator/prometheus del pod file-6c89df674c-2vzjk desde hace más de 1 minuto. Revisa el pod con kubectl -n circleguard-stage describe pod file-6c89df674c-2vzjk.",
+      "summary": "file no responde en circleguard-stage"
+    },
+    "endsAt": "2026-11-22T23:38:36.030Z",
+    "receivers": [
+      {
+        "name": "monitoring/circleguard/discord"
+      }
+    ],
+    "startsAt": "2026-11-22T23:30:06.030Z",
+    "status": {
+      "inhibitedBy": [],
+      "silencedBy": [],
+      "state": "active"
+    },
+    "updatedAt": "2026-11-22T23:34:36.032Z",
+    "labels": {
+      "alertname": "ServiceDown",
+      "container": "file",
+      "endpoint": "http",
+      "environment": "stage",
+      "instance": "10.42.0.105:8085",
+      "job": "file",
+      "namespace": "circleguard-stage",
+      "pod": "file-6c89df674c-2vzjk",
+      "project": "circleguard",
+      "prometheus": "monitoring/kube-prometheus-stack-prometheus",
+      "service": "file",
+      "severity": "critical"
+    }
+  }
+]

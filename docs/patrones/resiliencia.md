@@ -30,3 +30,21 @@ También se puede consultar el propio servicio:
 La prueba `RedisHealthCircuitBreakerTest` tumba Redis con un doble, comprueba que el circuito abre y que la llamada siguiente no toca Redis, espera el tiempo configurado y comprueba que una lectura correcta lo cierra. El medidor `resilience4j.circuitbreaker.state` pasa de `open` a `closed`.
 
 El panel `CircleGuard redisHealth circuit` muestra si el circuito está abierto y la tasa de fallo.
+
+## Prueba con la falla inyectada en stage
+
+El 22 de noviembre de 2026 se apagó Redis en stage con tráfico real de check-ins
+([evidencia](../operaciones/evidencias/hu-41/README.md)). El primer intento mostró dos fallas que
+la prueba unitaria no podía ver:
+
+- **Sin timeout hacia Redis.** Lettuce espera hasta 60 s por comando, así que cada check-in retenía
+  un hilo un minuto y el pod dejaba de responder antes de que el circuito abriera. Se fijaron
+  `spring.data.redis.timeout` y `connect-timeout` en 500 ms: el circuito solo protege si la llamada
+  falla rápido.
+- **Readiness atada a Redis.** Con `redis` en el grupo de readiness, Kubernetes sacaba al gateway
+  del Service y los usuarios recibían `502` en lugar de la respuesta del circuito. El gateway quedó
+  con `readinessState`; la caída de Redis la maneja el circuito.
+
+Con los dos cambios, el gateway respondió en unos 0,2 s con `Access Denied: Health status
+unavailable`, el circuito abrió, la alerta `CircuitBreakerOpen` llegó a Discord y, al volver Redis,
+el circuito cerró solo.
