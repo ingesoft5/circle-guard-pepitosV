@@ -178,6 +178,8 @@ main() {
   # The agents share circleguard-ci-sg, so they reach SonarQube and Nexus like Jenkins does, and
   # connect to the controller (WebSocket on 8080) through this self reference.
   ensure_rule "${ci_sg}" 8080 --source-group "${ci_sg}"
+  # Gradle build cache node on the CI host, shared by the workers.
+  ensure_rule "${ci_sg}" 5071 --source-group "${ci_sg}"
 
   ci_id="$(ensure_instance "${CI_INSTANCE_NAME}" "${ami}" "${ci_sg}")"
   [[ "${ci_id}" == i-* ]] || die "No se pudo crear la instancia ${CI_INSTANCE_NAME}"

@@ -69,6 +69,9 @@ jenkins:
           # Registry HTTP API (promoteRelease, rollback): http://nexus:5000 or the tools host
           - key: "NEXUS_REGISTRY_API"
             value: "${NEXUS_REGISTRY_API:-http://nexus:5000}"
+          # Gradle build cache node on the CI host (settings.gradle.kts), for every node
+          - key: "GRADLE_BUILD_CACHE_URL"
+            value: "${GRADLE_BUILD_CACHE_URL:-}"
           # Private IP of each environment host, used by the deployCompose step
           - key: "DEPLOY_HOST_DEV"
             value: "${DEPLOY_HOST_DEV:-}"
