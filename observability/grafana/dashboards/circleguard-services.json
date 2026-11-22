@@ -1,0 +1,106 @@
+{
+  "uid": "circleguard-services",
+  "title": "CircleGuard · Servicios",
+  "description": "RED, pods y JVM de los 8 servicios. Filtra por ambiente y servicio (HU-40).",
+  "tags": [
+    "circleguard",
+    "hu-40"
+  ],
+  "timezone": "browser",
+  "editable": true,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "label": "Datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0,
+        "refresh": 1,
+        "regex": "",
+        "options": []
+      },
+      {
+        "name": "namespace",
+        "label": "Ambiente",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "query": {
+          "query": "label_values(http_server_requests_seconds_count, namespace)",
+          "refId": "namespace"
+        },
+        "definition": "label_values(http_server_requests_seconds_count, namespace)",
+        "refresh": 2,
+        "sort": 1,
+        "hide": 0,
+        "current": {},
+        "options": [],
+        "regex": ""
+      },
+      {
+        "name": "service",
+        "label": "Servicio",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "query": {
+          "query": "label_values(http_server_requests_seconds_count{namespace=\"$namespace\"}, service)",
+          "refId": "service"
+        },
+        "definition": "label_values(http_server_requests_seconds_count{namespace=\"$namespace\"}, service)",
+        "refresh": 2,
+        "sort": 1,
+        "hide": 0,
+        "current": {},
+        "options": [],
+        "regex": "",
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".+"
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "links": [],
+  "panels": [
+    {"id": 1, "type": "row", "title": "Resumen", "collapsed": false, "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0}, "panels": []},
+    {"type": "stat", "title": "Targets arriba", "description": "Pods que Prometheus logra leer sobre los esperados.", "targets": [{"refId": "A", "expr": "sum(up{namespace=\"$namespace\", service=~\"$service\"}) / count(up{namespace=\"$namespace\", service=~\"$service\"})", "datasource": {"type": "prometheus", "uid": "${datasource}"}}], "fieldConfig": {"defaults": {"unit": "percentunit", "decimals": 0, "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "orange", "value": 0.9}, {"color": "green", "value": 1}]}, "color": {"mode": "thresholds"}}, "overrides": []}, "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}}, "id": 2, "gridPos": {"h": 4, "w": 6, "x": 0, "y": 1}, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
+    {"type": "stat", "title": "Solicitudes por segundo", "description": "Sin contar /actuator (sondas y scraping).", "targets": [{"refId": "A", "expr": "sum(rate(http_server_requests_seconds_count{namespace=\"$namespace\", service=~\"$service\", uri!~\"/actuator.*\"}[$__rate_interval]))", "datasource": {"type": "prometheus", "uid": "${datasource}"}}], "fieldConfig": {"defaults": {"unit": "reqps", "decimals": 2}, "overrides": []}, "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}}, "id": 3, "gridPos": {"h": 4, "w": 6, "x": 6, "y": 1}, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
+    {"type": "stat", "title": "Errores 5xx", "description": "Porcentaje de respuestas con error del servidor.", "targets": [{"refId": "A", "expr": "sum(rate(http_server_requests_seconds_count{namespace=\"$namespace\", service=~\"$service\", uri!~\"/actuator.*\", outcome=\"SERVER_ERROR\"}[$__rate_interval])) / sum(rate(http_server_requests_seconds_count{namespace=\"$namespace\", service=~\"$service\", uri!~\"/actuator.*\"}[$__rate_interval]))", "datasource": {"type": "prometheus", "uid": "${datasource}"}}], "fieldConfig": {"defaults": {"unit": "percentunit", "decimals": 2, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 0.01}, {"color": "red", "value": 0.05}]}, "color": {"mode": "thresholds"}}, "overrides": []}, "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}}, "id": 4, "gridPos": {"h": 4, "w": 6, "x": 12, "y": 1}, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
+    {"type": "stat", "title": "Latencia p95", "description": "Percentil 95 del tiempo de respuesta HTTP, todos los servicios elegidos.", "targets": [{"refId": "A", "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{namespace=\"$namespace\", service=~\"$service\", uri!~\"/actuator.*\"}[$__rate_interval])))", "datasource": {"type": "prometheus", "uid": "${datasource}"}}], "fieldConfig": {"defaults": {"unit": "s", "decimals": 3, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 0.5}, {"color": "red", "value": 1}]}, "color": {"mode": "thresholds"}}, "overrides": []}, "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}}, "id": 5, "gridPos": {"h": 4, "w": 6, "x": 18, "y": 1}, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
+    {"id": 6, "type": "row", "title": "Tráfico HTTP", "collapsed": false, "gridPos": {"h": 1, "w": 24, "x": 0, "y": 5}, "panels": []},
+    {"type": "timeseries", "title": "Tasa de solicitudes", "description": "Solicitudes por segundo de cada servicio, sin /actuator.", "targets": [{"refId": "A", "expr": "sum by (service) (rate(http_server_requests_seconds_count{namespace=\"$namespace\", service=~\"$service\", uri!~\"/actuator.*\"}[$__rate_interval]))", "datasource": {"type": "prometheus", "uid": "${datasource}"}, "legendFormat": "{{service}}"}], "fieldConfig": {"defaults": {"unit": "reqps", "custom": {"drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false, "axisLabel": "", "stacking": {"mode": "none", "group": "A"}}, "min": 0}, "overrides": []}, "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}, "id": 7, "gridPos": {"h": 8, "w": 12, "x": 0, "y": 6}, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
+    {"type": "timeseries", "title": "Respuestas por resultado", "description": "Solicitudes por segundo según el resultado (2xx, 4xx, 5xx...).", "targets": [{"refId": "A", "expr": "sum by (outcome) (rate(http_server_requests_seconds_count{namespace=\"$namespace\", service=~\"$service\", uri!~\"/actuator.*\"}[$__rate_interval]))", "datasource": {"type": "prometheus", "uid": "${datasource}"}, "legendFormat": "{{outcome}}"}], "fieldConfig": {"defaults": {"unit": "reqps", "custom": {"drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false, "axisLabel": "", "stacking": {"mode": "normal", "group": "A"}}, "min": 0}, "overrides": []}, "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}, "id": 8, "gridPos": {"h": 8, "w": 12, "x": 12, "y": 6}, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
+    {"type": "timeseries", "title": "Tasa de errores 5xx", "description": "Porcentaje de respuestas 5xx de cada servicio.", "targets": [{"refId": "A", "expr": "sum by (service) (rate(http_server_requests_seconds_count{namespace=\"$namespace\", service=~\"$service\", uri!~\"/actuator.*\", outcome=\"SERVER_ERROR\"}[$__rate_interval])) / sum by (service) (rate(http_server_requests_seconds_count{namespace=\"$namespace\", service=~\"$service\", uri!~\"/actuator.*\"}[$__rate_interval]))", "datasource": {"type": "prometheus", "uid": "${datasource}"}, "legendFormat": "{{service}}"}], "fieldConfig": {"defaults": {"unit": "percentunit", "custom": {"drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false, "axisLabel": "", "stacking": {"mode": "none", "group": "A"}, "thresholdsStyle": {"mode": "line+area"}}, "min": 0, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 0.05}]}}, "overrides": []}, "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}, "id": 9, "gridPos": {"h": 8, "w": 12, "x": 0, "y": 14}, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
+    {"type": "timeseries", "title": "Latencia p95", "description": "Percentil 95 por servicio. Calculado con los buckets de 25 ms a 5 s.", "targets": [{"refId": "A", "expr": "histogram_quantile(0.95, sum by (service, le) (rate(http_server_requests_seconds_bucket{namespace=\"$namespace\", service=~\"$service\", uri!~\"/actuator.*\"}[$__rate_interval])))", "datasource": {"type": "prometheus", "uid": "${datasource}"}, "legendFormat": "{{service}}"}], "fieldConfig": {"defaults": {"unit": "s", "custom": {"drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false, "axisLabel": "", "stacking": {"mode": "none", "group": "A"}, "thresholdsStyle": {"mode": "line+area"}}, "min": 0, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}}, "overrides": []}, "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}, "id": 10, "gridPos": {"h": 8, "w": 12, "x": 12, "y": 14}, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
+    {"type": "timeseries", "title": "Latencia p95 por endpoint", "description": "Los endpoints más lentos de los servicios elegidos.", "targets": [{"refId": "A", "expr": "topk(10, histogram_quantile(0.95, sum by (service, method, uri, le) (rate(http_server_requests_seconds_bucket{namespace=\"$namespace\", service=~\"$service\", uri!~\"/actuator.*\"}[$__rate_interval]))))", "datasource": {"type": "prometheus", "uid": "${datasource}"}, "legendFormat": "{{service}} {{method}} {{uri}}"}], "fieldConfig": {"defaults": {"unit": "s", "custom": {"drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false, "axisLabel": "", "stacking": {"mode": "none", "group": "A"}}, "min": 0}, "overrides": []}, "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}, "id": 11, "gridPos": {"h": 8, "w": 24, "x": 0, "y": 22}, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
+    {"id": 12, "type": "row", "title": "Pods", "collapsed": false, "gridPos": {"h": 1, "w": 24, "x": 0, "y": 30}, "panels": []},
+    {"type": "timeseries", "title": "CPU", "description": "Núcleos usados por los contenedores de cada servicio.", "targets": [{"refId": "A", "expr": "sum by (container) (rate(container_cpu_usage_seconds_total{namespace=\"$namespace\", container=~\"$service\"}[$__rate_interval]))", "datasource": {"type": "prometheus", "uid": "${datasource}"}, "legendFormat": "{{container}}"}], "fieldConfig": {"defaults": {"unit": "short", "custom": {"drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false, "axisLabel": "núcleos", "stacking": {"mode": "none", "group": "A"}}, "min": 0}, "overrides": []}, "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}, "id": 13, "gridPos": {"h": 8, "w": 8, "x": 0, "y": 31}, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
+    {"type": "timeseries", "title": "Memoria", "description": "Memoria de trabajo de los contenedores (la que cuenta para el límite).", "targets": [{"refId": "A", "expr": "sum by (container) (container_memory_working_set_bytes{namespace=\"$namespace\", container=~\"$service\"})", "datasource": {"type": "prometheus", "uid": "${datasource}"}, "legendFormat": "{{container}}"}], "fieldConfig": {"defaults": {"unit": "bytes", "custom": {"drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false, "axisLabel": "", "stacking": {"mode": "none", "group": "A"}}, "min": 0}, "overrides": []}, "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}, "id": 14, "gridPos": {"h": 8, "w": 8, "x": 8, "y": 31}, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
+    {"type": "timeseries", "title": "Reinicios", "description": "Reinicios de contenedor en la última hora. Más de 0 indica caídas o OOMKilled.", "targets": [{"refId": "A", "expr": "sum by (container) (increase(kube_pod_container_status_restarts_total{namespace=\"$namespace\", container=~\"$service\"}[1h]))", "datasource": {"type": "prometheus", "uid": "${datasource}"}, "legendFormat": "{{container}}"}], "fieldConfig": {"defaults": {"unit": "short", "custom": {"drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false, "axisLabel": "", "stacking": {"mode": "none", "group": "A"}, "thresholdsStyle": {"mode": "line+area"}}, "min": 0, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}}, "overrides": []}, "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}, "id": 15, "gridPos": {"h": 8, "w": 8, "x": 16, "y": 31}, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
+    {"type": "timeseries", "title": "Réplicas disponibles", "description": "Pods listos de cada Deployment.", "targets": [{"refId": "A", "expr": "sum by (deployment) (kube_deployment_status_replicas_available{namespace=\"$namespace\", deployment=~\"$service\"})", "datasource": {"type": "prometheus", "uid": "${datasource}"}, "legendFormat": "{{deployment}}"}], "fieldConfig": {"defaults": {"unit": "short", "custom": {"drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false, "axisLabel": "", "stacking": {"mode": "none", "group": "A"}}, "min": 0}, "overrides": []}, "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}, "id": 16, "gridPos": {"h": 8, "w": 12, "x": 0, "y": 39}, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
+    {"type": "stat", "title": "Reinicios en el rango", "description": "Total de reinicios en el rango de tiempo elegido.", "targets": [{"refId": "A", "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"$namespace\", container=~\"$service\"}[$__range]))", "datasource": {"type": "prometheus", "uid": "${datasource}"}}], "fieldConfig": {"defaults": {"unit": "short", "decimals": 0, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}, "color": {"mode": "thresholds"}}, "overrides": []}, "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}}, "id": 17, "gridPos": {"h": 8, "w": 12, "x": 12, "y": 39}, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
+    {"id": 18, "type": "row", "title": "JVM", "collapsed": false, "gridPos": {"h": 1, "w": 24, "x": 0, "y": 47}, "panels": []},
+    {"type": "timeseries", "title": "Heap usado", "description": "Memoria heap de la JVM por servicio.", "targets": [{"refId": "A", "expr": "sum by (service) (jvm_memory_used_bytes{namespace=\"$namespace\", service=~\"$service\", area=\"heap\"})", "datasource": {"type": "prometheus", "uid": "${datasource}"}, "legendFormat": "{{service}}"}], "fieldConfig": {"defaults": {"unit": "bytes", "custom": {"drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false, "axisLabel": "", "stacking": {"mode": "none", "group": "A"}}, "min": 0}, "overrides": []}, "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}, "id": 19, "gridPos": {"h": 8, "w": 8, "x": 0, "y": 48}, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
+    {"type": "timeseries", "title": "Tiempo en GC", "description": "Fracción del tiempo que la JVM pasa en pausas de recolección.", "targets": [{"refId": "A", "expr": "sum by (service) (rate(jvm_gc_pause_seconds_sum{namespace=\"$namespace\", service=~\"$service\"}[$__rate_interval]))", "datasource": {"type": "prometheus", "uid": "${datasource}"}, "legendFormat": "{{service}}"}], "fieldConfig": {"defaults": {"unit": "percentunit", "custom": {"drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false, "axisLabel": "", "stacking": {"mode": "none", "group": "A"}}, "min": 0}, "overrides": []}, "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}, "id": 20, "gridPos": {"h": 8, "w": 8, "x": 8, "y": 48}, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
+    {"type": "timeseries", "title": "Hilos vivos", "description": "Hilos de la JVM por servicio.", "targets": [{"refId": "A", "expr": "sum by (service) (jvm_threads_live_threads{namespace=\"$namespace\", service=~\"$service\"})", "datasource": {"type": "prometheus", "uid": "${datasource}"}, "legendFormat": "{{service}}"}], "fieldConfig": {"defaults": {"unit": "short", "custom": {"drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false, "axisLabel": "", "stacking": {"mode": "none", "group": "A"}}, "min": 0}, "overrides": []}, "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}, "id": 21, "gridPos": {"h": 8, "w": 8, "x": 16, "y": 48}, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
+    {"type": "timeseries", "title": "Conexiones a PostgreSQL", "description": "Conexiones activas del pool Hikari (solo servicios con base de datos).", "targets": [{"refId": "A", "expr": "sum by (service) (hikaricp_connections_active{namespace=\"$namespace\", service=~\"$service\"})", "datasource": {"type": "prometheus", "uid": "${datasource}"}, "legendFormat": "{{service}}"}], "fieldConfig": {"defaults": {"unit": "short", "custom": {"drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false, "axisLabel": "", "stacking": {"mode": "none", "group": "A"}}, "min": 0}, "overrides": []}, "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}, "id": 22, "gridPos": {"h": 8, "w": 12, "x": 0, "y": 56}, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
+    {"type": "timeseries", "title": "Lag de consumidores Kafka", "description": "Mensajes pendientes por leer, el máximo de cada servicio.", "targets": [{"refId": "A", "expr": "max by (service) (kafka_consumer_fetch_manager_records_lag_max{namespace=\"$namespace\", service=~\"$service\"})", "datasource": {"type": "prometheus", "uid": "${datasource}"}, "legendFormat": "{{service}}"}], "fieldConfig": {"defaults": {"unit": "short", "custom": {"drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false, "axisLabel": "", "stacking": {"mode": "none", "group": "A"}}, "min": 0}, "overrides": []}, "options": {"legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}, "id": 23, "gridPos": {"h": 8, "w": 12, "x": 12, "y": 56}, "datasource": {"type": "prometheus", "uid": "${datasource}"}}
+  ]
+}

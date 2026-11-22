@@ -225,6 +225,66 @@ da el total de pods que responden.
 - Las etiquetas no llevan identificadores de personas: `anonymousId` no se usa como etiqueta.
 - El stack de Compose no incluye Prometheus; el scraping es solo de los clústeres k3s.
 
+## Dashboards (HU-40)
+
+Los dashboards están versionados en `observability/grafana/dashboards/` y aparecen en Grafana con
+la etiqueta `circleguard`:
+
+| Dashboard | Qué muestra | Filtros |
+|:---|:---|:---|
+| **CircleGuard · Servicios** (`circleguard-services`) | Targets arriba, solicitudes por segundo, resultados, errores 5xx, latencia p95 (por servicio y por endpoint), CPU, memoria, reinicios, réplicas, heap, tiempo en GC, hilos, conexiones a PostgreSQL y lag de Kafka | Ambiente (namespace) y servicio, con selección múltiple |
+| **CircleGuard · Negocio** (`circleguard-business`) | Promociones por minuto por estado y origen, contactos por caso, cuestionarios con y sin síntomas, check-ins por resultado y tiempo de contención (p50, p95, p99 y porcentaje bajo 1 s) | Ambiente |
+
+Los paneles HTTP no cuentan `/actuator`, para que las sondas y el scraping no inflen el tráfico.
+El tiempo de contención excluye los cambios a `ACTIVE` y los estados desconocidos (`OTHER`), así
+que mide solo promociones. El panel del circuito de Redis sigue en el chart de la aplicación
+(`deploy/k8s/circleguard/files/redis-health.json`).
+
+### Cómo se aprovisionan
+
+`observability/grafana/kustomization.yaml` convierte cada JSON en un ConfigMap del namespace
+`monitoring` con la etiqueta `grafana_dashboard`. El sidecar de Grafana (activado en
+`observability/prometheus/values.yaml`) carga esos ConfigMaps en segundos, sin reiniciar.
+
+- **En cada despliegue**, `deployK8s` aplica la carpeta después de Helm. Si el clúster no tiene
+  el namespace `monitoring`, se salta el paso; si falla, la etapa queda `UNSTABLE` y el
+  despliegue no se revierte.
+- **A mano**, con el kubeconfig del clúster:
+
+  ```bash
+  kubectl apply -k observability/grafana
+  kubectl -n monitoring get configmap -l grafana_dashboard=1
+  ```
+
+Los dashboards usan la variable `datasource`, que toma el datasource de Prometheus por defecto
+(el que crea `kube-prometheus-stack`). Si agregaste otro a mano, se puede elegir en el selector.
+
+### Latencia p95
+
+El p95 sale de `http_server_requests_seconds_bucket`. Los 8 servicios publican buckets de 25 ms,
+50 ms, 100 ms, 250 ms, 500 ms, 1 s, 2 s y 5 s (`management.metrics.distribution.slo` en su
+`application.yml`). Son pocos a propósito: el p95 es una aproximación entre dos buckets y cada
+endpoint agrega solo 9 series. Las imágenes anteriores a este cambio no publican buckets, así que
+el p95 queda vacío hasta desplegar la versión nueva.
+
+### Cambiar un dashboard
+
+Grafana no guarda cambios en un dashboard aprovisionado. Para modificarlo:
+
+1. Edítalo en Grafana y usa **Save dashboard → Save JSON to file** (o **Export → Export as JSON**).
+2. Reemplaza el archivo en `observability/grafana/dashboards/` sin cambiar el `uid`.
+3. Déjalo con un panel por línea:
+
+   ```bash
+   python3 observability/grafana/format_dashboard.py observability/grafana/dashboards/*.json
+   ```
+
+   Un JSON exportado tiene más de mil líneas, y el control de tamaño del PR cuenta los `.json`.
+   Con un panel por línea el archivo baja a unas 100 líneas y el diff muestra cada panel cambiado.
+4. Haz el commit. El siguiente despliegue lo aplica; para verlo antes, usa `kubectl apply -k`.
+
+Un dashboard nuevo necesita su JSON y una entrada en `configMapGenerator` de la kustomización.
+
 ## Problemas comunes
 
 | Síntoma | Causa | Solución |
@@ -233,6 +293,8 @@ da el total de pods que responden.
 | `Permission denied (publickey)` | La llave no coincide con el key pair | Usa `circleguard-admin-key.pem` o `ssh-add` |
 | `helm` falla al conectar al API | k3s aún no terminó de arrancar | El script espera hasta 5 minutos; revisa `sudo k3s kubectl get nodes` |
 | Prometheus sin targets | El chart se desplegó antes que el stack (sin CRD) o con `metrics.serviceMonitor.enabled=false` | Repite el `helm upgrade` de la aplicación y comprueba `kubectl -n circleguard-<ambiente> get servicemonitor` |
+| Los dashboards no aparecen en Grafana | El ConfigMap no existe o no tiene la etiqueta `grafana_dashboard` | `kubectl apply -k observability/grafana` y revisa `kubectl -n monitoring logs deploy/kube-prometheus-stack-grafana -c grafana-sc-dashboard` |
+| Latencia p95 vacía | La imagen del servicio es anterior a los buckets de HU-40 | Despliega una versión que incluya `management.metrics.distribution.slo` |
 | Un servicio aparece `DOWN` con `401` | Su seguridad exige autenticación en `/actuator/prometheus` | Permite esa ruta en su `SecurityConfig` (como en `identity`) |
 | Pods en `Pending` o `OOMKilled` | El nodo de 8 GB quedó corto | Baja retención y límites, o desactiva componentes que no uses |
 

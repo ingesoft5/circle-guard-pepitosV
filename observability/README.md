@@ -16,7 +16,10 @@ observability/
 ├── promtail/
 │   └── values.yaml     # envío de logs de los pods a Loki
 ├── grafana/
-│   └── datasources.yaml  # Loki y el enlace de una línea al trace de Jaeger
+│   ├── datasources.yaml            # Loki y el enlace de una línea al trace de Jaeger
+│   ├── kustomization.yaml          # dashboards (HU-40): un ConfigMap por dashboard en monitoring
+│   ├── format_dashboard.py         # deja un panel por línea antes del commit
+│   └── dashboards/                 # JSON: Servicios y Negocio
 └── alerts/             # reglas de Alertmanager (HU-41)
 ```
 
@@ -33,9 +36,8 @@ Alertmanager se publican en `/prometheus` y `/alertmanager` detrás del middlewa
 `monitoring-basic-auth`; el secreto se crea fuera de Git con
 `infra/bootstrap/load-monitoring-auth.sh`. El TLS es HU-47.
 
-## Qué queda para HU-40 y HU-41
+## Qué queda para HU-41
 
-- **HU-40:** dashboards JSON en `observability/grafana/` y su ConfigMap.
 - **HU-41:** reglas en `observability/alerts/` y la notificación de Alertmanager.
 
 La guía de operación y verificación está en
