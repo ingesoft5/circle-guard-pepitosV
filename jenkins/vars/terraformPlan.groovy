@@ -43,6 +43,8 @@ def call(Map config = [:]) {
                 "PLAN_FILE=${planFile}"
             ]) {
                 int rc = sh(script: '''
+                    # No shell trace: it would print the key read below in the build log.
+                    set +x
                     set -euo pipefail
                     export TF_VAR_prometheus_ssh_host="$PROMETHEUS_SSH_HOST"
                     export TF_VAR_prometheus_ssh_private_key="$(cat "$PROMETHEUS_SSH_KEY_FILE")"
@@ -59,8 +61,11 @@ def call(Map config = [:]) {
                 if (!(rc in [0, 2])) {
                     error("terraformPlan: plan failed in ${environment} (exit ${rc})")
                 }
-                stash name: "terraform-${environment}",
-                      includes: "infra/terraform/envs/${environment}/${planFile}"
+                // From the workspace root, so terraformApply unstashes it at the same path.
+                dir(env.WORKSPACE) {
+                    stash name: "terraform-${environment}",
+                          includes: "infra/terraform/envs/${environment}/${planFile}"
+                }
                 echo "terraformPlan: ${environment} ${rc == 2 ? 'has changes' : 'has no changes'}"
                 result = [hasChanges: rc == 2, planFile: planFile]
             }
