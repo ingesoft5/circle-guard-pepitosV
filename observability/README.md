@@ -27,12 +27,8 @@ Alertmanager se publican en `/prometheus` y `/alertmanager` detrás del middlewa
 `monitoring-basic-auth`; el secreto se crea fuera de Git con
 `infra/bootstrap/load-monitoring-auth.sh`. El TLS es HU-47.
 
-## Qué queda para HU-39, HU-40 y HU-41
+## Qué queda para HU-40 y HU-41
 
-- **HU-39:** dependencia `micrometer-registry-prometheus` en los 8 servicios,
-  endpoint `/actuator/prometheus`, contadores de negocio y el ServiceMonitor, que vive en
-  el chart de la aplicación (`deploy/k8s/circleguard/templates/servicemonitor.yaml`)
-  porque su namespace y sus servicios cambian por ambiente.
 - **HU-40:** dashboards JSON en `observability/grafana/` y su ConfigMap.
 - **HU-41:** reglas en `observability/alerts/` y la notificación de Alertmanager.
 

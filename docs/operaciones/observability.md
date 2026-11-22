@@ -130,8 +130,9 @@ curl -s -u monitoring:<password> -o /dev/null -w '%{http_code}\n' \
 ```
 
 El chart de la aplicación crea el ServiceMonitor `circleguard-services` (ver
-`deploy/k8s/README.md`). En Prometheus, la página de *targets* muestra los 8 servicios con la
-etiqueta `environment`; pasan a `UP` cuando cada servicio expone `/actuator/prometheus` (HU-39). En Grafana, el datasource de Prometheus queda configurado por el chart.
+`deploy/k8s/README.md`). En Prometheus, la página de *targets* muestra los 8 servicios en `UP`
+con la etiqueta `environment`. En Grafana, el datasource de Prometheus queda configurado por el
+chart.
 
 ## Ejecutar la instalación sin Terraform
 
