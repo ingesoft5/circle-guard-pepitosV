@@ -1,7 +1,5 @@
-# Observability of one environment on the AWS side: a CloudWatch log group per service, alarms
-# for the k3s node and an SNS topic for notifications. The in-cluster stack (Prometheus,
-# Grafana, Loki) is installed with Helm in its own stories; this module only declares what
-# Terraform can own without duplicating that stack.
+# Observability of one environment: CloudWatch log groups, node alarms and an SNS topic,
+# plus the in-cluster install of Prometheus, Grafana, Loki and Promtail.
 
 resource "aws_sns_topic" "alerts" {
   name = "${var.name_prefix}-alerts"
@@ -63,6 +61,10 @@ resource "aws_cloudwatch_metric_alarm" "status_check" {
 locals {
   prometheus_values_file    = "${path.module}/../../../../observability/prometheus/values.yaml"
   prometheus_install_script = "${path.module}/../../../../infra/bootstrap/install-observability.sh"
+  loki_values_file          = "${path.module}/../../../../observability/loki/values.yaml"
+  promtail_values_file      = "${path.module}/../../../../observability/promtail/values.yaml"
+  loki_install_script       = "${path.module}/../../../../infra/bootstrap/install-loki.sh"
+  grafana_datasources_file  = "${path.module}/../../../../observability/grafana/datasources.yaml"
 }
 
 # The Helm chart runs inside the cluster, so Terraform uploads the script and the values over
@@ -103,6 +105,60 @@ resource "terraform_data" "prometheus" {
   provisioner "remote-exec" {
     inline = [
       "sudo env KUBECONFIG=/etc/rancher/k3s/k3s.yaml bash /tmp/install-observability.sh '${var.prometheus_namespace}' '${var.prometheus_chart_version}' '/tmp/kube-prometheus-stack-values.yaml' '${base64encode(var.prometheus_grafana_admin_password)}'",
+    ]
+  }
+}
+
+# Loki and Promtail follow the same path as Prometheus: the chart runs inside the cluster,
+# so Terraform uploads the script and the values and runs them on the node.
+resource "terraform_data" "loki" {
+  count = var.install_prometheus ? 1 : 0
+
+  triggers_replace = [
+    var.instance_id,
+    var.prometheus_ssh_host,
+    var.prometheus_namespace,
+    var.environment,
+    var.loki_chart_version,
+    var.promtail_chart_version,
+    filemd5(local.loki_values_file),
+    filemd5(local.promtail_values_file),
+    filemd5(local.loki_install_script),
+    filemd5(local.grafana_datasources_file),
+  ]
+
+  connection {
+    type        = "ssh"
+    host        = var.prometheus_ssh_host
+    user        = "ubuntu"
+    agent       = var.prometheus_ssh_private_key == ""
+    private_key = var.prometheus_ssh_private_key == "" ? null : var.prometheus_ssh_private_key
+    timeout     = "10m"
+  }
+
+  provisioner "file" {
+    source      = local.loki_install_script
+    destination = "/tmp/install-loki.sh"
+  }
+
+  provisioner "file" {
+    source      = local.loki_values_file
+    destination = "/tmp/loki-values.yaml"
+  }
+
+  provisioner "file" {
+    source      = local.promtail_values_file
+    destination = "/tmp/promtail-values.yaml"
+  }
+
+  provisioner "file" {
+    source      = local.grafana_datasources_file
+    destination = "/tmp/grafana-datasources.yaml"
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "sudo env KUBECONFIG=/etc/rancher/k3s/k3s.yaml bash /tmp/install-loki.sh '${var.prometheus_namespace}' '${var.environment}' '${var.loki_chart_version}' '${var.promtail_chart_version}' /tmp/loki-values.yaml /tmp/promtail-values.yaml /tmp/grafana-datasources.yaml",
     ]
   }
 }

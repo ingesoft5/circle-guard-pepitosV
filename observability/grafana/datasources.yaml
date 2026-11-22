@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-loki-jaeger
+  namespace: __NAMESPACE__
+  labels:
+    grafana_datasource: "1"
+data:
+  loki-jaeger.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Loki
+        type: loki
+        uid: loki
+        access: proxy
+        url: http://loki.__NAMESPACE__.svc.cluster.local:3100
+        jsonData:
+          derivedFields:
+            - name: TraceID
+              matcherRegex: '"traceId":"([0-9a-f]+)"'
+              url: '$${__value.raw}'
+              datasourceUid: jaeger
+              urlDisplayLabel: Jaeger
+      - name: Jaeger
+        type: jaeger
+        uid: jaeger
+        access: proxy
+        url: http://jaeger.circleguard-__ENVIRONMENT__.svc.cluster.local:16686

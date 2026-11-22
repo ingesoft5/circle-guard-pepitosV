@@ -14,6 +14,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.circleguard.promotion.exception.FenceException;
+import com.circleguard.promotion.metrics.PromotionMetrics;
 import com.circleguard.promotion.model.graph.CircleNode;
 import com.circleguard.promotion.model.graph.UserNode;
 import com.circleguard.promotion.model.jpa.SystemSettings;
@@ -21,6 +22,7 @@ import com.circleguard.promotion.repository.graph.CircleNodeRepository;
 import com.circleguard.promotion.repository.graph.UserNodeRepository;
 import com.circleguard.promotion.repository.jpa.SystemSettingsRepository;
 import com.circleguard.promotion.support.Neo4jClientStub;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -45,6 +47,7 @@ class HealthStatusServiceUnitTest {
     private KafkaTemplate<String, Object> kafka;
     private SystemSettingsRepository settingsRepository;
     private CircleNodeRepository circleRepository;
+    private SimpleMeterRegistry meters;
     private HealthStatusService service;
     // multiSet receives one HashMap that the service clears and refills for each
     // batch, so every call is copied here instead of keeping the reference.
@@ -66,7 +69,9 @@ class HealthStatusServiceUnitTest {
         settingsRepository = mock(SystemSettingsRepository.class);
         circleRepository = mock(CircleNodeRepository.class);
         when(circleRepository.findNewlyFencedCircles(anyString())).thenReturn(List.of());
-        service = new HealthStatusService(userRepository, neo4j.client, redis, kafka, settingsRepository, circleRepository);
+        meters = new SimpleMeterRegistry();
+        service = new HealthStatusService(userRepository, neo4j.client, redis, kafka, settingsRepository,
+                circleRepository, new PromotionMetrics(meters));
     }
 
     private static SystemSettings settings(int fenceDays, int windowDays) {
@@ -290,5 +295,78 @@ class HealthStatusServiceUnitTest {
 
         assertThat(service.getCachedStatus("u1")).isEqualTo("SUSPECT");
         service.evictUserCache("u1");
+    }
+
+    private double promotions(String status, String origin) {
+        return meters.get("circleguard.promotions").tags("status", status, "origin", origin).counter().count();
+    }
+
+    private double allPromotions() {
+        return meters.find("circleguard.promotions").counters().stream().mapToDouble(c -> c.count()).sum();
+    }
+
+    @Test
+    void confirmedCaseCountsEveryPromotionAndTimesTheContainment() {
+        when(settingsRepository.getSettings()).thenReturn(Optional.of(settings(14, 7)));
+        neo4j.oneResults(propagation(List.of(
+                Map.of("id", "contact-1", "status", "SUSPECT"),
+                Map.of("id", "contact-2", "status", "PROBABLE"))));
+
+        service.updateStatus("source", "CONFIRMED");
+
+        assertThat(promotions("CONFIRMED", "source")).isEqualTo(1.0);
+        assertThat(promotions("SUSPECT", "contact")).isEqualTo(1.0);
+        assertThat(promotions("PROBABLE", "contact")).isEqualTo(1.0);
+        assertThat(allPromotions()).isEqualTo(3.0);
+        assertThat(meters.get("circleguard.containment.duration").tag("status", "CONFIRMED").timer().count())
+                .isEqualTo(1L);
+    }
+
+    @Test
+    void contactsWithoutAnIdAreNotCounted() {
+        List<Map<String, String>> affected = new ArrayList<>();
+        affected.add(Map.of("id", "c1", "status", "PROBABLE"));
+        affected.add(null);
+        Map<String, String> withoutId = new HashMap<>();
+        withoutId.put("status", "PROBABLE");
+        affected.add(withoutId);
+        neo4j.oneResults(propagation(affected));
+
+        service.updateStatus("source", "SUSPECT");
+
+        assertThat(promotions("SUSPECT", "source")).isEqualTo(1.0);
+        assertThat(promotions("PROBABLE", "contact")).isEqualTo(1.0);
+    }
+
+    @Test
+    void anActiveOrUnknownStatusIsNotAPromotionButIsStillTimed() {
+        neo4j.oneResults(propagation(List.of()), propagation(List.of()));
+
+        service.updateStatus("source", "ACTIVE");
+        service.updateStatus("source", "GREEN");
+
+        assertThat(allPromotions()).isZero();
+        assertThat(meters.get("circleguard.containment.duration").tag("status", "ACTIVE").timer().count())
+                .isEqualTo(1L);
+        assertThat(meters.get("circleguard.containment.duration").tag("status", "OTHER").timer().count())
+                .isEqualTo(1L);
+    }
+
+    @Test
+    void anUnknownUserIsNeitherCountedNorTimed() {
+        service.updateStatus("ghost", "SUSPECT");
+
+        assertThat(allPromotions()).isZero();
+        assertThat(meters.get("circleguard.containment.duration").tag("status", "SUSPECT").timer().count())
+                .isZero();
+    }
+
+    @Test
+    void recoveryIsCountedAsAPromotion() {
+        neo4j.oneResults(null, null);
+
+        service.promoteToRecovered("u1");
+
+        assertThat(promotions("RECOVERED", "source")).isEqualTo(1.0);
     }
 }
