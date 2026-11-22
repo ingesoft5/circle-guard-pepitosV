@@ -127,8 +127,21 @@ La primera ejecución genera `infra/compose/ci/.env` con contraseñas aleatorias
 | Nexus (ambientes, solo pull) | `deploy-puller` | `NEXUS_PULL_PASSWORD` en `infra/compose/ci/.env`; se pasa a `bootstrap-env.sh` |
 | GitHub | `<usuario>` | `GITHUB_USER` y `GITHUB_TOKEN` en `infra/compose/ci/.env` |
 | Ambientes (SSH) | `deploy` | Una llave por ambiente en `infra/compose/ci/secrets/`, en Jenkins como `deploy-ssh-<ambiente>`; se carga con `load-deploy-credential.sh` |
+| Terraform (AWS) | El usuario IAM que aplica la infraestructura | Archivo `aws-terraform` en `infra/compose/ci/secrets/`, en Jenkins como `aws-terraform`; se carga con `load-terraform-credential.sh aws` |
+| Observability (SSH) | `ubuntu` | Llave privada `prometheus-ssh-key` en `infra/compose/ci/secrets/`, en Jenkins como `prometheus-ssh-key`; se carga con `load-terraform-credential.sh ssh` |
+| Grafana (Terraform) | `admin` | `prometheus-grafana-password` en `infra/compose/ci/secrets/`, en Jenkins como `prometheus-grafana-password`; se carga con `load-terraform-credential.sh grafana` |
 
 La credencial `sonar-token` se declara por JCasC a partir de `SONAR_TOKEN`; el servidor `SonarQube` apunta a `http://sonarqube:9000`.
+
+Las credenciales de Terraform se cargan desde el host de CI sin pasar por el repositorio:
+
+```bash
+sudo ./infra/bootstrap/load-terraform-credential.sh aws     < ~/.aws/credentials-terraform
+sudo ./infra/bootstrap/load-terraform-credential.sh ssh     < ~/.ssh/circleguard-admin-key
+sudo ./infra/bootstrap/load-terraform-credential.sh grafana < ~/grafana-admin-password.txt
+```
+
+`K8S_HOST_<AMBIENTE>` debe ser la IP privada del nodo: el pipeline la usa como `TF_VAR_prometheus_ssh_host` porque el Security Group solo permite SSH desde la IP privada de Jenkins.
 
 El job multibranch, el webhook de GitHub y la etapa de Sonar se documentan en [docs/operaciones/jenkins-pipeline.md](../../../docs/operaciones/jenkins-pipeline.md).
 

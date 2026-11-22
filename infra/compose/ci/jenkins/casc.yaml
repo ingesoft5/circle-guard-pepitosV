@@ -55,6 +55,9 @@ jenkins:
             value: "${K8S_HOST_STAGE:-}"
           - key: "K8S_HOST_PROD"
             value: "${K8S_HOST_PROD:-}"
+          # Region used by the Terraform plan/apply steps (HU-32)
+          - key: "AWS_REGION"
+            value: "${AWS_REGION:-us-east-1}"
           # Branch the rollback job takes its pipeline and the shared library from (HU-17)
           - key: "ROLLBACK_BRANCH"
             value: "${ROLLBACK_BRANCH:-main}"
@@ -138,6 +141,27 @@ credentials:
               fileName: "kubeconfig"
               description: "kubeconfig of the prod k3s cluster"
               secretBytes: "${readFileBase64:/run/secrets/deploy/kubeconfig-prod}"
+          # Terraform plan/apply (HU-32). The files are written by
+          # infra/bootstrap/load-terraform-credential.sh.
+          - file:
+              scope: GLOBAL
+              id: "aws-terraform"
+              fileName: "credentials"
+              description: "AWS credentials for the Terraform pipeline steps"
+              secretBytes: "${readFileBase64:/run/secrets/deploy/aws-terraform}"
+          - basicSSHUserPrivateKey:
+              scope: GLOBAL
+              id: "prometheus-ssh-key"
+              username: "ubuntu"
+              description: "SSH key for the observability node (Terraform provisioner)"
+              privateKeySource:
+                directEntry:
+                  privateKey: "${readFile:/run/secrets/deploy/prometheus-ssh-key}"
+          - string:
+              scope: GLOBAL
+              id: "prometheus-grafana-password"
+              secret: "${readFile:/run/secrets/deploy/prometheus-grafana-password}"
+              description: "Grafana admin password for the observability Helm release"
 
 unclassified:
   location:
