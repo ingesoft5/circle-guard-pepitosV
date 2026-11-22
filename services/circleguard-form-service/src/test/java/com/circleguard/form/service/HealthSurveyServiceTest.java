@@ -10,10 +10,12 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.circleguard.form.metrics.SurveyMetrics;
 import com.circleguard.form.model.HealthSurvey;
 import com.circleguard.form.model.Questionnaire;
 import com.circleguard.form.model.ValidationStatus;
 import com.circleguard.form.repository.HealthSurveyRepository;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -29,6 +31,7 @@ class HealthSurveyServiceTest {
     private QuestionnaireService questionnaireService;
     private SymptomMapper symptomMapper;
     private KafkaTemplate<String, Object> kafkaTemplate;
+    private SimpleMeterRegistry meters;
     private HealthSurveyService service;
     private final UUID anonymousId = UUID.randomUUID();
 
@@ -39,7 +42,9 @@ class HealthSurveyServiceTest {
         questionnaireService = mock(QuestionnaireService.class);
         symptomMapper = mock(SymptomMapper.class);
         kafkaTemplate = mock(KafkaTemplate.class);
-        service = new HealthSurveyService(repository, questionnaireService, symptomMapper, kafkaTemplate);
+        meters = new SimpleMeterRegistry();
+        service = new HealthSurveyService(repository, questionnaireService, symptomMapper, kafkaTemplate,
+                new SurveyMetrics(meters));
         when(repository.save(any(HealthSurvey.class))).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
@@ -131,5 +136,28 @@ class HealthSurveyServiceTest {
 
         assertThatThrownBy(() -> service.validateSurvey(surveyId, ValidationStatus.APPROVED, UUID.randomUUID()))
                 .hasMessageContaining(surveyId.toString());
+    }
+
+    private double surveys(String symptoms) {
+        return meters.get("circleguard.surveys").tag("symptoms", symptoms).counter().count();
+    }
+
+    @Test
+    void everySubmittedSurveyIsCountedBySymptoms() {
+        Questionnaire active = Questionnaire.builder().title("Daily").build();
+        HealthSurvey sick = HealthSurvey.builder().anonymousId(UUID.randomUUID()).build();
+        HealthSurvey well = HealthSurvey.builder().anonymousId(UUID.randomUUID()).build();
+        HealthSurvey alsoWell = HealthSurvey.builder().anonymousId(UUID.randomUUID()).build();
+        when(questionnaireService.getActiveQuestionnaire()).thenReturn(Optional.of(active));
+        when(symptomMapper.hasSymptoms(sick, active)).thenReturn(true);
+        when(symptomMapper.hasSymptoms(well, active)).thenReturn(false);
+        when(symptomMapper.hasSymptoms(alsoWell, active)).thenReturn(false);
+
+        service.submitSurvey(sick);
+        service.submitSurvey(well);
+        service.submitSurvey(alsoWell);
+
+        assertThat(surveys("true")).isEqualTo(1.0);
+        assertThat(surveys("false")).isEqualTo(2.0);
     }
 }

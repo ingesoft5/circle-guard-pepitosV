@@ -9,7 +9,8 @@ los dashboards y las alertas se configuran en HU-39, HU-40 y HU-41.
 | Pieza | Dónde |
 |:---|:---|
 | `kube-prometheus-stack`: Prometheus, Grafana, Alertmanager, node-exporter y kube-state-metrics | Namespace `monitoring` del clúster |
-| `micrometer-registry-prometheus`, `/actuator/prometheus`, contadores de negocio y ServiceMonitors | Código de los 8 servicios (HU-39) |
+| `micrometer-registry-prometheus`, `/actuator/prometheus` y contadores de negocio | Código de los 8 servicios (HU-39) |
+| ServiceMonitor de los 8 servicios | `deploy/k8s/circleguard/templates/servicemonitor.yaml` (HU-39) |
 | Dashboards JSON y su aprovisionamiento | `observability/grafana/` (HU-40) |
 | Reglas de Alertmanager | `observability/alerts/` (HU-41) |
 | Ingress de Grafana, Prometheus y Alertmanager | HU-26, con TLS en HU-47 |
@@ -129,8 +130,9 @@ curl -s -u monitoring:<password> -o /dev/null -w '%{http_code}\n' \
 ```
 
 El chart de la aplicación crea el ServiceMonitor `circleguard-services` (ver
-`deploy/k8s/README.md`). En Prometheus, la página de *targets* muestra los 8 servicios con la
-etiqueta `environment`; pasan a `UP` cuando cada servicio expone `/actuator/prometheus` (HU-39). En Grafana, el datasource de Prometheus queda configurado por el chart.
+`deploy/k8s/README.md`). En Prometheus, la página de *targets* muestra los 8 servicios en `UP`
+con la etiqueta `environment`. En Grafana, el datasource de Prometheus queda configurado por el
+chart.
 
 ## Ejecutar la instalación sin Terraform
 
@@ -145,6 +147,84 @@ KUBECONFIG=/ruta/al/kubeconfig \
 Es idempotente (`helm upgrade --install`). Útil cuando el pipeline dispone de la credencial
 `kubeconfig-<ambiente>` y se prefiere no pasar la llave SSH por Terraform.
 
+## Métricas de los servicios (HU-39)
+
+Los 8 servicios exponen `/actuator/prometheus` con Micrometer. Todas las métricas llevan la
+etiqueta `application` (el nombre del servicio); Prometheus agrega `namespace`, `pod`, `service`,
+`job` y `environment`.
+
+| Grupo | Métricas | Servicios |
+|:---|:---|:---|
+| JVM y proceso | `jvm_*`, `process_*`, `system_*` | Los 8 |
+| HTTP | `http_server_requests_seconds_*` | Los 8 |
+| Base de datos | `hikaricp_*` | Los que usan PostgreSQL |
+| Kafka | `kafka_producer_*`, `kafka_consumer_*` | `form`, `identity`, `notification`, `promotion` |
+
+Las métricas de Kafka aparecen cuando el cliente se crea: las del productor, tras el primer envío.
+
+### Métricas de negocio
+
+| Métrica | Servicio | Etiquetas | Qué cuenta |
+|:---|:---|:---|:---|
+| `circleguard_promotions_total` | `promotion` | `status` (`SUSPECT`, `PROBABLE`, `CONFIRMED`, `RECOVERED`) y `origin` (`source`: el usuario cuyo estado cambió; `contact`: un contacto alcanzado por la cascada) | Usuarios cuyo estado subió |
+| `circleguard_containment_duration_seconds` | `promotion` | `status` | Tiempo de un cambio de estado: cascada en Neo4j, Redis y eventos de Kafka. Buckets de 0,25, 0,5, 1, 2 y 5 s; el de 1 s es el objetivo NFR-1. No incluye el viaje del evento de entrada por Kafka |
+| `circleguard_surveys_total` | `form` | `symptoms` (`true` o `false`) | Cuestionarios enviados |
+| `circleguard_checkins_total` | `gateway` | `result` (`granted`, `denied_health_risk`, `denied_status_unavailable`, `invalid_token`) | Validaciones de QR en el acceso |
+
+Los contadores nacen en cero, así que `rate()` y los paneles funcionan desde el arranque. Volver
+a `ACTIVE` no cuenta como promoción. Un estado desconocido se informa como `OTHER` en el tiempo de
+contención y tampoco cuenta, para que un valor enviado por la API no cree series nuevas.
+
+Consultas de ejemplo:
+
+```promql
+sum by (status) (increase(circleguard_promotions_total[1h]))
+histogram_quantile(0.95, sum by (le) (rate(circleguard_containment_duration_seconds_bucket[5m])))
+sum by (result) (rate(circleguard_checkins_total[5m]))
+```
+
+### ServiceMonitor
+
+El chart de la aplicación crea el ServiceMonitor `circleguard-services` en el namespace
+`circleguard-<ambiente>`. Selecciona los Services con la etiqueta `circleguard.io/metrics: "true"`,
+que el chart pone a los servicios con `spring: true` en `values.yaml`, y lee `/actuator/prometheus`
+en su puerto `http` cada 30 s. La etiqueta `environment` sale de la etiqueta
+`circleguard.io/environment` del Service. Prometheus lo descubre porque
+`observability/prometheus/values.yaml` deja vacíos los selectores de ServiceMonitor y de namespace.
+
+- **Requiere los CRD** de Prometheus Operator (`monitoring.coreos.com/v1`), que instala
+  `kube-prometheus-stack`. En un clúster sin el stack el chart omite el recurso y no falla; si
+  instalas el stack después, repite el `helm upgrade` de la aplicación.
+- **Con `helm template`**, agrega `--api-versions monitoring.coreos.com/v1/ServiceMonitor` o el
+  recurso no se genera.
+- **Para quitarlo:** `--set metrics.serviceMonitor.enabled=false`. El intervalo y la ruta están en
+  `metrics.serviceMonitor` de `values.yaml`.
+
+### Verificar el scraping
+
+```bash
+kubectl -n circleguard-dev get servicemonitor circleguard-services
+
+# Un servicio a mano (métricas JVM, HTTP y contadores propios):
+kubectl -n circleguard-dev port-forward svc/promotion 8088:8088
+curl -s http://localhost:8088/actuator/prometheus \
+  | grep -E '^(jvm_memory_used_bytes|http_server_requests_seconds_count|circleguard_)'
+```
+
+En Prometheus (`http://<node_public_ip>/prometheus`, con Basic Auth), **Status → Targets** lista
+un target por pod: deben aparecer al menos los 8 servicios en `UP`. La consulta `count(up{namespace="circleguard-dev"} == 1)`
+da el total de pods que responden.
+
+### Seguridad de las métricas
+
+- Los pods no piden autenticación en `/actuator/prometheus`, porque Prometheus las lee dentro del
+  clúster. `identity` exige JWT en casi todo, así que se agregó esa ruta a las que permite sin él.
+- Las métricas no se publican: el Ingress solo expone el cliente web, y su nginx responde 404 a
+  `/svc/<servicio>/actuator/*`, salvo `/actuator/health`. Ese cambio de `mobile/nginx.conf` llega
+  con la próxima imagen del cliente web.
+- Las etiquetas no llevan identificadores de personas: `anonymousId` no se usa como etiqueta.
+- El stack de Compose no incluye Prometheus; el scraping es solo de los clústeres k3s.
+
 ## Problemas comunes
 
 | Síntoma | Causa | Solución |
@@ -152,7 +232,8 @@ Es idempotente (`helm upgrade --install`). Útil cuando el pipeline dispone de l
 | `terraform apply` falla con `dial tcp ...:22: i/o timeout` | El clúster está apagado o la IP no está autorizada | `hosts.sh start k3s`, `hosts.sh allow` |
 | `Permission denied (publickey)` | La llave no coincide con el key pair | Usa `circleguard-admin-key.pem` o `ssh-add` |
 | `helm` falla al conectar al API | k3s aún no terminó de arrancar | El script espera hasta 5 minutos; revisa `sudo k3s kubectl get nodes` |
-| Prometheus sin targets | Los ServiceMonitors de HU-39 no están aplicados | Aplica los ServiceMonitors de HU-39 |
+| Prometheus sin targets | El chart se desplegó antes que el stack (sin CRD) o con `metrics.serviceMonitor.enabled=false` | Repite el `helm upgrade` de la aplicación y comprueba `kubectl -n circleguard-<ambiente> get servicemonitor` |
+| Un servicio aparece `DOWN` con `401` | Su seguridad exige autenticación en `/actuator/prometheus` | Permite esa ruta en su `SecurityConfig` (como en `identity`) |
 | Pods en `Pending` o `OOMKilled` | El nodo de 8 GB quedó corto | Baja retención y límites, o desactiva componentes que no uses |
 
 ## Seguridad

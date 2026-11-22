@@ -15,3 +15,13 @@ spring:
 
 server:
   port: 8084
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  metrics:
+    tags:
+      # Same value in every metric, so dashboards can filter by service.
+      application: ${spring.application.name}

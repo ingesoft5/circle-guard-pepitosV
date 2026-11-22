@@ -16,6 +16,7 @@ deploy/k8s/
 │   └── templates/
 │       ├── workloads.yaml     # ConfigMap + Deployment/StatefulSet + Service por componente
 │       ├── hpa.yaml
+│       ├── servicemonitor.yaml  # scraping de /actuator/prometheus (HU-39)
 │       └── ingress.yaml
 └── scripts/apply-secrets.sh   # crea el Secret del ambiente sin versionar valores
 ```
@@ -78,6 +79,10 @@ chart crea un ServiceMonitor, `circleguard-services`, que lee `/actuator/prometh
 El ServiceMonitor solo se crea si el clúster tiene las CRD del Prometheus Operator (namespace
 `monitoring`, instalado por `infra/terraform/modules/observability`). En un clúster sin monitoreo
 el chart se instala igual, sin ese recurso, y lo crea en el siguiente despliegue.
+
+Con `helm template`, agrega `--api-versions monitoring.coreos.com/v1/ServiceMonitor` o el recurso
+no se genera. Las métricas, sus etiquetas y cómo verificarlas están en
+[`docs/operaciones/observability.md`](../../docs/operaciones/observability.md#métricas-de-los-servicios-hu-39).
 
 ## Desplegar a mano
 

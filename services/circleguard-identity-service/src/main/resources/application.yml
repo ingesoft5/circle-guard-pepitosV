@@ -31,7 +31,11 @@ management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health,prometheus
+  metrics:
+    tags:
+      # Same value in every metric, so dashboards can filter by service.
+      application: ${spring.application.name}
 
 circleguard:
   cors:
