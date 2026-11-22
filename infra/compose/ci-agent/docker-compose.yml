@@ -1,0 +1,35 @@
+# Jenkins build agent (circleguard-ci-agent-<n>): the same image as the controller
+# (infra/compose/ci/jenkins/Dockerfile, with Docker CLI, kubectl, Helm and Terraform), started as
+# an inbound agent over WebSocket. Builds use the Docker daemon of this host, like the controller.
+# Started by infra/bootstrap/bootstrap-ci-agent.sh, which writes .env and secrets/agent-secret.
+name: ${CI_AGENT_PROJECT:-circleguard-ci-agent}
+
+services:
+  agent:
+    build:
+      context: ../ci/jenkins
+    image: circleguard-ci/jenkins:lts-jdk21-docker
+    container_name: ${CI_AGENT_PROJECT:-circleguard-ci-agent}
+    restart: unless-stopped
+    user: jenkins
+    entrypoint: ["/bin/sh", "-c"]
+    # agent.jar comes from the controller, so it always matches its version.
+    command:
+      - >-
+        curl -fsS -o /tmp/agent.jar "$${JENKINS_URL%/}/jnlpJars/agent.jar" &&
+        exec java -Xmx512m -jar /tmp/agent.jar -url "$${JENKINS_URL}" -webSocket
+        -name "$${JENKINS_AGENT_NAME}" -secret @/run/secrets/agent-secret
+        -workDir /var/jenkins_home/agent
+    environment:
+      JENKINS_URL: ${JENKINS_URL:?Define JENKINS_URL (controller private address)}
+      JENKINS_AGENT_NAME: ${JENKINS_AGENT_NAME:?Define JENKINS_AGENT_NAME}
+    group_add:
+      - "${DOCKER_GID:-0}"
+    volumes:
+      # Same path as the controller: GRADLE_USER_HOME is ${JENKINS_HOME}/gradle-cache.
+      - agent_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./secrets/agent-secret:/run/secrets/agent-secret:ro
+
+volumes:
+  agent_home:
