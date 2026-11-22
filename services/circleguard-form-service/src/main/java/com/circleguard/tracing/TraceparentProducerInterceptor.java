@@ -23,6 +23,11 @@ public class TraceparentProducerInterceptor implements ProducerInterceptor<Objec
 
     @Override
     public ProducerRecord<Object, Object> onSend(ProducerRecord<Object, Object> record) {
+        // The outbox relay sets the traceparent captured in the request; do not overwrite it with
+        // the relay's own span.
+        if (record.headers().lastHeader(TraceparentHeaders.HEADER) != null) {
+            return record;
+        }
         if (tracer == null || tracer.currentSpan() == null) {
             return record;
         }
