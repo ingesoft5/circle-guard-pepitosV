@@ -51,6 +51,9 @@ public class OutboxRelay {
                 kafkaTemplate.send(record)
                         .get(properties.getRelay().getSendTimeout().toMillis(), TimeUnit.MILLISECONDS);
                 event.markPublished();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("Interrupted while publishing outbox event", e);
             } catch (Exception e) {
                 event.recordFailure(e.getMessage());
                 log.warn("outbox: could not publish {} ({})", event.getId(), event.getTopic(), e);

@@ -2,8 +2,12 @@ package com.circleguard.form.service;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -17,6 +21,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.header.Header;
 import org.junit.jupiter.api.BeforeEach;
@@ -72,6 +77,23 @@ class OutboxRelayTest {
         assertThat(event.getAttempts()).isEqualTo(1);
         assertThat(event.getLastError()).contains("kafka down");
         verify(repository).save(event);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void anInterruptionReInterruptsTheThreadAndLeavesTheEventPending() throws Exception {
+        OutboxEvent event = pendingEvent();
+        when(repository.claimBatch(10)).thenReturn(List.of(event));
+        CompletableFuture<SendResult<String, Object>> future = mock(CompletableFuture.class);
+        doThrow(new InterruptedException("stop"))
+                .when(future).get(anyLong(), any(TimeUnit.class));
+        when(kafkaTemplate.send(any(ProducerRecord.class))).thenReturn(future);
+
+        assertThatThrownBy(relay::publishPending).isInstanceOf(IllegalStateException.class);
+
+        assertThat(Thread.interrupted()).as("thread must be re-interrupted").isTrue();
+        assertThat(event.getPublishedAt()).isNull();
+        verify(repository, never()).save(event);
     }
 
     @Test
