@@ -2,7 +2,7 @@ def call(Map config = [:]) {
     def server = config.server ?: 'SonarQube'
     def service = config.service
     def target = service ? ":services:${service}:sonar" : 'sonar'
-    def args = ['./gradlew', '--no-daemon']
+    def args = ['./gradlew']
 
     if (config.projectKey) {
         args.add("-Dsonar.projectKey=${config.projectKey}")
@@ -21,7 +21,10 @@ def call(Map config = [:]) {
     // el gate consulte la tarea de este servicio y no la del primero que se analizó.
     sh 'rm -f build/sonar/report-task.txt services/*/build/sonar/report-task.txt'
 
+    // JENKINS_NODE_COOKIE keeps the Gradle daemon alive after the step (see gradleBuild).
     withSonarQubeEnv(server) {
-        sh args.join(' ')
+        withEnv(['JENKINS_NODE_COOKIE=dontKillMe']) {
+            sh args.join(' ')
+        }
     }
 }

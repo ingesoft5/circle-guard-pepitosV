@@ -2,13 +2,34 @@ version: 2
 updates:
   - package-ecosystem: gradle
     directory: /
+    # Updates follow the normal flow (PR to dev), never straight to main.
+    target-branch: dev
     schedule:
       interval: weekly
+    open-pull-requests-limit: 3
+    # Major versions (Spring Boot 4, Gradle 9, Kotlin 2...) are planned upgrades, not bumps.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: npm
     directory: /
+    # Updates follow the normal flow (PR to dev), never straight to main.
+    target-branch: dev
     schedule:
       interval: weekly
+    open-pull-requests-limit: 3
+    # Major versions (Spring Boot 4, Gradle 9, Kotlin 2...) are planned upgrades, not bumps.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: npm
     directory: /mobile
+    # Updates follow the normal flow (PR to dev), never straight to main.
+    target-branch: dev
     schedule:
       interval: weekly
+    open-pull-requests-limit: 3
+    # Major versions (Spring Boot 4, Gradle 9, Kotlin 2...) are planned upgrades, not bumps.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
