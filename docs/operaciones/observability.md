@@ -12,7 +12,7 @@ los dashboards y las alertas se configuran en HU-39, HU-40 y HU-41.
 | `micrometer-registry-prometheus`, `/actuator/prometheus` y contadores de negocio | Código de los 8 servicios (HU-39) |
 | ServiceMonitor de los 8 servicios | `deploy/k8s/circleguard/templates/servicemonitor.yaml` (HU-39) |
 | Dashboards JSON y su aprovisionamiento | `observability/grafana/` (HU-40) |
-| Reglas de Alertmanager | `observability/alerts/` (HU-41) |
+| Reglas de alerta y envío a Discord | `observability/alerts/` y `alertmanager.config` en `observability/prometheus/values.yaml` (HU-41) |
 | Ingress de Grafana, Prometheus y Alertmanager | HU-26, con TLS en HU-47 |
 | Logs centralizados con Loki | HU-43 |
 
@@ -285,6 +285,126 @@ Grafana no guarda cambios en un dashboard aprovisionado. Para modificarlo:
 
 Un dashboard nuevo necesita su JSON y una entrada en `configMapGenerator` de la kustomización.
 
+## Alertas (HU-41)
+
+Las reglas están en `observability/alerts/circleguard-rules.yaml` (un `PrometheusRule`).
+Prometheus las evalúa cada 30 s y Alertmanager envía al canal de Discord del equipo las que llevan
+`project=circleguard`. Las alertas propias del stack (nodo, kubelet, etc.) se ven en
+`/alertmanager` pero no se envían.
+
+| Alerta | Condición | Espera | Severidad |
+|:---|:---|:---|:---|
+| `ServiceDown` | Prometheus no puede leer `/actuator/prometheus` de un pod (`up == 0`) | 1 min | `critical` |
+| `HighErrorRate` | Más del 5 % de respuestas 5xx en 5 min, con al menos 3 solicitudes por minuto | 2 min | `critical` |
+| `HighLatencyP95` | p95 HTTP por encima de 1 s en 5 min, con al menos 3 solicitudes por minuto | 5 min | `warning` |
+
+Las tres excluyen `/actuator`. El mínimo de tráfico evita que una sola solicitud fallida o lenta en
+un servicio sin uso dispare la alerta. Mientras un servicio tiene una alerta `critical`, sus
+`warning` no se envían. Alertmanager agrupa por alerta, namespace y servicio, repite cada 4 horas
+si sigue activa y avisa cuando se resuelve.
+
+### Configurar el canal de Discord
+
+1. En Discord: **Editar canal → Integraciones → Webhooks → Nuevo webhook**, y copia la URL. Puede
+   ser el mismo canal de las notificaciones de Jenkins.
+2. Guarda la URL fuera del repo (por ejemplo en `~/.config/circleguard/alertmanager-discord-webhook`)
+   y crea el Secret en cada clúster. La URL va por stdin, no queda en argv:
+
+   ```bash
+   ssh ubuntu@<node_public_ip> 'sudo ~/circleguard/infra/bootstrap/load-alertmanager-discord.sh' \
+     < ~/.config/circleguard/alertmanager-discord-webhook
+   ```
+
+   Si el nodo no tiene el repo en `~/circleguard`, copia antes el script y `infra/bootstrap/lib/`.
+3. Aplica Terraform en el ambiente (o corre `install-observability.sh`) para que Alertmanager tome
+   la ruta y el receptor de `observability/prometheus/values.yaml`.
+4. Aplica las reglas. `deployK8s` lo hace en cada despliegue; a mano:
+
+   ```bash
+   kubectl apply -k observability/alerts
+   kubectl -n monitoring get prometheusrule circleguard-alerts
+   ```
+
+   En Prometheus, **Alerts** debe listar las tres reglas en `Inactive`.
+
+El Secret se monta como volumen opcional: Alertmanager arranca aunque no exista, pero no puede
+enviar a Discord hasta que lo crees. Volver a correr el script cambia la URL sin reiniciar nada.
+
+### Probar el canal
+
+Antes de provocar las alertas, comprueba que Discord recibe algo. Esta alerta manual llega en
+unos 30 s y se resuelve sola a los 5 minutos:
+
+```bash
+curl -u monitoring:<password> -H 'Content-Type: application/json' \
+  http://<node_public_ip>/alertmanager/api/v2/alerts -d '[{
+    "labels": {"alertname": "PruebaDelCanal", "project": "circleguard",
+               "severity": "warning", "namespace": "circleguard-dev"},
+    "annotations": {"summary": "Prueba del canal de alertas",
+                    "description": "Enviada a mano para comprobar el webhook."}}]'
+```
+
+Si no llega, revisa `kubectl -n monitoring logs alertmanager-kube-prometheus-stack-alertmanager-0 -c alertmanager`.
+
+### Provocar cada alerta
+
+Hazlo en dev, con una versión desplegada que incluya HU-39 y HU-40 (métricas y buckets). Los
+comandos van en el nodo, con `sudo k3s kubectl` o con tu kubeconfig. Cada prueba deja dos
+mensajes en Discord: `FIRING` y, al revertir, `RESOLVED`.
+
+**ServiceDown.** Quita el endpoint de métricas a `file`. El pod sigue sano, pero
+`/actuator/prometheus` responde 404, y al minuto se dispara la alerta:
+
+```bash
+kubectl -n circleguard-dev set env deployment/file MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health
+# Espera unos 3 minutos (nuevo pod + 1 minuto). Para revertir:
+kubectl -n circleguard-dev set env deployment/file MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE-
+```
+
+**HighErrorRate.** Apaga Neo4j y genera tráfico a un endpoint de `promotion` que lo usa. Cada
+solicitud responde 500:
+
+```bash
+kubectl -n circleguard-dev scale statefulset/neo4j --replicas=0
+for i in $(seq 1 600); do
+  curl -s -o /dev/null -w '%{http_code}\n' http://<node_public_ip>/svc/promotion/api/v1/circles/user/alert-test
+  sleep 0.5
+done | sort | uniq -c
+kubectl -n circleguard-dev scale statefulset/neo4j --replicas=1
+```
+
+La alerta llega a los 2 o 3 minutos; el bucle dura 5. `promotion` sigue listo porque su
+readiness no depende de Neo4j.
+
+**HighLatencyP95.** Agrega 700 ms de retraso a la red de Neo4j, en el nodo, y genera el mismo
+tráfico. Cada consulta hace al menos dos idas y vueltas, así que las respuestas pasan de 1 s sin
+fallar:
+
+```bash
+CID=$(sudo k3s crictl ps --name neo4j -q)
+PID=$(sudo k3s crictl inspect --output go-template --template '{{.info.pid}}' "$CID")
+sudo modprobe sch_netem   # si falla: sudo apt-get install -y linux-modules-extra-$(uname -r)
+sudo nsenter -t "$PID" -n tc qdisc add dev eth0 root netem delay 700ms
+
+for i in $(seq 1 960); do
+  curl -s -o /dev/null -w '%{time_total}\n' http://<node_public_ip>/svc/promotion/api/v1/circles/user/alert-test
+  sleep 0.5
+done | sort -n | tail -n 3
+
+sudo nsenter -t "$PID" -n tc qdisc del dev eth0 root
+```
+
+La alerta llega a los 6 o 7 minutos (5 de espera más la ventana de 5 minutos); el bucle dura
+unos 8. Si Neo4j se reinicia durante la prueba, el retraso desaparece con el contenedor viejo:
+vuelve a calcular `CID` y `PID`.
+
+### Evidencia
+
+Guarda en `docs/operaciones/evidencias/hu-41/` una captura del mensaje `FIRING` y otra del
+`RESOLVED` de cada alerta, más la vista **Alerts** de Prometheus con la regla en `Firing`. Usa
+nombres como `servicedown-firing.png` y `servicedown-resolved.png`, y anota la fecha y el ambiente
+de cada prueba en el PR.
+
 ## Problemas comunes
 
 | Síntoma | Causa | Solución |
@@ -295,6 +415,8 @@ Un dashboard nuevo necesita su JSON y una entrada en `configMapGenerator` de la 
 | Prometheus sin targets | El chart se desplegó antes que el stack (sin CRD) o con `metrics.serviceMonitor.enabled=false` | Repite el `helm upgrade` de la aplicación y comprueba `kubectl -n circleguard-<ambiente> get servicemonitor` |
 | Los dashboards no aparecen en Grafana | El ConfigMap no existe o no tiene la etiqueta `grafana_dashboard` | `kubectl apply -k observability/grafana` y revisa `kubectl -n monitoring logs deploy/kube-prometheus-stack-grafana -c grafana-sc-dashboard` |
 | Latencia p95 vacía | La imagen del servicio es anterior a los buckets de HU-40 | Despliega una versión que incluya `management.metrics.distribution.slo` |
+| Las alertas se disparan pero no llegan a Discord | Falta el Secret `alertmanager-discord` o la URL es inválida | Corre `load-alertmanager-discord.sh` y revisa los logs del contenedor `alertmanager` |
+| Llegan alertas `ServiceDown` de todos los servicios | Las imágenes desplegadas son anteriores a HU-39 y no exponen `/actuator/prometheus` | Despliega una versión que incluya HU-39 |
 | Un servicio aparece `DOWN` con `401` | Su seguridad exige autenticación en `/actuator/prometheus` | Permite esa ruta en su `SecurityConfig` (como en `identity`) |
 | Pods en `Pending` o `OOMKilled` | El nodo de 8 GB quedó corto | Baja retención y límites, o desactiva componentes que no uses |
 
