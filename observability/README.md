@@ -11,8 +11,13 @@ observability/
 │   └── values.yaml     # valores base de kube-prometheus-stack (HU-26)
 ├── ingress/
 │   └── basic-auth-middleware.yaml  # BasicAuth de Prometheus y Alertmanager
-├── grafana/            # dashboards como código (HU-40)
-│   ├── kustomization.yaml          # un ConfigMap por dashboard en monitoring
+├── loki/
+│   └── values.yaml     # Loki de un solo binario
+├── promtail/
+│   └── values.yaml     # envío de logs de los pods a Loki
+├── grafana/
+│   ├── datasources.yaml            # Loki y el enlace de una línea al trace de Jaeger
+│   ├── kustomization.yaml          # dashboards (HU-40): un ConfigMap por dashboard en monitoring
 │   ├── format_dashboard.py         # deja un panel por línea antes del commit
 │   └── dashboards/                 # JSON: Servicios y Negocio
 └── alerts/             # reglas de Alertmanager (HU-41)
