@@ -1,0 +1,20 @@
+# CircleGuard dashboards (HU-40). Each JSON in dashboards/ becomes a ConfigMap in the monitoring
+# namespace, and the Grafana sidecar of kube-prometheus-stack loads every ConfigMap labelled
+# grafana_dashboard. deployK8s applies it after each deploy; by hand:
+#   kubectl apply -k observability/grafana
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: monitoring
+generatorOptions:
+  # Stable names, so each apply updates the same ConfigMap instead of adding a new one.
+  disableNameSuffixHash: true
+  labels:
+    grafana_dashboard: "1"
+    app.kubernetes.io/part-of: circleguard
+configMapGenerator:
+  - name: circleguard-dashboard-services
+    files:
+      - dashboards/circleguard-services.json
+  - name: circleguard-dashboard-business
+    files:
+      - dashboards/circleguard-business.json

@@ -47,6 +47,10 @@ management:
     tags:
       # Same value in every metric, so dashboards can filter by service.
       application: ${spring.application.name}
+    distribution:
+      slo:
+        # Few buckets on purpose: enough for the p95 panel in Grafana, cheap in series.
+        "[http.server.requests]": 25ms,50ms,100ms,250ms,500ms,1s,2s,5s
   tracing:
     sampling:
       probability: 1.0

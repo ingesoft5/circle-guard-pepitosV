@@ -12,6 +12,8 @@
  *
  * helm --atomic --wait: if any rollout does not finish within the timeout the release goes back to
  * its previous revision and the stage fails, so the pipeline turns FAILED and notifies.
+ *
+ * After the rollout it applies the Grafana dashboards of observability/grafana (HU-40).
  */
 def call(Map config = [:]) {
     String environment = config.environment
@@ -60,6 +62,19 @@ def call(Map config = [:]) {
                 '''
                 error("deployK8s: rollout of ${version} to ${environment} did not finish in ${timeout}; " +
                         'Helm restored the previous revision')
+            }
+            // Dashboards as code (HU-40): Grafana runs in the monitoring namespace of the same
+            // cluster. A cluster without the monitoring stack skips the step, and a failure here
+            // marks the stage UNSTABLE instead of failing a deploy that already finished.
+            catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE',
+                    message: 'deployK8s: the Grafana dashboards were not applied') {
+                sh '''
+                    if kubectl get namespace monitoring >/dev/null 2>&1; then
+                      kubectl apply -k observability/grafana
+                    else
+                      echo "No monitoring namespace in this cluster; dashboards skipped"
+                    fi
+                '''
             }
         }
     }

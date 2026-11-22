@@ -11,7 +11,10 @@ observability/
 │   └── values.yaml     # valores base de kube-prometheus-stack (HU-26)
 ├── ingress/
 │   └── basic-auth-middleware.yaml  # BasicAuth de Prometheus y Alertmanager
-├── grafana/            # dashboards JSON versionados y aprovisionados (HU-40)
+├── grafana/            # dashboards como código (HU-40)
+│   ├── kustomization.yaml          # un ConfigMap por dashboard en monitoring
+│   ├── format_dashboard.py         # deja un panel por línea antes del commit
+│   └── dashboards/                 # JSON: Servicios y Negocio
 └── alerts/             # reglas de Alertmanager (HU-41)
 ```
 
@@ -27,9 +30,8 @@ Alertmanager se publican en `/prometheus` y `/alertmanager` detrás del middlewa
 `monitoring-basic-auth`; el secreto se crea fuera de Git con
 `infra/bootstrap/load-monitoring-auth.sh`. El TLS es HU-47.
 
-## Qué queda para HU-40 y HU-41
+## Qué queda para HU-41
 
-- **HU-40:** dashboards JSON en `observability/grafana/` y su ConfigMap.
 - **HU-41:** reglas en `observability/alerts/` y la notificación de Alertmanager.
 
 La guía de operación y verificación está en
