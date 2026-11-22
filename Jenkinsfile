@@ -33,7 +33,9 @@ def failedService = null
 def failedStage = null
 
 pipeline {
-    agent any
+    // The controller (CI) orchestrates: checkout, scans, plans, deploys and approvals. The heavy
+    // lanes of 'Build, test and package' run on the build workers.
+    agent { label 'controller' }
 
     options {
         buildDiscarder(logRotator(numToKeepStr: '20'))
@@ -54,7 +56,6 @@ pipeline {
         // Shared by every branch: the workspaces are wiped after each build.
         GRADLE_USER_HOME = "${JENKINS_HOME}/gradle-cache"
         GRADLE_OPTS = '-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx1g'
-        MAX_PARALLEL_SERVICES = '3'
         PR_MAX_ADDITIONS = '700'
         PR_MAX_DELETIONS = '300'
         PR_MAX_CHANGED_LINES = '1000'
@@ -193,144 +194,6 @@ pipeline {
             }
         }
 
-        stage('Build and test') {
-            steps {
-                script {
-                    int maxParallel = (env.MAX_PARALLEL_SERVICES ?: '3') as int
-                    if (maxParallel < 1) {
-                        maxParallel = 1
-                    }
-
-                    if (!changed.services && !changed.web) {
-                        echo 'No hay servicios ni cliente web modificados.'
-                    }
-
-                    def services = changed.services
-                    for (int i = 0; i < services.size(); i += maxParallel) {
-                        int end = i + maxParallel
-                        if (end > services.size()) {
-                            end = services.size()
-                        }
-                        def batch = []
-                        for (int j = i; j < end; j++) {
-                            batch.add(services[j])
-                        }
-                        def branches = [:]
-                        batch.each { service ->
-                            branches[service] = {
-                                def currentStage = "Compile ${service}"
-                                try {
-                                    stage(currentStage) {
-                                        gradleBuild(service: service)
-                                    }
-                                    currentStage = "Test ${service}"
-                                    stage(currentStage) {
-                                        runTests(service: service, publish: false)
-                                    }
-                                } catch (Exception e) {
-                                    if (!failedService) {
-                                        failedService = service
-                                        failedStage = currentStage
-                                    }
-                                    throw e
-                                }
-                            }
-                        }
-                        parallel branches
-                    }
-
-                }
-            }
-        }
-
-        stage('Sonar analysis and quality gate') {
-            when {
-                expression { !changed.services.isEmpty() }
-            }
-            steps {
-                script {
-                    for (String service : changed.services) {
-                        def currentStage = "Sonar ${service}"
-                        try {
-                            stage(currentStage) {
-                                sonarScan(service: service)
-                            }
-
-                            currentStage = "Quality gate ${service}"
-                            stage(currentStage) {
-                                timeout(time: 10, unit: 'MINUTES') {
-                                    waitForQualityGate abortPipeline: true
-                                }
-                            }
-                        } catch (Exception e) {
-                            failedService = service
-                            failedStage = currentStage
-                            throw e
-                        }
-                    }
-                }
-            }
-        }
-
-        // Proves that the images build when nothing is published afterwards (PRs to dev).
-        // Where images are published, dockerPublish already builds them; on main they are
-        // promoted from the release candidate, so building them here would be wasted work.
-        stage('Package images') {
-            when {
-                expression { prereleaseVersion == null && env.BRANCH_NAME != 'main' }
-            }
-            steps {
-                script {
-                    int maxParallel = (env.MAX_PARALLEL_SERVICES ?: '3') as int
-                    if (maxParallel < 1) {
-                        maxParallel = 1
-                    }
-
-                    def services = changed.services
-                    for (int i = 0; i < services.size(); i += maxParallel) {
-                        int end = Math.min(i + maxParallel, services.size())
-                        def batch = []
-                        for (int j = i; j < end; j++) {
-                            batch.add(services[j])
-                        }
-
-                        def branches = [:]
-                        batch.each { service ->
-                            branches[service] = {
-                                try {
-                                    stage("Package ${service}") {
-                                        dockerBuild(service: service)
-                                    }
-                                } catch (Exception e) {
-                                    failedService = service
-                                    failedStage = "Package ${service}"
-                                    throw e
-                                }
-                            }
-                        }
-
-                        parallel branches
-                    }
-
-                    if (changed.web) {
-                        try {
-                            stage('Package web client') {
-                                dockerBuild(
-                                    image: 'web-client',
-                                    dockerfile: 'mobile/Dockerfile',
-                                    context: 'mobile'
-                                )
-                            }
-                        } catch (Exception e) {
-                            failedService = 'web-client'
-                            failedStage = 'Package web client'
-                            throw e
-                        }
-                    }
-                }
-            }
-        }
-
         stage('IaC scan') {
             when { expression { !alreadyMerged } }
             steps {
@@ -357,60 +220,148 @@ pipeline {
             }
         }
 
-        stage('Integration tests') {
-            when {
-                expression {
-                    changed.all || changed.services.any { service ->
-                        service == 'circleguard-auth-service' ||
-                            service == 'circleguard-form-service' ||
-                            service == 'circleguard-promotion-service' ||
-                            service == 'circleguard-gateway-service'
-                    }
-                }
-            }
+        // Heavy work runs on the build workers (label 'worker'), one lane per component, all in
+        // parallel: each worker takes as many lanes as it has executors and the rest queue. A
+        // lane is self-contained (checkout, compile, test, Sonar, image), so no JAR moves between
+        // machines. The controller only orchestrates, deploys and approves.
+        stage('Build, test and package') {
             steps {
                 script {
-                    def currentStage = 'Integration tests'
-                    try {
-                        runTests(integration: true, coverage: false, publish: true)
-                    } catch (Exception e) {
-                        if (!failedService) {
-                            failedService = 'integration-tests'
-                            failedStage = currentStage
+                    boolean publish = prereleaseVersion != null
+                    boolean packageOnly = !publish && env.BRANCH_NAME != 'main'
+                    // SNAPSHOT publishes only the affected components. A promotion PR (or a
+                    // release branch) publishes the full set: the RC is what main promotes.
+                    String sourceBranch = env.CHANGE_BRANCH ?: env.BRANCH_NAME
+                    boolean onlyChanged = !promotionPr && sourceBranch == 'dev'
+                    List<String> buildServices = publish && !onlyChanged ? SERVICES : changed.services
+                    boolean buildWeb = publish && !onlyChanged ? true : changed.web
+
+                    def lanes = [:]
+                    buildServices.each { service ->
+                        lanes[service] = {
+                            node('worker') {
+                                def currentStage = "Compile ${service}"
+                                try {
+                                    checkout scm
+                                    sh 'chmod +x gradlew'
+                                    stage(currentStage) {
+                                        gradleBuild(service: service)
+                                    }
+                                    currentStage = "Test ${service}"
+                                    stage(currentStage) {
+                                        runTests(service: service, publish: true)
+                                        publishCoverage(services: [service])
+                                    }
+                                    // The scanner waits for the quality gate itself and fails the
+                                    // lane when it is red, so parallel lanes never read each
+                                    // other's analysis (waitForQualityGate takes the last one).
+                                    currentStage = "Sonar ${service}"
+                                    stage(currentStage) {
+                                        sonarScan(
+                                            service: service,
+                                            extraArgs: '-Dsonar.qualitygate.wait=true -Dsonar.qualitygate.timeout=600'
+                                        )
+                                    }
+                                    if (publish) {
+                                        currentStage = "Publish ${service}"
+                                        stage(currentStage) {
+                                            dockerPublish(service: service, version: prereleaseVersion)
+                                        }
+                                    } else if (packageOnly) {
+                                        currentStage = "Package ${service}"
+                                        stage(currentStage) {
+                                            dockerBuild(service: service)
+                                        }
+                                    }
+                                } catch (Exception e) {
+                                    if (!failedService) {
+                                        failedService = service
+                                        failedStage = currentStage
+                                    }
+                                    throw e
+                                } finally {
+                                    cleanWs()
+                                }
+                            }
                         }
-                        throw e
+                    }
+
+                    if (buildWeb && (publish || packageOnly)) {
+                        lanes['web-client'] = {
+                            node('worker') {
+                                String currentStage = publish ? 'Publish web client' : 'Package web client'
+                                try {
+                                    checkout scm
+                                    stage(currentStage) {
+                                        if (publish) {
+                                            dockerPublish(image: 'web-client', dockerfile: 'mobile/Dockerfile', context: 'mobile', version: prereleaseVersion)
+                                        } else {
+                                            dockerBuild(image: 'web-client', dockerfile: 'mobile/Dockerfile', context: 'mobile')
+                                        }
+                                    }
+                                } catch (Exception e) {
+                                    if (!failedService) {
+                                        failedService = 'web-client'
+                                        failedStage = currentStage
+                                    }
+                                    throw e
+                                } finally {
+                                    cleanWs()
+                                }
+                            }
+                        }
+                    }
+
+                    boolean integration = changed.all || changed.services.any { service ->
+                        service in ['circleguard-auth-service', 'circleguard-form-service',
+                                    'circleguard-promotion-service', 'circleguard-gateway-service']
+                    }
+                    if (integration) {
+                        lanes['integration-tests'] = {
+                            node('worker') {
+                                try {
+                                    checkout scm
+                                    sh 'chmod +x gradlew'
+                                    stage('Integration tests') {
+                                        runTests(integration: true, coverage: false, publish: true)
+                                    }
+                                } catch (Exception e) {
+                                    if (!failedService) {
+                                        failedService = 'integration-tests'
+                                        failedStage = 'Integration tests'
+                                    }
+                                    throw e
+                                } finally {
+                                    cleanWs()
+                                }
+                            }
+                        }
+                    }
+
+                    if (lanes) {
+                        parallel lanes
+                    } else {
+                        echo 'No hay servicios ni cliente web modificados.'
                     }
                 }
             }
         }
 
-        stage('Publish prerelease images') {
-            when { expression { prereleaseVersion != null } }
+        // Before the merge: checks that main will be able to find this RC (read only).
+        stage('Verify promotion path') {
+            when { expression { promotionPr && prereleaseVersion != null } }
             steps {
                 script {
-                    // SNAPSHOT publishes only the affected components. A promotion PR (or a
-                    // release branch) publishes the full set: the RC is what main promotes.
-                    String sourceBranch = env.CHANGE_BRANCH ?: env.BRANCH_NAME
-                    boolean onlyChanged = !promotionPr && sourceBranch == 'dev'
-                    publishImages(
-                        onlyChanged ? changed.services : SERVICES,
-                        onlyChanged ? changed.web : true,
-                        prereleaseVersion
-                    )
-
-                    // Before the merge: checks that main will be able to find this RC (read only).
-                    if (promotionPr) {
-                        try {
-                            promoteRelease(
-                                version: prereleaseVersion.substring(0, prereleaseVersion.indexOf('-rc.')),
-                                services: SERVICES,
-                                dryRun: true
-                            )
-                        } catch (Exception e) {
-                            failedService = 'registry'
-                            failedStage = 'Verify promotion path'
-                            throw e
-                        }
+                    try {
+                        promoteRelease(
+                            version: prereleaseVersion.substring(0, prereleaseVersion.indexOf('-rc.')),
+                            services: SERVICES,
+                            dryRun: true
+                        )
+                    } catch (Exception e) {
+                        failedService = 'registry'
+                        failedStage = 'Verify promotion path'
+                        throw e
                     }
                 }
             }
@@ -711,17 +662,6 @@ pipeline {
     }
 
     post {
-        always {
-            script {
-                if (changed.services) {
-                    def patterns = changed.services.collect {
-                        "services/${it}/build/test-results/test/*.xml"
-                    }.join(',')
-                    junit allowEmptyResults: true, testResults: patterns
-                    publishCoverage(services: changed.services)
-                }
-            }
-        }
         failure {
             notifyDiscord(
                 status: 'FAILED',
@@ -751,28 +691,5 @@ pipeline {
         cleanup {
             cleanWs()
         }
-    }
-}
-
-// Publishes the images in parallel batches of MAX_PARALLEL_SERVICES. Each image is built from the
-// JAR of the Compile stage, so a batch is mostly the push to the registry.
-def publishImages(List<String> services, boolean web, String version) {
-    int maxParallel = Math.max((env.MAX_PARALLEL_SERVICES ?: '3') as int, 1)
-    def jobs = [:]
-    services.each { service ->
-        jobs[service] = { dockerPublish(service: service, version: version) }
-    }
-    if (web) {
-        jobs['web-client'] = {
-            dockerPublish(image: 'web-client', dockerfile: 'mobile/Dockerfile', context: 'mobile', version: version)
-        }
-    }
-    List<String> names = jobs.keySet() as List
-    for (int i = 0; i < names.size(); i += maxParallel) {
-        def batch = [:]
-        names.subList(i, Math.min(i + maxParallel, names.size())).each { name ->
-            batch["Publish ${name}"] = jobs[name]
-        }
-        parallel batch
     }
 }

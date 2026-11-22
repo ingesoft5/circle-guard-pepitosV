@@ -133,7 +133,7 @@ publishCoverage(services: ['circleguard-auth-service', 'circleguard-form-service
 
 ### `sonarScan`
 
-Ejecuta el análisis de SonarQube de un servicio dentro de `withSonarQubeEnv`. El `Jenkinsfile` lo usa en la etapa `Sonar analysis and quality gate`, seguida de `waitForQualityGate abortPipeline: true`.
+Ejecuta el análisis de SonarQube de un servicio dentro de `withSonarQubeEnv`. El `Jenkinsfile` lo usa en el carril de cada servicio (`Sonar <servicio>`) con `extraArgs: '-Dsonar.qualitygate.wait=true -Dsonar.qualitygate.timeout=600'`, de modo que el scanner espera el quality gate y falla si está en rojo.
 
 | Parámetro | Obligatorio | Valor por defecto | Descripción |
 |:---|:---|:---|:---|
