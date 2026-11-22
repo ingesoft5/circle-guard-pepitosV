@@ -24,7 +24,7 @@ Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`), 
 - Cuando un build falla o queda inestable, `notifyDiscord` envía un mensaje al canal de Discord con rama, servicio, etapa, autor y enlace al build. Si el build siguiente se recupera, envía un mensaje de recuperación.
 - La librería se carga desde `jenkins/vars/` usando `libraryPath: "jenkins"`, en la versión de la misma rama que se está construyendo.
 - Jenkins publica el resultado como estado de commit en GitHub. Para builds de PR el contexto es `continuous-integration/jenkins/pr-merge`.
-- Una rama con un PR abierto se construye solo como `PR-<n>` (fusionada con su base) y no también como rama (`buildOriginBranchWithPR(false)`), porque Jenkins tiene un solo ejecutor. Las ramas sin PR, `dev` y `main` se siguen construyendo en cada push.
+- Una rama con un PR abierto se construye solo como `PR-<n>` (fusionada con su base) y no también como rama (`buildOriginBranchWithPR(false)`), para no construir dos veces el mismo cambio. Las ramas sin PR, `dev` y `main` se siguen construyendo en cada push.
 - El contenedor de Jenkins monta `/var/run/docker.sock` para que las pruebas con Testcontainers puedan iniciar contenedores y para el empaquetado posterior.
 
 ## Configuración que vive en el repositorio
@@ -176,27 +176,59 @@ Para los RC, `Deploy RC to stage` despliega la imagen preliminar en stage antes 
 
 `Approve production` es un `input` de 15 minutos. Solo el usuario `admin` puede aprobarlo (`submitter: 'admin'`, HU-21); el usuario `dev` no puede. Ver la [política de cambios](../release-notes/politica-cambios.md). Al aprobar, `Deploy to prod` despliega la misma versión en `prod`; si se rechaza o expira, prod no cambia.
 
-El despliegue reutiliza `deployCompose`, `deploy/compose` y `deploy.sh`; no hay pasos nuevos de despliegue. El smoke test y la espera de servicios `healthy` siguen dentro de `deploy.sh`.
+Desde la HU-34 todos los despliegues usan `deployK8s`: `helm upgrade --install --atomic --wait` del chart `deploy/k8s/circleguard` en el clúster k3s del ambiente, y después `k8sSmokeTest` por el Ingress. Las E2E corren contra `K8S_HOST_<ENV>`. Si un rollout no termina en 10 minutos, Helm restaura la revisión anterior, la etapa falla y `post { failure }` avisa a Discord.
 
-Jenkins tiene un solo ejecutor: mientras el `input` espera aprobación, los demás builds quedan en cola. El timeout global del pipeline sigue en 60 minutos y el `input` tiene un límite de 15.
+Jenkins tiene dos ejecutores: mientras el `input` espera aprobación ocupa uno, y los demás builds usan el otro. El timeout global del pipeline sigue en 60 minutos y el `input` tiene un límite de 15.
 
-## Rollback (HU-17)
+## Terraform en el pipeline (HU-32)
 
-El job `circleguard-rollback` (fuera del multibranch, declarado en `casc.yaml`) vuelve a desplegar en un ambiente una versión que ya está en Nexus. Se lanza desde Jenkins con **Build with Parameters**:
+Cuando `detectChangedServices` detecta cambios bajo `infra/terraform/` (y no solo documentación):
+
+- **PR:** `Terraform plan (PR)` ejecuta `terraform plan` para `dev`, `stage` y `prod`; el resultado queda en el log del build. No aplica nada.
+- **Merge a `main`:** `Terraform plan (main)` genera los tres planes; `Terraform apply dev` y `Terraform apply stage` aplican solo si el plan tiene cambios.
+- **Producción:** `Approve Terraform prod` es un `input` de 15 minutos que solo `admin` puede aprobar; después, `Terraform apply prod` aplica el plan guardado.
+- Si un ambiente no tiene cambios, el `apply` de ese ambiente se omite.
+- El `.tfplan` se aplica tal cual. Si el state cambió entre el plan y el apply, Terraform falla con `Saved plan is stale` y no aplica algo distinto a lo revisado.
+- El `.tfplan` no se archiva como artefacto porque puede contener valores sensibles; viaja por `stash`/`unstash` dentro del mismo build.
+- La detección usa el diff del PR o `HEAD^1` en `main`, no el fallback de "todos los servicios": un merge solo ve los archivos de `infra/terraform/` que trajo su PR. Los `.md` no cuentan.
+
+Credenciales de Jenkins que usa (ver `casc.yaml`):
+
+| Credencial | Uso |
+|:---|:---|
+| `aws-terraform` | Archivo de credenciales AWS del usuario que aplica la infraestructura. |
+| `prometheus-ssh-key` | Llave privada para el provisioner de observability. |
+| `prometheus-grafana-password` | Contraseña de Grafana del release de observability. |
+
+El paso usa `K8S_HOST_<AMBIENTE>` como `TF_VAR_prometheus_ssh_host`. Debe ser la **IP privada** del nodo: el Security Group solo abre el puerto 22 desde la IP privada de Jenkins.
+
+Carga manual en el host de CI (una vez, o al rotar credenciales):
+
+```bash
+sudo ./infra/bootstrap/load-terraform-credential.sh aws    < ~/.aws/credentials-terraform
+sudo ./infra/bootstrap/load-terraform-credential.sh ssh    < ~/.ssh/circleguard-admin-key
+sudo ./infra/bootstrap/load-terraform-credential.sh grafana < ~/grafana-admin-password.txt
+```
+
+Cada comando escribe el archivo en `infra/compose/ci/secrets/` y recarga JCasC. El usuario AWS necesita permisos sobre el bucket/tabla del state y sobre los recursos del proyecto (EC2, ECR, S3, CloudWatch, SNS, SSM). El usuario `circleguard-terraform-ci` ya los tiene.
+
+## Rollback (HU-17, HU-52)
+
+El job `circleguard-rollback` (fuera del multibranch, declarado en `casc.yaml`) vuelve atrás un ambiente en su clúster k3s. Se lanza desde Jenkins con **Build with Parameters**:
 
 | Parámetro | Valores |
 |:---|:---|
 | `ENVIRONMENT` | `stage`, `dev` o `prod` |
-| `VERSION` | Versión publicada, con o sin `v` (`0.1.0` o `v0.1.0`) |
+| `VERSION` | Vacío: `helm rollback` a la revisión anterior. O una versión publicada, con o sin `v` (`0.1.0` o `v0.1.0`) |
 
 Etapas:
 
-1. **Validate version:** comprueba en el registro de Nexus que existen todas las imágenes de `deploy/compose/stack.yml` con esa versión. Si falta alguna, el job falla **antes de conectarse al ambiente**.
-2. **Read current version:** lee por SSH el `IMAGE_TAG` que corre el ambiente.
-3. **Approve production:** solo en `prod`, un paso `input` pide confirmación antes de tocar el ambiente.
-4. **Redeploy:** usa `deployCompose`, el mismo paso del despliegue normal. `deploy.sh` descarga primero las imágenes (si falla, no cambia nada), espera a que todos los servicios estén `healthy` y corre el smoke test por el cliente web.
+1. **Read current release:** muestra `helm history`, lee la versión que corre y, si `VERSION` está vacío, la última revisión `superseded` y su versión.
+2. **Validate version:** solo con `VERSION`. Comprueba en Nexus que existen las 9 imágenes de la aplicación (`deploy/k8s/circleguard/values.yaml`) con esa versión. Si falta alguna, el job falla **antes de tocar el ambiente**.
+3. **Approve production:** solo en `prod`, un paso `input` que solo `admin` puede aprobar.
+4. **Roll back:** `helm rollback --wait` a la revisión elegida, o `deployK8s` con la versión pedida. En ambos casos termina con `k8sSmokeTest`.
 
-Evidencia: la descripción del build queda como `stage: 0.2.0 -> 0.1.0 by <usuario>` y el log termina con una línea `ROLLBACK OK` o `ROLLBACK FAILED` con ambiente, versión origen, versión destino y quién lo lanzó.
+Evidencia: la descripción del build queda como `stage: 0.6.0 -> revision 7 (0.5.0) by <usuario>` y el log termina con `ROLLBACK OK` o `ROLLBACK FAILED`. El plan completo está en [rollback.md](rollback.md).
 
 El job toma su pipeline y la Shared Library de la rama `ROLLBACK_BRANCH` del `.env` de CI (por defecto `main`, la versión estable). Solo se cambia para probar el job desde otra rama, y se vuelve a `main` después.
 

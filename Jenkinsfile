@@ -22,7 +22,9 @@ def prereleaseVersion = null
 // PR dev -> main: builds the release candidate that main later promotes to stable.
 def promotionPr = env.CHANGE_ID != null && env.CHANGE_TARGET == 'main' && env.CHANGE_BRANCH == 'dev' && env.CHANGE_FORK == null
 
-def changed = [services: [], web: false, all: false, base: '']
+def changed = [services: [], web: false, all: false, terraform: false, base: '']
+// Set by 'Terraform plan': hasChanges and planFile per environment (HU-32).
+def terraformChanges = [:]
 // A branch whose commit is already in dev (its PR was merged) is not built again.
 def alreadyMerged = false
 
@@ -73,6 +75,21 @@ pipeline {
             }
         }
 
+        stage('Secret scan') {
+            when { expression { !alreadyMerged } }
+            steps {
+                script {
+                    def currentStage = 'Secret scan'
+                    try {
+                        secretScan()
+                    } catch (Exception e) {
+                        failedStage = currentStage
+                        throw e
+                    }
+                }
+            }
+        }
+
         stage('PR size policy') {
             steps {
                 script {
@@ -90,9 +107,22 @@ pipeline {
                         buildAll: (params.BUILD_ALL ?: false) || promotionPr || ((env.BRANCH_NAME ?: '') ==~ /release\/.+/) || ((env.CHANGE_BRANCH ?: '') ==~ /release\/.+/),
                         services: SERVICES
                     )
+                    // Terraform has its own base: the PR target, or HEAD^1 on main. The
+                    // services diff falls back to "all" too often to drive an apply.
+                    changed.terraform = detectTerraformChanges()
                     echo "Base del diff: ${changed.base ?: 'sin base'}"
                     echo "Servicios seleccionados: ${changed.services ?: 'ninguno'}"
                     echo "Cliente web: ${changed.web}"
+                    echo "Cambios de Terraform: ${changed.terraform}"
+                }
+            }
+        }
+
+        stage('Dependency scan') {
+            when { expression { !alreadyMerged } }
+            steps {
+                script {
+                    trivyFsScan()
                 }
             }
         }
@@ -301,6 +331,32 @@ pipeline {
             }
         }
 
+        stage('IaC scan') {
+            when { expression { !alreadyMerged } }
+            steps {
+                script {
+                    trivyConfigScan()
+                }
+            }
+        }
+
+        // HU-32: a PR that changes infra/terraform gets the three plans in its build log.
+        stage('Terraform plan (PR)') {
+            when {
+                allOf {
+                    changeRequest()
+                    expression { changed.terraform }
+                }
+            }
+            steps {
+                script {
+                    terraformPlan(environment: 'dev')
+                    terraformPlan(environment: 'stage')
+                    terraformPlan(environment: 'prod')
+                }
+            }
+        }
+
         stage('Integration tests') {
             when {
                 expression {
@@ -370,7 +426,7 @@ pipeline {
                 }
             }
             steps {
-                deployCompose(environment: 'stage', version: prereleaseVersion)
+                deployK8s(environment: 'stage', version: prereleaseVersion)
             }
         }
 
@@ -387,7 +443,7 @@ pipeline {
                     usernameVariable: 'E2E_USERNAME',
                     passwordVariable: 'E2E_PASSWORD'
                 )]) {
-                    withEnv(["E2E_BASE_URL=http://${env.DEPLOY_HOST_STAGE}"]) {
+                    withEnv(["E2E_BASE_URL=http://${env.K8S_HOST_STAGE}"]) {
                         sh 'bash tests/e2e-playwright/run-e2e.sh'
                     }
                 }
@@ -462,6 +518,48 @@ pipeline {
             }
         }
 
+        // HU-32: a merge to main plans the three environments and applies dev, then stage.
+        // The plan file is applied as-is; a stale plan fails instead of drifting.
+        stage('Terraform plan (main)') {
+            when {
+                allOf {
+                    branch 'main'
+                    expression { changed.terraform }
+                }
+            }
+            steps {
+                script {
+                    terraformChanges.dev = terraformPlan(environment: 'dev')
+                    terraformChanges.stage = terraformPlan(environment: 'stage')
+                    terraformChanges.prod = terraformPlan(environment: 'prod')
+                }
+            }
+        }
+
+        stage('Terraform apply dev') {
+            when {
+                allOf {
+                    branch 'main'
+                    expression { changed.terraform && terraformChanges.dev?.hasChanges }
+                }
+            }
+            steps {
+                terraformApply(environment: 'dev')
+            }
+        }
+
+        stage('Terraform apply stage') {
+            when {
+                allOf {
+                    branch 'main'
+                    expression { changed.terraform && terraformChanges.stage?.hasChanges }
+                }
+            }
+            steps {
+                terraformApply(environment: 'stage')
+            }
+        }
+
         stage('Deploy to dev') {
             when {
                 allOf {
@@ -470,7 +568,7 @@ pipeline {
                 }
             }
             steps {
-                deployCompose(environment: 'dev', version: releaseVersion)
+                deployK8s(environment: 'dev', version: releaseVersion)
             }
         }
 
@@ -507,7 +605,7 @@ pipeline {
                     usernameVariable: 'E2E_USERNAME',
                     passwordVariable: 'E2E_PASSWORD'
                 )]) {
-                    withEnv(["E2E_BASE_URL=http://${env.DEPLOY_HOST_DEV}"]) {
+                    withEnv(["E2E_BASE_URL=http://${env.K8S_HOST_DEV}"]) {
                         sh 'bash tests/e2e-playwright/run-e2e.sh'
                     }
                 }
@@ -536,7 +634,7 @@ pipeline {
                 }
             }
             steps {
-                deployCompose(environment: 'stage', version: releaseVersion)
+                deployK8s(environment: 'stage', version: releaseVersion)
             }
         }
 
@@ -563,6 +661,42 @@ pipeline {
             }
         }
 
+        // HU-32: the prod Terraform plan needs its own admin approval. The application
+        // approval above is a separate decision.
+        stage('Approve Terraform prod') {
+            when {
+                allOf {
+                    branch 'main'
+                    expression { changed.terraform && terraformChanges.prod?.hasChanges }
+                }
+            }
+            steps {
+                timeout(time: 15, unit: 'MINUTES') {
+                    script {
+                        env.TERRAFORM_PROD_APPROVER = input(
+                            message: 'Apply the saved Terraform plan to prod',
+                            ok: 'Apply to prod',
+                            submitter: 'admin',
+                            submitterParameter: 'APPROVER'
+                        )
+                        echo "Terraform prod approved by ${env.TERRAFORM_PROD_APPROVER}"
+                    }
+                }
+            }
+        }
+
+        stage('Terraform apply prod') {
+            when {
+                allOf {
+                    branch 'main'
+                    expression { changed.terraform && terraformChanges.prod?.hasChanges }
+                }
+            }
+            steps {
+                terraformApply(environment: 'prod')
+            }
+        }
+
         stage('Deploy to prod') {
             when {
                 allOf {
@@ -571,7 +705,7 @@ pipeline {
                 }
             }
             steps {
-                deployCompose(environment: 'prod', version: releaseVersion)
+                deployK8s(environment: 'prod', version: releaseVersion)
             }
         }
     }

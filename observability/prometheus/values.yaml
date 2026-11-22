@@ -1,0 +1,111 @@
+# Base values for kube-prometheus-stack in the single-node k3s clusters.
+# HU-26 installs the stack; HU-39 configures scraping and service metrics, HU-40 adds the
+# dashboards and HU-41 the Alertmanager rules. Keep this file free of secrets.
+
+grafana:
+  enabled: true
+  # Published through the cluster's Traefik on the already open port 80, at /grafana, so no
+  # extra port is opened in the security group. Grafana keeps its own login. Prometheus and
+  # Alertmanager are published at /prometheus and /alertmanager behind the Traefik BasicAuth
+  # middleware (monitoring-basic-auth). HU-47 adds TLS.
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    path: /grafana
+    pathType: Prefix
+    hosts: []
+  grafana.ini:
+    server:
+      root_url: "%(protocol)s://%(domain)s/grafana/"
+      serve_from_sub_path: true
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      searchNamespace: ALL
+    datasources:
+      enabled: true
+      searchNamespace: ALL
+
+prometheus:
+  # Published through the cluster's Traefik at /prometheus on the already open port 80.
+  # The BasicAuth middleware is created by infra/bootstrap/load-monitoring-auth.sh.
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    pathType: Prefix
+    paths:
+      - /prometheus
+    hosts: []
+    annotations:
+      traefik.ingress.kubernetes.io/router.middlewares: monitoring-basic-auth@kubernetescrd
+  prometheusSpec:
+    # The external URL needs the /prometheus path: without it, the root redirect goes to
+    # /graph, which is not a Prometheus route and falls into the web client's 404.
+    externalUrl: /prometheus
+    routePrefix: /prometheus
+    retention: 7d
+    # Selectors empty so ServiceMonitors and rules from the application namespaces are discovered.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorNamespaceSelector: {}
+    podMonitorSelectorNilUsesHelmValues: false
+    podMonitorNamespaceSelector: {}
+    ruleSelectorNilUsesHelmValues: false
+    ruleNamespaceSelector: {}
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        memory: 1Gi
+
+alertmanager:
+  enabled: true
+  # Published through the cluster's Traefik at /alertmanager on the already open port 80.
+  # The BasicAuth middleware is created by infra/bootstrap/load-monitoring-auth.sh.
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    pathType: Prefix
+    paths:
+      - /alertmanager
+    hosts: []
+    annotations:
+      traefik.ingress.kubernetes.io/router.middlewares: monitoring-basic-auth@kubernetescrd
+  alertmanagerSpec:
+    routePrefix: /alertmanager
+    # Notifications (HU-41): the whole Alertmanager configuration comes from the
+    # AlertmanagerConfig in observability/alerts/alertmanager-config.yaml, which reads the
+    # Discord webhook from a Secret. This operator version rejects webhook_url_file in a plain
+    # alertmanager.config, so the routing lives there instead of in this file.
+    alertmanagerConfiguration:
+      name: circleguard
+    # The chart defaults to {} (every AlertmanagerConfig), which would load circleguard a second
+    # time as a per-namespace config. No object carries this label, so none is merged.
+    alertmanagerConfigSelector:
+      matchLabels:
+        circleguard.io/alertmanager-config: per-namespace
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+
+# k3s runs the control plane in a single process, so these scrape targets do not exist.
+kubeEtcd:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false

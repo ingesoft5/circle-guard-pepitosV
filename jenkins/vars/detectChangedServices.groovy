@@ -12,7 +12,7 @@ def call(Map config = [:]) {
 
     if (config.buildAll == true || env.BUILD_ALL == 'true') {
         echo 'detectChangedServices: BUILD_ALL activo; se procesan los 8 servicios y el web client.'
-        return [services: allServices.sort(), web: true, all: true, base: '']
+        return [services: allServices.sort(), web: true, all: true, terraform: false, base: '']
     }
 
     String base = (config.baseCommit ?: '').toString().trim()
@@ -52,7 +52,7 @@ def call(Map config = [:]) {
 
     if (!base) {
         echo 'detectChangedServices: sin commit base; se procesan los 8 servicios y el web client.'
-        return [services: allServices.sort(), web: true, all: true, base: '']
+        return [services: allServices.sort(), web: true, all: true, terraform: false, base: '']
     }
 
     boolean exists = sh(
@@ -61,7 +61,7 @@ def call(Map config = [:]) {
     ) == 0
     if (!exists) {
         echo "detectChangedServices: el commit base ${base} no está en el clon; se procesan todos."
-        return [services: allServices.sort(), web: true, all: true, base: base]
+        return [services: allServices.sort(), web: true, all: true, terraform: false, base: base]
     }
 
     boolean isAncestor = sh(
@@ -70,7 +70,7 @@ def call(Map config = [:]) {
     ) == 0
     if (!isAncestor) {
         echo "detectChangedServices: ${base} no es ancestro de HEAD; se procesan todos."
-        return [services: allServices.sort(), web: true, all: true, base: base]
+        return [services: allServices.sort(), web: true, all: true, terraform: false, base: base]
     }
 
     String diff = sh(
@@ -80,12 +80,13 @@ def call(Map config = [:]) {
 
     if (!diff) {
         echo "detectChangedServices: sin cambios entre ${base} y HEAD."
-        return [services: [], web: false, all: false, base: base]
+        return [services: [], web: false, all: false, terraform: false, base: base]
     }
 
     List<String> changedFiles = diff.split(/\r?\n/).collect { it.trim() }.findAll { it }
     Set<String> selected = new LinkedHashSet<String>()
     boolean web = false
+    boolean terraform = false
     boolean allServicesChanged = false
 
     List<String> exactShared = [
@@ -142,6 +143,11 @@ def call(Map config = [:]) {
             continue
         }
 
+        if (file.startsWith('infra/terraform/')) {
+            terraform = true
+            continue
+        }
+
         allServicesChanged = true
         web = true
     }
@@ -151,6 +157,6 @@ def call(Map config = [:]) {
     }
 
     List<String> result = selected.toList().sort()
-    echo "detectChangedServices: base=${base}, archivos=${changedFiles.size()}, servicios=${result}, web=${web}"
-    return [services: result, web: web, all: allServicesChanged, base: base]
+    echo "detectChangedServices: base=${base}, archivos=${changedFiles.size()}, servicios=${result}, web=${web}, terraform=${terraform}"
+    return [services: result, web: web, all: allServicesChanged, terraform: terraform, base: base]
 }

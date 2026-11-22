@@ -1,11 +1,11 @@
 package com.circleguard.form.service;
 
+import com.circleguard.form.metrics.SurveyMetrics;
 import com.circleguard.form.model.HealthSurvey;
 import com.circleguard.form.model.Questionnaire;
 import com.circleguard.form.model.ValidationStatus;
 import com.circleguard.form.repository.HealthSurveyRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.HashMap;
@@ -20,7 +20,8 @@ public class HealthSurveyService {
     private final HealthSurveyRepository repository;
     private final QuestionnaireService questionnaireService;
     private final SymptomMapper symptomMapper;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final OutboxService outboxService;
+    private final SurveyMetrics surveyMetrics;
 
     private static final String TOPIC_SURVEY_SUBMITTED = "survey.submitted";
     private static final String TOPIC_CERTIFICATE_VALIDATED = "certificate.validated";
@@ -49,7 +50,13 @@ public class HealthSurveyService {
         event.put("anonymousId", saved.getAnonymousId());
         event.put("hasSymptoms", hasSymptoms);
         event.put("timestamp", System.currentTimeMillis());
-        kafkaTemplate.send(TOPIC_SURVEY_SUBMITTED, saved.getAnonymousId().toString(), event);
+        String aggregateId = saved.getId() != null
+                ? saved.getId().toString()
+                : saved.getAnonymousId().toString();
+        outboxService.enqueue(
+                "HealthSurvey", aggregateId, TOPIC_SURVEY_SUBMITTED,
+                TOPIC_SURVEY_SUBMITTED, saved.getAnonymousId().toString(), event);
+        surveyMetrics.recordSubmitted(hasSymptoms);
         
         return saved;
     }
@@ -74,7 +81,9 @@ public class HealthSurveyService {
             event.put("status", "APPROVED");
             event.put("adminId", adminId);
             event.put("timestamp", System.currentTimeMillis());
-            kafkaTemplate.send(TOPIC_CERTIFICATE_VALIDATED, survey.getAnonymousId().toString(), event);
+            outboxService.enqueue(
+                    "HealthSurvey", survey.getId().toString(), TOPIC_CERTIFICATE_VALIDATED,
+                    TOPIC_CERTIFICATE_VALIDATED, survey.getAnonymousId().toString(), event);
         }
     }
 }

@@ -1,10 +1,10 @@
 plugins {
-    id("org.springframework.boot") version "3.2.4" apply false
-    id("io.spring.dependency-management") version "1.1.4" apply false
+    id("org.springframework.boot") version "3.5.16" apply false
+    id("io.spring.dependency-management") version "1.1.7" apply false
     id("org.sonarqube") version "5.1.0.4882" apply false
-    kotlin("jvm") version "1.9.24" apply false
-    kotlin("plugin.spring") version "1.9.24" apply false
-    kotlin("plugin.jpa") version "1.9.24" apply false
+    kotlin("jvm") version "1.9.25" apply false
+    kotlin("plugin.spring") version "1.9.25" apply false
+    kotlin("plugin.jpa") version "1.9.25" apply false
 }
 
 val coverageGatedServices = setOf(
@@ -35,15 +35,67 @@ subprojects {
     }
 
     dependencies {
-        "implementation"(platform("org.springframework.boot:spring-boot-dependencies:3.2.4"))
-        "testImplementation"(platform("org.springframework.boot:spring-boot-dependencies:3.2.4"))
+        "implementation"(platform("org.springframework.boot:spring-boot-dependencies:3.5.16"))
+        "testImplementation"(platform("org.springframework.boot:spring-boot-dependencies:3.5.16"))
         "compileOnly"("org.projectlombok:lombok")
         "annotationProcessor"("org.projectlombok:lombok")
         "testCompileOnly"("org.projectlombok:lombok")
         "testAnnotationProcessor"("org.projectlombok:lombok")
         "implementation"("org.jetbrains.kotlin:kotlin-reflect")
+        "implementation"("net.logstash.logback:logstash-logback-encoder:7.4")
         "testImplementation"("org.springframework.boot:spring-boot-starter-test")
         "testRuntimeOnly"("com.h2database:h2")
+    }
+
+    // The dependency plugin registers its version rule while this project is
+    // configured, so this rule has to be added afterwards or the BOM wins.
+    // Boot 3.5.16 still ships Tomcat, Jackson, Netty, PostgreSQL and lz4
+    // builds that the image gate rejects.
+    afterEvaluate {
+        configurations.configureEach {
+            resolutionStrategy.eachDependency {
+                val group = requested.group
+                val name = requested.name
+                when {
+                    group == "org.apache.tomcat.embed" || group == "org.apache.tomcat" -> {
+                        useVersion("10.1.61")
+                        because("Tomcat 10.1.55 still has critical CVEs fixed in 10.1.59")
+                    }
+                    group.startsWith("com.fasterxml.jackson.") && name != "jackson-annotations" -> {
+                        useVersion("2.21.8")
+                        because("Jackson 2.21.4 still has high CVEs fixed in 2.21.7")
+                    }
+                    group == "org.postgresql" && name == "postgresql" -> {
+                        useVersion("42.7.14")
+                        because("PostgreSQL JDBC 42.7.11 has a high CVE fixed in 42.7.12")
+                    }
+                    group == "commons-io" && name == "commons-io" -> {
+                        useVersion("2.22.0")
+                        because("Commons IO 2.7 has a high CVE fixed in 2.14.0")
+                    }
+                    group == "org.xerial.snappy" && name == "snappy-java" -> {
+                        useVersion("1.1.10.12")
+                        because("snappy-java 1.1.10.5 has high CVEs fixed in 1.1.10.9")
+                    }
+                    group == "org.freemarker" && name == "freemarker" -> {
+                        useVersion("2.3.35")
+                        because("FreeMarker 2.3.34 has a critical path traversal fixed in 2.3.35")
+                    }
+                    group == "io.netty" && name.startsWith("netty-") && !name.startsWith("netty-tcnative") -> {
+                        useVersion("4.1.141.Final")
+                        because("Netty 4.1.135 has high CVEs fixed in 4.1.136")
+                    }
+                    group == "org.apache.logging.log4j" && (name == "log4j-api" || name == "log4j-to-slf4j") -> {
+                        useVersion("2.25.5")
+                        because("Log4j API 2.24.3 has a CVE fixed in 2.25.5")
+                    }
+                    group == "at.yawk.lz4" && name == "lz4-java" -> {
+                        useVersion("1.14.1")
+                        because("lz4-java 1.10.1 has a high CVE fixed in 1.11.4")
+                    }
+                }
+            }
+        }
     }
 
     tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {

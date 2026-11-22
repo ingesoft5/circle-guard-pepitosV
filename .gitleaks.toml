@@ -1,0 +1,12 @@
+title = "CircleGuard"
+
+# gitleaks detect scans the git history. These paths hold local development
+# placeholders (password, admin, dev JWT). They are not production credentials.
+# A secret added outside this list still fails the pipeline.
+[allowlist]
+description = "Local development placeholders, not live credentials"
+paths = [
+  '''services/.*/src/main/resources/application.*\.yml''',
+  '''services/.*/src/test/resources/application.*\.yml''',
+  '''services/.*/src/integrationTest/.*''',
+]

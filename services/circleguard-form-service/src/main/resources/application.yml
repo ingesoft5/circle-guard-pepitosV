@@ -18,6 +18,13 @@ spring:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
 
+outbox:
+  retention: 7d
+  relay:
+    delay: 1000
+    batch-size: 50
+    send-timeout: 10s
+
 server:
   port: 8086
 
@@ -25,4 +32,18 @@ management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health,prometheus
+  metrics:
+    tags:
+      # Same value in every metric, so dashboards can filter by service.
+      application: ${spring.application.name}
+    distribution:
+      slo:
+        # Few buckets on purpose: enough for the p95 panel in Grafana, cheap in series.
+        "[http.server.requests]": 25ms,50ms,100ms,250ms,500ms,1s,2s,5s
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}

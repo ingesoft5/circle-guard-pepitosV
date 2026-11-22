@@ -1,0 +1,9 @@
+environment: stage
+services:
+  auth:
+    config:
+      QR_EXPIRATION: "30000"
+      CIRCLEGUARD_FEATURES_QR_DIAGNOSTICS: "false"
+middleware:
+  postgres:
+    storage: {size: 3Gi}

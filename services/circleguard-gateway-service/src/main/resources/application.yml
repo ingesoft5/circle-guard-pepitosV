@@ -21,4 +21,41 @@ management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health,metrics,circuitbreakers,prometheus
+  metrics:
+    tags:
+      # Same value in every metric, so dashboards can filter by service.
+      application: ${spring.application.name}
+    distribution:
+      slo:
+        # Few buckets on purpose: enough for the p95 panel in Grafana, cheap in series.
+        "[http.server.requests]": 25ms,50ms,100ms,250ms,500ms,1s,2s,5s
+  endpoint:
+    health:
+      show-details: always
+  health:
+    circuitbreakers:
+      enabled: true
+
+resilience4j:
+  circuitbreaker:
+    # Outer aspect: one failed call is counted after retries are exhausted.
+    circuitBreakerAspectOrder: 1
+    instances:
+      redisHealth:
+        registerHealthIndicator: true
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 6
+        minimumNumberOfCalls: 4
+        failureRateThreshold: 50
+        waitDurationInOpenState: 5s
+        permittedNumberOfCallsInHalfOpenState: 1
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+  retry:
+    retryAspectOrder: 2
+    instances:
+      redisHealth:
+        maxAttempts: 2
+        waitDuration: 50ms
+        retryExceptions:
+          - org.springframework.dao.DataAccessException

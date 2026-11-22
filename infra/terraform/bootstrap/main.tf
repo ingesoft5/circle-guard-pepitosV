@@ -1,6 +1,6 @@
 # Remote state for the CircleGuard environments: one S3 bucket (versioned, encrypted, private)
 # and one DynamoDB table for state locking. Applied once with local state; everything else
-# uses this backend (see ../environment/*.s3.tfbackend). Its own state lives in the same bucket.
+# uses this backend (see ../envs/<env>/backend.hcl). Its own state lives in the same bucket.
 
 terraform {
   required_version = ">= 1.9.0"
@@ -65,6 +65,47 @@ resource "aws_s3_bucket_public_access_block" "state" {
   restrict_public_buckets = true
 }
 
+# The state holds infrastructure details, so any unencrypted access is denied outright.
+data "aws_iam_policy_document" "state" {
+  statement {
+    sid       = "DenyInsecureTransport"
+    effect    = "Deny"
+    actions   = ["s3:*"]
+    resources = [aws_s3_bucket.state.arn, "${aws_s3_bucket.state.arn}/*"]
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "state" {
+  bucket = aws_s3_bucket.state.id
+  policy = data.aws_iam_policy_document.state.json
+}
+
+# Versioning is kept; this only expires the old noncurrent copies to control cost.
+resource "aws_s3_bucket_lifecycle_configuration" "state" {
+  bucket = aws_s3_bucket.state.id
+
+  rule {
+    id     = "expire-noncurrent-state"
+    status = "Enabled"
+    filter {}
+
+    noncurrent_version_expiration {
+      noncurrent_days = var.noncurrent_state_expiration_days
+    }
+  }
+}
+
 resource "aws_dynamodb_table" "locks" {
   name         = var.lock_table_name
   billing_mode = "PAY_PER_REQUEST"
@@ -73,6 +114,10 @@ resource "aws_dynamodb_table" "locks" {
   attribute {
     name = "LockID"
     type = "S"
+  }
+
+  point_in_time_recovery {
+    enabled = true
   }
 
   lifecycle {

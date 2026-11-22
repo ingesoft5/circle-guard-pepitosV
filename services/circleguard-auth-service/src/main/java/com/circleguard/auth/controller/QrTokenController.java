@@ -1,5 +1,6 @@
 package com.circleguard.auth.controller;
 
+import com.circleguard.auth.config.FeatureProperties;
 import com.circleguard.auth.service.QrTokenService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -13,6 +14,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class QrTokenController {
     private final QrTokenService qrService;
+    private final FeatureProperties features;
 
     /**
      * Generates a short-lived QR token for campus entry.
@@ -26,7 +28,23 @@ public class QrTokenController {
         
         return ResponseEntity.ok(Map.of(
             "qrToken", token,
-            "expiresIn", "60"
+            "expiresIn", Long.toString(qrService.expirationMillis() / 1000)
+        ));
+    }
+
+    /**
+     * Shows the QR lifetime currently in effect. Available only when the
+     * qr-diagnostics feature is on, so production does not expose it.
+     */
+    @GetMapping("/diagnostics")
+    public ResponseEntity<Map<String, String>> diagnostics() {
+        if (!features.isQrDiagnostics()) {
+            return ResponseEntity.notFound().build();
+        }
+        long expirationMillis = qrService.expirationMillis();
+        return ResponseEntity.ok(Map.of(
+            "expirationMillis", Long.toString(expirationMillis),
+            "expiresIn", Long.toString(expirationMillis / 1000)
         ));
     }
 }

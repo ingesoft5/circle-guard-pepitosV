@@ -1,0 +1,6 @@
+environment: dev
+services:
+  auth:
+    config:
+      QR_EXPIRATION: "120000"
+      CIRCLEGUARD_FEATURES_QR_DIAGNOSTICS: "true"

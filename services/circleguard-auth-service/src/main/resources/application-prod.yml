@@ -1,0 +1,7 @@
+qr:
+  # Shorter campus QR in production. Same image as dev; only this config changes.
+  expiration: 30000
+
+circleguard:
+  features:
+    qr-diagnostics: false

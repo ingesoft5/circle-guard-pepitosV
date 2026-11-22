@@ -1,0 +1,198 @@
+{{- /*
+One ConfigMap, one Deployment (or StatefulSet when it has storage) and one ClusterIP Service per
+workload in .Values.services and .Values.middleware. Nothing is exposed with NodePort: traffic
+enters through the Ingress (ingress.yaml).
+*/ -}}
+{{- $root := . -}}
+{{- $workloads := dict -}}
+{{- range $name, $spec := .Values.middleware }}{{ $_ := set $workloads $name $spec }}{{ end -}}
+{{- range $name, $spec := .Values.services }}{{ $_ := set $workloads $name $spec }}{{ end -}}
+{{- range $name, $spec := $workloads }}
+{{- $ctx := dict "root" $root "name" $name "spec" $spec -}}
+{{- $config := dict -}}
+{{- $resources := $spec.resources -}}
+{{- $probes := $spec.probes | default dict -}}
+{{- /* Read-only root filesystem unless the image must write to it; these paths get an emptyDir. */ -}}
+{{- $writable := $spec.writablePaths | default (ternary $root.Values.spring.writablePaths list (default false $spec.spring)) -}}
+{{- if $spec.spring -}}
+{{- $config = merge (dict "MANAGEMENT_ENDPOINT_HEALTH_GROUP_READINESS_INCLUDE" $spec.readinessGroup "CORS_ALLOWED_ORIGINS" $root.Values.corsAllowedOrigins) $root.Values.spring.config -}}
+{{- $resources = $spec.resources | default $root.Values.spring.resources -}}
+{{- /* A probe set on the service replaces the default one whole (no mixed handlers). */ -}}
+{{- $probes = deepCopy $probes -}}
+{{- range $kind, $probe := $root.Values.spring.probes }}{{ if not (hasKey $probes $kind) }}{{ $_ := set $probes $kind $probe }}{{ end }}{{ end -}}
+{{- end -}}
+{{- $config = merge (deepCopy ($spec.config | default dict)) $config }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}-config
+  labels:
+    {{- include "circleguard.labels" $ctx | nindent 4 }}
+data:
+  {{- range $key, $value := $config }}
+  {{ $key }}: {{ tpl ($value | toString) $root | quote }}
+  {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "circleguard.labels" $ctx | nindent 4 }}
+    {{- if $spec.spring }}
+    circleguard.io/metrics: "true"
+    {{- end }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "circleguard.selector" $ctx | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ $spec.port }}
+      targetPort: http
+    {{- range $extra := $spec.extraPorts }}
+    - name: {{ $extra.name }}
+      port: {{ $extra.port }}
+      targetPort: {{ $extra.name }}
+    {{- end }}
+---
+apiVersion: apps/v1
+kind: {{ if $spec.storage }}StatefulSet{{ else }}Deployment{{ end }}
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "circleguard.labels" $ctx | nindent 4 }}
+spec:
+  {{- if $spec.storage }}
+  serviceName: {{ $name }}
+  {{- end }}
+  {{- if not $spec.hpa }}
+  replicas: {{ $spec.replicas | default 1 }}
+  {{- end }}
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      {{- include "circleguard.selector" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "circleguard.labels" $ctx | nindent 8 }}
+      annotations:
+        # A config change rolls the pods; secrets are read at start, so they roll with a restart.
+        checksum/config: {{ toJson $config | sha256sum }}
+    spec:
+      # Service links inject variables such as KAFKA_PORT that break the Confluent and Neo4j images.
+      enableServiceLinks: false
+      automountServiceAccountToken: false
+      {{- with $root.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        seccompProfile: {type: RuntimeDefault}
+        {{- if $spec.spring }}
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        {{- end }}
+      containers:
+        - name: {{ $name }}
+          image: {{ include "circleguard.image" $ctx | quote }}
+          imagePullPolicy: {{ $root.Values.image.pullPolicy }}
+          {{- with $spec.command }}
+          command: {{ toJson . }}
+          {{- end }}
+          {{- with $spec.args }}
+          args: {{ toJson . }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ $spec.port }}
+            {{- range $extra := $spec.extraPorts }}
+            - name: {{ $extra.name }}
+              containerPort: {{ $extra.port }}
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ $name }}-config
+          {{- if or $spec.secrets $spec.env }}
+          env:
+            {{- range $var, $key := $spec.secrets }}
+            - name: {{ $var }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $root.Values.secretName }}
+                  key: {{ $key }}
+            {{- end }}
+            {{- with $spec.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- end }}
+          {{- with $resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- range $probe := list "startup" "liveness" "readiness" }}
+          {{- with index $probes $probe }}
+          {{ $probe }}Probe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: {{ not $spec.writableRoot }}
+            {{- if $spec.spring }}
+            capabilities: {drop: [ALL]}
+            {{- end }}
+          {{- if or $spec.storage $spec.initSql $writable }}
+          volumeMounts:
+            {{- range $i, $path := $writable }}
+            - name: writable-{{ $i }}
+              mountPath: {{ $path }}
+            {{- end }}
+            {{- if $spec.storage }}
+            - name: data
+              mountPath: {{ $spec.storage.mountPath }}
+            {{- end }}
+            {{- if $spec.initSql }}
+            - name: init-sql
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+            {{- end }}
+          {{- end }}
+      {{- if or $spec.initSql $writable }}
+      volumes:
+        {{- range $i, $path := $writable }}
+        - name: writable-{{ $i }}
+          emptyDir: {}
+        {{- end }}
+        {{- if $spec.initSql }}
+        - name: init-sql
+          configMap:
+            name: {{ $name }}-init-sql
+        {{- end }}
+      {{- end }}
+  {{- if $spec.storage }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: {{ $spec.storage.size }}
+  {{- end }}
+{{- if $spec.initSql }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}-init-sql
+  labels:
+    {{- include "circleguard.labels" $ctx | nindent 4 }}
+data:
+  init-db.sql: |
+    {{- $root.Files.Get "files/init-db.sql" | nindent 4 }}
+{{- end }}
+{{- end }}

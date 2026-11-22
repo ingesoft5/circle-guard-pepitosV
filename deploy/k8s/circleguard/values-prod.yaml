@@ -1,0 +1,15 @@
+environment: prod
+middleware:
+  postgres:
+    storage: {size: 5Gi}
+  neo4j:
+    storage: {size: 3Gi}
+services:
+  auth:
+    config:
+      QR_EXPIRATION: "30000"
+      CIRCLEGUARD_FEATURES_QR_DIAGNOSTICS: "false"
+  gateway:
+    hpa: {minReplicas: 2, maxReplicas: 4}
+  form:
+    hpa: {minReplicas: 2, maxReplicas: 4}
