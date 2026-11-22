@@ -2,6 +2,7 @@
 # Crea (de forma idempotente) los dos hosts del stack CI y sus Security Groups:
 #   circleguard-ci     Jenkins y los builds          (circleguard-ci-sg)
 #   circleguard-tools  SonarQube y Nexus (registro)  (circleguard-tools-sg)
+#   circleguard-ci-agent-<n>  agentes de Jenkins     (circleguard-ci-sg), CI_AGENT_COUNT (1 por defecto)
 # En el plan gratuito de AWS ninguna instancia puede pasar de m7i-flex.large (2 vCPU, 8 GB):
 # separar las herramientas en su propio host duplica la memoria y el disco disponibles.
 # Requiere AWS CLI configurado y los parámetros CI_SUBNET_ID, CI_KEY_NAME y ADMIN_CIDR.
@@ -16,6 +17,8 @@ readonly CI_INSTANCE_NAME="${CI_INSTANCE_NAME:-circleguard-ci}"
 readonly CI_SG_NAME="${CI_SG_NAME:-circleguard-ci-sg}"
 readonly TOOLS_INSTANCE_NAME="${TOOLS_INSTANCE_NAME:-circleguard-tools}"
 readonly TOOLS_SG_NAME="${TOOLS_SG_NAME:-circleguard-tools-sg}"
+readonly CI_AGENT_PREFIX="${CI_AGENT_PREFIX:-circleguard-ci-agent}"
+readonly CI_AGENT_COUNT="${CI_AGENT_COUNT:-1}"
 readonly AWS_REGION="${AWS_REGION:-us-east-1}"
 readonly CI_INSTANCE_TYPE="${CI_INSTANCE_TYPE:-m7i-flex.large}"
 readonly CI_ROOT_VOLUME_GB="${CI_ROOT_VOLUME_GB:-50}"
@@ -172,11 +175,22 @@ main() {
     ensure_rule "${tools_sg}" "${port}" --source-group "${ci_sg}"
   done
   ensure_rule "${ci_sg}" 8080 --source-group "${tools_sg}"
+  # The agents share circleguard-ci-sg, so they reach SonarQube and Nexus like Jenkins does, and
+  # connect to the controller (WebSocket on 8080) through this self reference.
+  ensure_rule "${ci_sg}" 8080 --source-group "${ci_sg}"
 
   ci_id="$(ensure_instance "${CI_INSTANCE_NAME}" "${ami}" "${ci_sg}")"
   [[ "${ci_id}" == i-* ]] || die "No se pudo crear la instancia ${CI_INSTANCE_NAME}"
   tools_id="$(ensure_instance "${TOOLS_INSTANCE_NAME}" "${ami}" "${tools_sg}")"
   [[ "${tools_id}" == i-* ]] || die "No se pudo crear la instancia ${TOOLS_INSTANCE_NAME}"
+
+  [[ "${CI_AGENT_COUNT}" =~ ^[0-9]+$ ]] || die "CI_AGENT_COUNT debe ser un número entero"
+  local n agent_id
+  for ((n = 1; n <= CI_AGENT_COUNT; n++)); do
+    agent_id="$(ensure_instance "${CI_AGENT_PREFIX}-${n}" "${ami}" "${ci_sg}")"
+    [[ "${agent_id}" == i-* ]] || die "No se pudo crear la instancia ${CI_AGENT_PREFIX}-${n}"
+    info "Agente listo: ${CI_AGENT_PREFIX}-${n} (${agent_id}); siga con infra/bootstrap/bootstrap-ci-agent.sh"
+  done
 
   ci_ip="$(public_ip_of "${ci_id}")" || die "La instancia ${ci_id} no tiene IP pública todavía"
   tools_ip="$(public_ip_of "${tools_id}")" || die "La instancia ${tools_id} no tiene IP pública todavía"

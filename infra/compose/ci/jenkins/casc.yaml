@@ -1,9 +1,35 @@
 jenkins:
   systemMessage: "CircleGuard CI — Jenkins"
-  # Two executors: a light build (docs, already merged branch, scans) no longer waits behind a
-  # full one. The host has 8 GB plus 4 GB of swap and one full build uses about 1.7 GB.
-  numExecutors: 2
+  # Controller and workers: the controller (label 'controller') runs the light part of each
+  # build (checkout, scans, plans, deploys, approvals), one executor per concurrent build; the
+  # compile, test, Sonar and image lanes run on the workers (label 'worker').
+  numExecutors: 4
+  labelString: "controller"
   mode: NORMAL
+  # Build workers: circleguard-ci-agent-<n> (infra/cloud/aws/provision-ci-hosts.sh), connected by
+  # infra/bootstrap/bootstrap-ci-agent.sh over WebSocket. Two lanes each (2 vCPU per host).
+  # EXCLUSIVE: only work asking for 'worker' lands there.
+  nodes:
+    - permanent:
+        name: "ci-agent-1"
+        labelString: "worker ci-agent-1"
+        remoteFS: "/var/jenkins_home/agent"
+        numExecutors: 2
+        mode: EXCLUSIVE
+        retentionStrategy: "always"
+        launcher:
+          inbound:
+            webSocket: true
+    - permanent:
+        name: "ci-agent-2"
+        labelString: "worker ci-agent-2"
+        remoteFS: "/var/jenkins_home/agent"
+        numExecutors: 2
+        mode: EXCLUSIVE
+        retentionStrategy: "always"
+        launcher:
+          inbound:
+            webSocket: true
   securityRealm:
     local:
       allowsSignup: false
