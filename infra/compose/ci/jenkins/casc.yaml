@@ -40,17 +40,20 @@ jenkins:
         # Non-admin account: runs, cancels and inspects builds, cannot approve prod.
         - id: "${JENKINS_DEV_ID}"
           password: "${JENKINS_DEV_PASSWORD}"
-  # Jenkins lets any administrator answer an input, so only the admin account
-  # gets Overall/Administer; every other account is a regular user.
+  # Role-based Strategy. The prod input submitter stays "admin" in the Jenkinsfile.
+  # Only the admin account has Overall/Administer, so a developer cannot approve it.
   authorizationStrategy:
-    globalMatrix:
-      entries:
-        - user:
-            name: "${JENKINS_ADMIN_ID}"
+    roleBased:
+      roles:
+        global:
+          - name: "admin"
+            description: "CircleGuard administrators"
             permissions:
               - "Overall/Administer"
-        - group:
-            name: "authenticated"
+            entries:
+              - user: "${JENKINS_ADMIN_ID}"
+          - name: "developer"
+            description: "Builds and reads. Cannot approve production."
             permissions:
               - "Overall/Read"
               - "Job/Build"
@@ -58,6 +61,16 @@ jenkins:
               - "Job/Read"
               - "Job/Workspace"
               - "View/Read"
+            entries:
+              - user: "${JENKINS_DEV_ID}"
+          - name: "approver"
+            description: "Account allowed to approve the production input."
+            permissions:
+              - "Overall/Read"
+              - "Job/Read"
+              - "View/Read"
+            entries:
+              - user: "${JENKINS_ADMIN_ID}"
   globalNodeProperties:
     - envVars:
         env:
