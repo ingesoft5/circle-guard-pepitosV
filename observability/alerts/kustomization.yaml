@@ -1,4 +1,4 @@
-# CircleGuard alert rules (HU-41), applied to the monitoring namespace. deployK8s applies it
+# CircleGuard alert rules and Alertmanager routing (HU-41), applied to the monitoring namespace. deployK8s applies it
 # after each deploy; by hand:
 #   kubectl apply -k observability/alerts
 apiVersion: kustomize.config.k8s.io/v1beta1
@@ -6,3 +6,4 @@ kind: Kustomization
 namespace: monitoring
 resources:
   - circleguard-rules.yaml
+  - alertmanager-config.yaml

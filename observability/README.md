@@ -21,8 +21,9 @@ observability/
 │   ├── format_dashboard.py         # deja un panel por línea antes del commit
 │   └── dashboards/                 # JSON: Servicios y Negocio
 └── alerts/             # alertas como código (HU-41)
-    ├── kustomization.yaml          # aplica las reglas en monitoring
-    └── circleguard-rules.yaml      # ServiceDown, HighErrorRate y HighLatencyP95
+    ├── kustomization.yaml          # aplica reglas y ruteo en monitoring
+    ├── circleguard-rules.yaml      # ServiceDown, HighErrorRate y HighLatencyP95
+    └── alertmanager-config.yaml    # ruta y receptor de Discord de Alertmanager
 ```
 
 ## Qué instala HU-26

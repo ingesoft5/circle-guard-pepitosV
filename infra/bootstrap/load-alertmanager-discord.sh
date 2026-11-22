@@ -3,8 +3,9 @@
 # (HU-41). The URL is read from stdin, so it never reaches argv or the repo:
 #   ssh ubuntu@<node> 'sudo ~/circleguard/infra/bootstrap/load-alertmanager-discord.sh' \
 #     < ~/.config/circleguard/alertmanager-discord-webhook
-# It is idempotent: running it again replaces the URL. Alertmanager mounts the Secret as an
-# optional volume (observability/prometheus/values.yaml) and picks up the change within a minute.
+# It is idempotent: running it again replaces the URL. The AlertmanagerConfig in
+# observability/alerts/alertmanager-config.yaml references the Secret, and the operator puts the
+# URL in the Alertmanager configuration it generates.
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

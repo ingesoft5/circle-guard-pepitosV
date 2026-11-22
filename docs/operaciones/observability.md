@@ -12,7 +12,7 @@ los dashboards y las alertas se configuran en HU-39, HU-40 y HU-41.
 | `micrometer-registry-prometheus`, `/actuator/prometheus` y contadores de negocio | Código de los 8 servicios (HU-39) |
 | ServiceMonitor de los 8 servicios | `deploy/k8s/circleguard/templates/servicemonitor.yaml` (HU-39) |
 | Dashboards JSON y su aprovisionamiento | `observability/grafana/` (HU-40) |
-| Reglas de alerta y envío a Discord | `observability/alerts/` y `alertmanager.config` en `observability/prometheus/values.yaml` (HU-41) |
+| Reglas de alerta y envío a Discord | `observability/alerts/` (HU-41) |
 | Ingress de Grafana, Prometheus y Alertmanager | HU-26, con TLS en HU-47 |
 | Logs centralizados con Loki | HU-43 |
 
@@ -292,6 +292,12 @@ Prometheus las evalúa cada 30 s y Alertmanager envía al canal de Discord del e
 `project=circleguard`. Las alertas propias del stack (nodo, kubelet, etc.) se ven en
 `/alertmanager` pero no se envían.
 
+La ruta y el receptor están en `observability/alerts/alertmanager-config.yaml`, un
+`AlertmanagerConfig` que `observability/prometheus/values.yaml` usa como configuración completa de
+Alertmanager (`alertmanagerConfiguration`). El operador lee la URL del webhook del Secret
+`alertmanager-discord` y la escribe en la configuración que genera, así que nunca está en Git. No
+se usa `webhook_url_file` en `alertmanager.config` porque el operador de esta versión lo rechaza.
+
 | Alerta | Condición | Espera | Severidad |
 |:---|:---|:---|:---|
 | `ServiceDown` | Prometheus no puede leer `/actuator/prometheus` de un pod (`up == 0`) | 1 min | `critical` |
@@ -316,19 +322,30 @@ si sigue activa y avisa cuando se resuelve.
    ```
 
    Si el nodo no tiene el repo en `~/circleguard`, copia antes el script y `infra/bootstrap/lib/`.
-3. Aplica Terraform en el ambiente (o corre `install-observability.sh`) para que Alertmanager tome
-   la ruta y el receptor de `observability/prometheus/values.yaml`.
-4. Aplica las reglas. `deployK8s` lo hace en cada despliegue; a mano:
+3. Aplica las reglas y el `AlertmanagerConfig`. `deployK8s` lo hace en cada despliegue; a mano:
 
    ```bash
    kubectl apply -k observability/alerts
    kubectl -n monitoring get prometheusrule circleguard-alerts
+   kubectl -n monitoring get alertmanagerconfig circleguard
    ```
 
    En Prometheus, **Alerts** debe listar las tres reglas en `Inactive`.
+4. Aplica Terraform en el ambiente (o corre `install-observability.sh`) para que Alertmanager use
+   el `AlertmanagerConfig`. Hazlo después del paso 3: si el objeto o el Secret no existen, el
+   operador no actualiza Alertmanager y lo registra en su log.
+5. Comprueba que el operador generó la configuración:
 
-El Secret se monta como volumen opcional: Alertmanager arranca aunque no exista, pero no puede
-enviar a Discord hasta que lo crees. Volver a correr el script cambia la URL sin reiniciar nada.
+   ```bash
+   kubectl -n monitoring get secret alertmanager-kube-prometheus-stack-alertmanager-generated \
+     -o jsonpath='{.data.alertmanager\.yaml\.gz}' | base64 -d | gunzip | grep -c discord_configs
+   kubectl -n monitoring logs deploy/kube-prometheus-stack-operator --since=10m | grep -i error
+   ```
+
+   El primero debe dar `1` y el segundo no debe mostrar errores de `alertmanager`.
+
+Volver a correr el script cambia la URL; el operador regenera la configuración en uno o dos
+minutos, sin reiniciar Alertmanager.
 
 ### Probar el canal
 
@@ -415,7 +432,7 @@ de cada prueba en el PR.
 | Prometheus sin targets | El chart se desplegó antes que el stack (sin CRD) o con `metrics.serviceMonitor.enabled=false` | Repite el `helm upgrade` de la aplicación y comprueba `kubectl -n circleguard-<ambiente> get servicemonitor` |
 | Los dashboards no aparecen en Grafana | El ConfigMap no existe o no tiene la etiqueta `grafana_dashboard` | `kubectl apply -k observability/grafana` y revisa `kubectl -n monitoring logs deploy/kube-prometheus-stack-grafana -c grafana-sc-dashboard` |
 | Latencia p95 vacía | La imagen del servicio es anterior a los buckets de HU-40 | Despliega una versión que incluya `management.metrics.distribution.slo` |
-| Las alertas se disparan pero no llegan a Discord | Falta el Secret `alertmanager-discord` o la URL es inválida | Corre `load-alertmanager-discord.sh` y revisa los logs del contenedor `alertmanager` |
+| Las alertas se disparan pero no llegan a Discord | Falta el Secret `alertmanager-discord`, la URL es inválida o falta el `AlertmanagerConfig` | Corre `load-alertmanager-discord.sh`, `kubectl apply -k observability/alerts` y revisa `kubectl -n monitoring logs deploy/kube-prometheus-stack-operator` |
 | Llegan alertas `ServiceDown` de todos los servicios | Las imágenes desplegadas son anteriores a HU-39 y no exponen `/actuator/prometheus` | Despliega una versión que incluya HU-39 |
 | Un servicio aparece `DOWN` con `401` | Su seguridad exige autenticación en `/actuator/prometheus` | Permite esa ruta en su `SecurityConfig` (como en `identity`) |
 | Pods en `Pending` o `OOMKilled` | El nodo de 8 GB quedó corto | Baja retención y límites, o desactiva componentes que no uses |

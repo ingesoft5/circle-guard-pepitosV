@@ -72,56 +72,19 @@ alertmanager:
     hosts: []
     annotations:
       traefik.ingress.kubernetes.io/router.middlewares: monitoring-basic-auth@kubernetescrd
-  # Notifications (HU-41). Only the alerts labelled project=circleguard (observability/alerts/)
-  # go to Discord; the stack's own cluster alerts stay visible in /alertmanager without paging.
-  # The webhook URL is not in Git: infra/bootstrap/load-alertmanager-discord.sh creates the
-  # alertmanager-discord Secret, mounted below. Until it exists, Alertmanager runs and the
-  # Discord notifications fail.
-  config:
-    global:
-      resolve_timeout: 5m
-    route:
-      receiver: "null"
-      group_by: [alertname, namespace, service]
-      group_wait: 30s
-      group_interval: 5m
-      repeat_interval: 4h
-      routes:
-        - receiver: discord
-          matchers:
-            - project = "circleguard"
-    receivers:
-      - name: "null"
-      - name: discord
-        discord_configs:
-          - webhook_url_file: /etc/alertmanager/discord/webhook-url
-            send_resolved: true
-            title: >-
-              [{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}]
-              {{ .CommonLabels.alertname }} · {{ .CommonLabels.namespace }}
-            message: |-
-              {{ range .Alerts }}**{{ .Labels.severity }}** · {{ .Annotations.summary }}
-              {{ .Annotations.description }}
-              {{ end }}
-    inhibit_rules:
-      # While a service has a critical alert, its warnings are not sent.
-      - source_matchers: [severity = "critical"]
-        target_matchers: [severity = "warning"]
-        equal: [namespace, service]
-    templates:
-      - /etc/alertmanager/config/*.tmpl
   alertmanagerSpec:
     routePrefix: /alertmanager
-    volumes:
-      - name: discord-webhook
-        secret:
-          secretName: alertmanager-discord
-          # Optional, so Alertmanager starts before the Secret is created.
-          optional: true
-    volumeMounts:
-      - name: discord-webhook
-        mountPath: /etc/alertmanager/discord
-        readOnly: true
+    # Notifications (HU-41): the whole Alertmanager configuration comes from the
+    # AlertmanagerConfig in observability/alerts/alertmanager-config.yaml, which reads the
+    # Discord webhook from a Secret. This operator version rejects webhook_url_file in a plain
+    # alertmanager.config, so the routing lives there instead of in this file.
+    alertmanagerConfiguration:
+      name: circleguard
+    # The chart defaults to {} (every AlertmanagerConfig), which would load circleguard a second
+    # time as a per-namespace config. No object carries this label, so none is merged.
+    alertmanagerConfigSelector:
+      matchLabels:
+        circleguard.io/alertmanager-config: per-namespace
     resources:
       requests:
         cpu: 50m

@@ -46,7 +46,7 @@ Observabilidad de un ambiente: por un lado, lo que vive en AWS (log group de Clo
 - Este módulo cubre lo que vive en AWS (retención de logs, alarmas de la instancia, notificaciones) y deja instalado el stack base de observabilidad en el clúster (HU-26).
 - HU-39 agrega `micrometer-registry-prometheus`, `/actuator/prometheus`, los contadores de negocio y el ServiceMonitor del chart de la aplicación (`deploy/k8s/circleguard/templates/servicemonitor.yaml`), que Prometheus descubre.
 - HU-40 versiona los dashboards JSON en `observability/grafana/` y los aprovisiona como ConfigMaps.
-- HU-41 versiona las reglas en `observability/alerts/` y envía las de CircleGuard a Discord. La URL del webhook vive en el Secret `alertmanager-discord`, que crea `infra/bootstrap/load-alertmanager-discord.sh`.
+- HU-41 versiona las reglas en `observability/alerts/` y envía las de CircleGuard a Discord. La ruta y el receptor están en `observability/alerts/alertmanager-config.yaml`; la URL del webhook vive en el Secret `alertmanager-discord`, que crea `infra/bootstrap/load-alertmanager-discord.sh`.
 - Las etiquetas `Project`, `Environment` y `ManagedBy` las aplica `default_tags` del provider en el root.
 
 ## Requisitos de aplicación
