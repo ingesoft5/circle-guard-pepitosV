@@ -57,6 +57,7 @@ deploy/**/*.env
 *.pem
 *.key
 infra/compose/ci/secrets/
+infra/compose/ci-agent/secrets/
 
 # Terraform: providers and local state stay out of the repo (state lives in S3)
 **/.terraform/

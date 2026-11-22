@@ -1,5 +1,6 @@
 package com.circleguard.gateway.service;
 
+import com.circleguard.gateway.metrics.CheckInMetrics;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -12,6 +13,7 @@ import java.security.Key;
 @RequiredArgsConstructor
 public class QrValidationService {
     private final HealthStatusLookup healthStatusLookup;
+    private final CheckInMetrics checkInMetrics;
 
     @Value("${qr.secret}")
     private String qrSecret;
@@ -29,16 +31,20 @@ public class QrValidationService {
             String status = healthStatusLookup.currentStatus(anonymousId);
 
             if (HealthStatusLookup.UNAVAILABLE.equals(status)) {
+                checkInMetrics.record(CheckInMetrics.DENIED_STATUS_UNAVAILABLE);
                 return new ValidationResult(false, "RED", "Access Denied: Health status unavailable");
             }
 
             if ("CONTAGIED".equals(status) || "POTENTIAL".equals(status)) {
+                checkInMetrics.record(CheckInMetrics.DENIED_HEALTH_RISK);
                 return new ValidationResult(false, "RED", "Access Denied: Health Risk Detected");
             }
 
+            checkInMetrics.record(CheckInMetrics.GRANTED);
             return new ValidationResult(true, "GREEN", "Welcome to Campus");
             
         } catch (Exception e) {
+            checkInMetrics.record(CheckInMetrics.INVALID_TOKEN);
             return new ValidationResult(false, "RED", "Invalid or Expired Token");
         }
     }

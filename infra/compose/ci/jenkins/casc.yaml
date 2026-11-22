@@ -1,7 +1,35 @@
 jenkins:
   systemMessage: "CircleGuard CI — Jenkins"
-  numExecutors: 1
+  # Controller and workers: the controller (label 'controller') runs the light part of each
+  # build (checkout, scans, plans, deploys, approvals), one executor per concurrent build; the
+  # compile, test, Sonar and image lanes run on the workers (label 'worker').
+  numExecutors: 4
+  labelString: "controller"
   mode: NORMAL
+  # Build workers: circleguard-ci-agent-<n> (infra/cloud/aws/provision-ci-hosts.sh), connected by
+  # infra/bootstrap/bootstrap-ci-agent.sh over WebSocket. Two lanes each (2 vCPU per host).
+  # EXCLUSIVE: only work asking for 'worker' lands there.
+  nodes:
+    - permanent:
+        name: "ci-agent-1"
+        labelString: "worker ci-agent-1"
+        remoteFS: "/var/jenkins_home/agent"
+        numExecutors: 2
+        mode: EXCLUSIVE
+        retentionStrategy: "always"
+        launcher:
+          inbound:
+            webSocket: true
+    - permanent:
+        name: "ci-agent-2"
+        labelString: "worker ci-agent-2"
+        remoteFS: "/var/jenkins_home/agent"
+        numExecutors: 2
+        mode: EXCLUSIVE
+        retentionStrategy: "always"
+        launcher:
+          inbound:
+            webSocket: true
   securityRealm:
     local:
       allowsSignup: false
@@ -41,6 +69,9 @@ jenkins:
           # Registry HTTP API (promoteRelease, rollback): http://nexus:5000 or the tools host
           - key: "NEXUS_REGISTRY_API"
             value: "${NEXUS_REGISTRY_API:-http://nexus:5000}"
+          # Gradle build cache node on the CI host (settings.gradle.kts), for every node
+          - key: "GRADLE_BUILD_CACHE_URL"
+            value: "${GRADLE_BUILD_CACHE_URL:-}"
           # Private IP of each environment host, used by the deployCompose step
           - key: "DEPLOY_HOST_DEV"
             value: "${DEPLOY_HOST_DEV:-}"
@@ -55,6 +86,9 @@ jenkins:
             value: "${K8S_HOST_STAGE:-}"
           - key: "K8S_HOST_PROD"
             value: "${K8S_HOST_PROD:-}"
+          # Region used by the Terraform plan/apply steps (HU-32)
+          - key: "AWS_REGION"
+            value: "${AWS_REGION:-us-east-1}"
           # Branch the rollback job takes its pipeline and the shared library from (HU-17)
           - key: "ROLLBACK_BRANCH"
             value: "${ROLLBACK_BRANCH:-main}"
@@ -138,6 +172,27 @@ credentials:
               fileName: "kubeconfig"
               description: "kubeconfig of the prod k3s cluster"
               secretBytes: "${readFileBase64:/run/secrets/deploy/kubeconfig-prod}"
+          # Terraform plan/apply (HU-32). The files are written by
+          # infra/bootstrap/load-terraform-credential.sh.
+          - file:
+              scope: GLOBAL
+              id: "aws-terraform"
+              fileName: "credentials"
+              description: "AWS credentials for the Terraform pipeline steps"
+              secretBytes: "${readFileBase64:/run/secrets/deploy/aws-terraform}"
+          - basicSSHUserPrivateKey:
+              scope: GLOBAL
+              id: "prometheus-ssh-key"
+              username: "ubuntu"
+              description: "SSH key for the observability node (Terraform provisioner)"
+              privateKeySource:
+                directEntry:
+                  privateKey: "${readFile:/run/secrets/deploy/prometheus-ssh-key}"
+          - string:
+              scope: GLOBAL
+              id: "prometheus-grafana-password"
+              secret: "${readFile:/run/secrets/deploy/prometheus-grafana-password}"
+              description: "Grafana admin password for the observability Helm release"
 
 unclassified:
   location:
@@ -225,6 +280,28 @@ jobs:
             }
             scriptPath('jenkins/rollback.Jenkinsfile')
             lightweight(true)
+          }
+        }
+      }
+  - script: |
+      pipelineJob('circleguard-prod-image-scan') {
+        description('Scans the stable images that prod runs and notifies Discord on a high or critical finding')
+        triggers {
+          cron('H 6 * * *')
+        }
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote {
+                  url("https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}.git")
+                  credentials('github-pat')
+                }
+                branch('*/dev')
+              }
+            }
+            scriptPath('jenkins/image-scan.Jenkinsfile')
+            lightweight(false)
           }
         }
       }

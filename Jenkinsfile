@@ -22,7 +22,9 @@ def prereleaseVersion = null
 // PR dev -> main: builds the release candidate that main later promotes to stable.
 def promotionPr = env.CHANGE_ID != null && env.CHANGE_TARGET == 'main' && env.CHANGE_BRANCH == 'dev' && env.CHANGE_FORK == null
 
-def changed = [services: [], web: false, all: false, base: '']
+def changed = [services: [], web: false, all: false, terraform: false, base: '']
+// Set by 'Terraform plan': hasChanges and planFile per environment (HU-32).
+def terraformChanges = [:]
 // A branch whose commit is already in dev (its PR was merged) is not built again.
 def alreadyMerged = false
 
@@ -31,7 +33,9 @@ def failedService = null
 def failedStage = null
 
 pipeline {
-    agent any
+    // The controller (CI) orchestrates: checkout, scans, plans, deploys and approvals. The heavy
+    // lanes of 'Build, test and package' run on the build workers.
+    agent { label 'controller' }
 
     options {
         buildDiscarder(logRotator(numToKeepStr: '20'))
@@ -51,8 +55,10 @@ pipeline {
     environment {
         // Shared by every branch: the workspaces are wiped after each build.
         GRADLE_USER_HOME = "${JENKINS_HOME}/gradle-cache"
-        GRADLE_OPTS = '-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx1g'
-        MAX_PARALLEL_SERVICES = '3'
+        // Gradle runs with its daemon: each call reuses a warm JVM instead of paying 20 to 40 s
+        // of startup and configuration (three calls per lane). gradle.properties stops an idle
+        // daemon after 30 minutes; the helpers keep Jenkins from killing it after each step.
+        GRADLE_OPTS = '-Dorg.gradle.jvmargs=-Xmx1g'
         PR_MAX_ADDITIONS = '700'
         PR_MAX_DELETIONS = '300'
         PR_MAX_CHANGED_LINES = '1000'
@@ -105,57 +111,14 @@ pipeline {
                         buildAll: (params.BUILD_ALL ?: false) || promotionPr || ((env.BRANCH_NAME ?: '') ==~ /release\/.+/) || ((env.CHANGE_BRANCH ?: '') ==~ /release\/.+/),
                         services: SERVICES
                     )
+                    // Terraform has its own base: the PR target, or HEAD^1 on main. The
+                    // services diff falls back to "all" too often to drive an apply.
+                    changed.terraform = detectTerraformChanges()
                     echo "Base del diff: ${changed.base ?: 'sin base'}"
                     echo "Servicios seleccionados: ${changed.services ?: 'ninguno'}"
                     echo "Cliente web: ${changed.web}"
+                    echo "Cambios de Terraform: ${changed.terraform}"
                 }
-            }
-        }
-
-        stage('Dependency scan') {
-            when { expression { !alreadyMerged } }
-            steps {
-                script {
-                    trivyFsScan()
-                }
-            }
-        }
-
-        // The syntax check runs in a throwaway container fed with docker cp: Jenkins runs in a
-        // container with docker.sock, so a -v of the workspace would be resolved on the host.
-        stage('Validate shared library') {
-            when {
-                allOf {
-                    changeRequest()
-                    expression { changed.all }
-                }
-            }
-            steps {
-                writeFile file: '.check-vars.groovy', text: '''
-                    import org.codehaus.groovy.control.*
-                    def failed = false
-                    new File("/vars").listFiles().findAll { it.name.endsWith(".groovy") }.each { f ->
-                        try {
-                            def cu = new CompilationUnit()
-                            cu.addSource(f)
-                            cu.compile(Phases.CONVERSION)
-                        } catch (Exception e) {
-                            println "ERROR en " + f.name + ": " + e.message
-                            failed = true
-                        }
-                    }
-                    System.exit(failed ? 1 : 0)
-                '''
-                sh '''
-                    cid="$(docker create groovy:4.0-jdk21 groovy /check.groovy)"
-                    docker cp .check-vars.groovy "$cid":/check.groovy
-                    docker cp jenkins/vars "$cid":/vars
-                    rc=0
-                    docker start -a "$cid" || rc=$?
-                    docker rm "$cid" >/dev/null
-                    rm -f .check-vars.groovy
-                    exit $rc
-                '''
             }
         }
 
@@ -187,207 +150,253 @@ pipeline {
             }
         }
 
-        stage('Build and test') {
-            steps {
-                script {
-                    int maxParallel = (env.MAX_PARALLEL_SERVICES ?: '3') as int
-                    if (maxParallel < 1) {
-                        maxParallel = 1
-                    }
-
-                    if (!changed.services && !changed.web) {
-                        echo 'No hay servicios ni cliente web modificados.'
-                    }
-
-                    def services = changed.services
-                    for (int i = 0; i < services.size(); i += maxParallel) {
-                        int end = i + maxParallel
-                        if (end > services.size()) {
-                            end = services.size()
+        // The checks of the controller (dependency and IaC scans, library validation, Terraform
+        // plans) run alongside the worker lanes instead of before them. failFast: the first
+        // failure, in a check or a lane, stops the rest.
+        stage('Checks, build and package') {
+            failFast true
+            parallel {
+                stage('Static checks') {
+                    stages {
+                stage('Dependency scan') {
+                    when { expression { !alreadyMerged } }
+                    steps {
+                        script {
+                            trivyFsScan()
                         }
-                        def batch = []
-                        for (int j = i; j < end; j++) {
-                            batch.add(services[j])
+                    }
+                }
+
+                // The syntax check runs in a throwaway container fed with docker cp: Jenkins runs in a
+                // container with docker.sock, so a -v of the workspace would be resolved on the host.
+                stage('Validate shared library') {
+                    when {
+                        allOf {
+                            changeRequest()
+                            expression { changed.all }
                         }
-                        def branches = [:]
-                        batch.each { service ->
-                            branches[service] = {
-                                def currentStage = "Compile ${service}"
+                    }
+                    steps {
+                        writeFile file: '.check-vars.groovy', text: '''
+                            import org.codehaus.groovy.control.*
+                            def failed = false
+                            new File("/vars").listFiles().findAll { it.name.endsWith(".groovy") }.each { f ->
                                 try {
-                                    stage(currentStage) {
-                                        gradleBuild(service: service)
-                                    }
-                                    currentStage = "Test ${service}"
-                                    stage(currentStage) {
-                                        runTests(service: service, publish: false)
-                                    }
+                                    def cu = new CompilationUnit()
+                                    cu.addSource(f)
+                                    cu.compile(Phases.CONVERSION)
                                 } catch (Exception e) {
-                                    if (!failedService) {
-                                        failedService = service
-                                        failedStage = currentStage
+                                    println "ERROR en " + f.name + ": " + e.message
+                                    failed = true
+                                }
+                            }
+                            System.exit(failed ? 1 : 0)
+                        '''
+                        sh '''
+                            cid="$(docker create groovy:4.0-jdk21 groovy /check.groovy)"
+                            docker cp .check-vars.groovy "$cid":/check.groovy
+                            docker cp jenkins/vars "$cid":/vars
+                            rc=0
+                            docker start -a "$cid" || rc=$?
+                            docker rm "$cid" >/dev/null
+                            rm -f .check-vars.groovy
+                            exit $rc
+                        '''
+                    }
+                }
+
+                stage('IaC scan') {
+                    when { expression { !alreadyMerged } }
+                    steps {
+                        script {
+                            trivyConfigScan()
+                        }
+                    }
+                }
+
+                // HU-32: a PR that changes infra/terraform gets the three plans in its build log.
+                stage('Terraform plan (PR)') {
+                    when {
+                        allOf {
+                            changeRequest()
+                            expression { changed.terraform }
+                        }
+                    }
+                    steps {
+                        script {
+                            terraformPlan(environment: 'dev')
+                            terraformPlan(environment: 'stage')
+                            terraformPlan(environment: 'prod')
+                        }
+                    }
+                }
+                    }
+                }
+
+                // Heavy work runs on the build workers (label 'worker'), one lane per component, all in
+                // parallel: each worker takes as many lanes as it has executors and the rest queue. A
+                // lane is self-contained (checkout, compile, test, Sonar, image), so no JAR moves between
+                // machines. The controller only orchestrates, deploys and approves.
+                stage('Build, test and package') {
+                    steps {
+                        script {
+                            boolean publish = prereleaseVersion != null
+                            boolean packageOnly = !publish && env.BRANCH_NAME != 'main'
+                            // SNAPSHOT publishes only the affected components. A promotion PR (or a
+                            // release branch) publishes the full set: the RC is what main promotes.
+                            String sourceBranch = env.CHANGE_BRANCH ?: env.BRANCH_NAME
+                            boolean onlyChanged = !promotionPr && sourceBranch == 'dev'
+                            List<String> buildServices = publish && !onlyChanged ? SERVICES : changed.services
+                            boolean buildWeb = publish && !onlyChanged ? true : changed.web
+
+                            def lanes = [:]
+                            buildServices.each { service ->
+                                lanes[service] = {
+                                    node('worker') {
+                                        def currentStage = "Compile ${service}"
+                                        try {
+                                            checkout scm
+                                            sh 'chmod +x gradlew'
+                                            stage(currentStage) {
+                                                gradleBuild(service: service)
+                                            }
+                                            currentStage = "Test ${service}"
+                                            stage(currentStage) {
+                                                runTests(service: service, publish: true)
+                                                publishCoverage(services: [service])
+                                            }
+                                            // The scanner waits for the quality gate itself and fails the
+                                            // lane when it is red, so parallel lanes never read each
+                                            // other's analysis (waitForQualityGate takes the last one).
+                                            currentStage = "Sonar ${service}"
+                                            stage(currentStage) {
+                                                sonarScan(
+                                                    service: service,
+                                                    extraArgs: '-Dsonar.qualitygate.wait=true -Dsonar.qualitygate.timeout=600'
+                                                )
+                                            }
+                                            if (publish) {
+                                                currentStage = "Publish ${service}"
+                                                stage(currentStage) {
+                                                    dockerPublish(service: service, version: prereleaseVersion)
+                                                }
+                                            } else if (packageOnly) {
+                                                currentStage = "Package ${service}"
+                                                stage(currentStage) {
+                                                    dockerBuild(service: service)
+                                                }
+                                            }
+                                        } catch (Exception e) {
+                                            if (!failedService) {
+                                                failedService = service
+                                                failedStage = currentStage
+                                            }
+                                            throw e
+                                        } finally {
+                                            cleanWs()
+                                        }
                                     }
-                                    throw e
                                 }
                             }
-                        }
-                        parallel branches
-                    }
 
-                }
-            }
-        }
-
-        stage('Sonar analysis and quality gate') {
-            when {
-                expression { !changed.services.isEmpty() }
-            }
-            steps {
-                script {
-                    for (String service : changed.services) {
-                        def currentStage = "Sonar ${service}"
-                        try {
-                            stage(currentStage) {
-                                sonarScan(service: service)
-                            }
-
-                            currentStage = "Quality gate ${service}"
-                            stage(currentStage) {
-                                timeout(time: 10, unit: 'MINUTES') {
-                                    waitForQualityGate abortPipeline: true
-                                }
-                            }
-                        } catch (Exception e) {
-                            failedService = service
-                            failedStage = currentStage
-                            throw e
-                        }
-                    }
-                }
-            }
-        }
-
-        // Proves that the images build when nothing is published afterwards (PRs to dev).
-        // Where images are published, dockerPublish already builds them; on main they are
-        // promoted from the release candidate, so building them here would be wasted work.
-        stage('Package images') {
-            when {
-                expression { prereleaseVersion == null && env.BRANCH_NAME != 'main' }
-            }
-            steps {
-                script {
-                    int maxParallel = (env.MAX_PARALLEL_SERVICES ?: '3') as int
-                    if (maxParallel < 1) {
-                        maxParallel = 1
-                    }
-
-                    def services = changed.services
-                    for (int i = 0; i < services.size(); i += maxParallel) {
-                        int end = Math.min(i + maxParallel, services.size())
-                        def batch = []
-                        for (int j = i; j < end; j++) {
-                            batch.add(services[j])
-                        }
-
-                        def branches = [:]
-                        batch.each { service ->
-                            branches[service] = {
-                                try {
-                                    stage("Package ${service}") {
-                                        dockerBuild(service: service)
+                            if (buildWeb && (publish || packageOnly)) {
+                                lanes['web-client'] = {
+                                    node('worker') {
+                                        String currentStage = publish ? 'Publish web client' : 'Package web client'
+                                        try {
+                                            checkout scm
+                                            stage(currentStage) {
+                                                if (publish) {
+                                                    dockerPublish(image: 'web-client', dockerfile: 'mobile/Dockerfile', context: 'mobile', version: prereleaseVersion)
+                                                } else {
+                                                    dockerBuild(image: 'web-client', dockerfile: 'mobile/Dockerfile', context: 'mobile')
+                                                }
+                                            }
+                                        } catch (Exception e) {
+                                            if (!failedService) {
+                                                failedService = 'web-client'
+                                                failedStage = currentStage
+                                            }
+                                            throw e
+                                        } finally {
+                                            cleanWs()
+                                        }
                                     }
-                                } catch (Exception e) {
-                                    failedService = service
-                                    failedStage = "Package ${service}"
-                                    throw e
                                 }
                             }
-                        }
 
-                        parallel branches
-                    }
-
-                    if (changed.web) {
-                        try {
-                            stage('Package web client') {
-                                dockerBuild(
-                                    image: 'web-client',
-                                    dockerfile: 'mobile/Dockerfile',
-                                    context: 'mobile'
-                                )
+                            boolean integration = changed.all || changed.services.any { service ->
+                                service in ['circleguard-auth-service', 'circleguard-form-service',
+                                            'circleguard-promotion-service', 'circleguard-gateway-service']
                             }
-                        } catch (Exception e) {
-                            failedService = 'web-client'
-                            failedStage = 'Package web client'
-                            throw e
+                            if (integration) {
+                                lanes['integration-tests'] = {
+                                    node('worker') {
+                                        try {
+                                            checkout scm
+                                            sh 'chmod +x gradlew'
+                                            stage('Integration tests') {
+                                                runTests(integration: true, coverage: false, publish: true)
+                                            }
+                                        } catch (Exception e) {
+                                            if (!failedService) {
+                                                failedService = 'integration-tests'
+                                                failedStage = 'Integration tests'
+                                            }
+                                            throw e
+                                        } finally {
+                                            cleanWs()
+                                        }
+                                    }
+                                }
+                            }
+
+                            // The longest lanes ask for a worker first, so the short ones fill the gaps
+                            // at the end instead of a long one starting last (measured test times:
+                            // promotion 3.5 min, identity 1.7, notification 1.5, the rest 1.1 to 1.3).
+                            def priority = ['integration-tests', 'web-client',
+                                            'circleguard-promotion-service', 'circleguard-identity-service',
+                                            'circleguard-notification-service', 'circleguard-gateway-service',
+                                            'circleguard-form-service']
+                            def ordered = [:]
+                            priority.each { name ->
+                                if (lanes.containsKey(name)) {
+                                    ordered[name] = lanes[name]
+                                }
+                            }
+                            lanes.each { name, lane ->
+                                if (!ordered.containsKey(name)) {
+                                    ordered[name] = lane
+                                }
+                            }
+                            if (lanes) {
+                                // The first failed lane stops the others.
+                                ordered.failFast = true
+                                parallel ordered
+                            } else {
+                                echo 'No hay servicios ni cliente web modificados.'
+                            }
                         }
                     }
                 }
             }
         }
 
-        stage('IaC scan') {
-            when { expression { !alreadyMerged } }
+        // Before the merge: checks that main will be able to find this RC (read only).
+        stage('Verify promotion path') {
+            when { expression { promotionPr && prereleaseVersion != null } }
             steps {
                 script {
-                    trivyConfigScan()
-                }
-            }
-        }
-
-        stage('Integration tests') {
-            when {
-                expression {
-                    changed.all || changed.services.any { service ->
-                        service == 'circleguard-auth-service' ||
-                            service == 'circleguard-form-service' ||
-                            service == 'circleguard-promotion-service' ||
-                            service == 'circleguard-gateway-service'
-                    }
-                }
-            }
-            steps {
-                script {
-                    def currentStage = 'Integration tests'
                     try {
-                        runTests(integration: true, coverage: false, publish: true)
+                        promoteRelease(
+                            version: prereleaseVersion.substring(0, prereleaseVersion.indexOf('-rc.')),
+                            services: SERVICES,
+                            dryRun: true
+                        )
                     } catch (Exception e) {
-                        if (!failedService) {
-                            failedService = 'integration-tests'
-                            failedStage = currentStage
-                        }
+                        failedService = 'registry'
+                        failedStage = 'Verify promotion path'
                         throw e
-                    }
-                }
-            }
-        }
-
-        stage('Publish prerelease images') {
-            when { expression { prereleaseVersion != null } }
-            steps {
-                script {
-                    // SNAPSHOT publishes only the affected components. A promotion PR (or a
-                    // release branch) publishes the full set: the RC is what main promotes.
-                    String sourceBranch = env.CHANGE_BRANCH ?: env.BRANCH_NAME
-                    boolean onlyChanged = !promotionPr && sourceBranch == 'dev'
-                    publishImages(
-                        onlyChanged ? changed.services : SERVICES,
-                        onlyChanged ? changed.web : true,
-                        prereleaseVersion
-                    )
-
-                    // Before the merge: checks that main will be able to find this RC (read only).
-                    if (promotionPr) {
-                        try {
-                            promoteRelease(
-                                version: prereleaseVersion.substring(0, prereleaseVersion.indexOf('-rc.')),
-                                services: SERVICES,
-                                dryRun: true
-                            )
-                        } catch (Exception e) {
-                            failedService = 'registry'
-                            failedStage = 'Verify promotion path'
-                            throw e
-                        }
                     }
                 }
             }
@@ -495,6 +504,48 @@ pipeline {
             }
         }
 
+        // HU-32: a merge to main plans the three environments and applies dev, then stage.
+        // The plan file is applied as-is; a stale plan fails instead of drifting.
+        stage('Terraform plan (main)') {
+            when {
+                allOf {
+                    branch 'main'
+                    expression { changed.terraform }
+                }
+            }
+            steps {
+                script {
+                    terraformChanges.dev = terraformPlan(environment: 'dev')
+                    terraformChanges.stage = terraformPlan(environment: 'stage')
+                    terraformChanges.prod = terraformPlan(environment: 'prod')
+                }
+            }
+        }
+
+        stage('Terraform apply dev') {
+            when {
+                allOf {
+                    branch 'main'
+                    expression { changed.terraform && terraformChanges.dev?.hasChanges }
+                }
+            }
+            steps {
+                terraformApply(environment: 'dev')
+            }
+        }
+
+        stage('Terraform apply stage') {
+            when {
+                allOf {
+                    branch 'main'
+                    expression { changed.terraform && terraformChanges.stage?.hasChanges }
+                }
+            }
+            steps {
+                terraformApply(environment: 'stage')
+            }
+        }
+
         stage('Deploy to dev') {
             when {
                 allOf {
@@ -596,6 +647,42 @@ pipeline {
             }
         }
 
+        // HU-32: the prod Terraform plan needs its own admin approval. The application
+        // approval above is a separate decision.
+        stage('Approve Terraform prod') {
+            when {
+                allOf {
+                    branch 'main'
+                    expression { changed.terraform && terraformChanges.prod?.hasChanges }
+                }
+            }
+            steps {
+                timeout(time: 15, unit: 'MINUTES') {
+                    script {
+                        env.TERRAFORM_PROD_APPROVER = input(
+                            message: 'Apply the saved Terraform plan to prod',
+                            ok: 'Apply to prod',
+                            submitter: 'admin',
+                            submitterParameter: 'APPROVER'
+                        )
+                        echo "Terraform prod approved by ${env.TERRAFORM_PROD_APPROVER}"
+                    }
+                }
+            }
+        }
+
+        stage('Terraform apply prod') {
+            when {
+                allOf {
+                    branch 'main'
+                    expression { changed.terraform && terraformChanges.prod?.hasChanges }
+                }
+            }
+            steps {
+                terraformApply(environment: 'prod')
+            }
+        }
+
         stage('Deploy to prod') {
             when {
                 allOf {
@@ -610,17 +697,6 @@ pipeline {
     }
 
     post {
-        always {
-            script {
-                if (changed.services) {
-                    def patterns = changed.services.collect {
-                        "services/${it}/build/test-results/test/*.xml"
-                    }.join(',')
-                    junit allowEmptyResults: true, testResults: patterns
-                    publishCoverage(services: changed.services)
-                }
-            }
-        }
         failure {
             notifyDiscord(
                 status: 'FAILED',
@@ -650,28 +726,5 @@ pipeline {
         cleanup {
             cleanWs()
         }
-    }
-}
-
-// Publishes the images in parallel batches of MAX_PARALLEL_SERVICES. Each image is built from the
-// JAR of the Compile stage, so a batch is mostly the push to the registry.
-def publishImages(List<String> services, boolean web, String version) {
-    int maxParallel = Math.max((env.MAX_PARALLEL_SERVICES ?: '3') as int, 1)
-    def jobs = [:]
-    services.each { service ->
-        jobs[service] = { dockerPublish(service: service, version: version) }
-    }
-    if (web) {
-        jobs['web-client'] = {
-            dockerPublish(image: 'web-client', dockerfile: 'mobile/Dockerfile', context: 'mobile', version: version)
-        }
-    }
-    List<String> names = jobs.keySet() as List
-    for (int i = 0; i < names.size(); i += maxParallel) {
-        def batch = [:]
-        names.subList(i, Math.min(i + maxParallel, names.size())).each { name ->
-            batch["Publish ${name}"] = jobs[name]
-        }
-        parallel batch
     }
 }
