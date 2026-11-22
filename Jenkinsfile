@@ -338,8 +338,22 @@ pipeline {
                         }
                     }
 
-                    if (lanes) {
-                        parallel lanes
+                    // The longest lanes ask for a worker first: the integration tests and the web
+                    // client take longer than a service, so queued last they would end the build.
+                    def ordered = [:]
+                    ['integration-tests', 'web-client'].each { name ->
+                        if (lanes.containsKey(name)) {
+                            ordered[name] = lanes[name]
+                        }
+                    }
+                    lanes.each { name, lane ->
+                        if (!ordered.containsKey(name)) {
+                            ordered[name] = lane
+                        }
+                    }
+
+                    if (ordered) {
+                        parallel ordered
                     } else {
                         echo 'No hay servicios ni cliente web modificados.'
                     }
