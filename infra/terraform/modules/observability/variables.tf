@@ -64,6 +64,18 @@ variable "prometheus_chart_version" {
   default     = "65.5.1"
 }
 
+variable "loki_chart_version" {
+  description = "Pinned version of the Grafana Loki Helm chart."
+  type        = string
+  default     = "6.55.0"
+}
+
+variable "promtail_chart_version" {
+  description = "Pinned version of the Grafana Promtail Helm chart."
+  type        = string
+  default     = "6.17.1"
+}
+
 variable "prometheus_grafana_admin_password" {
   description = "Grafana admin password. Empty keeps the chart default; pass it with TF_VAR_ and never commit it."
   type        = string
