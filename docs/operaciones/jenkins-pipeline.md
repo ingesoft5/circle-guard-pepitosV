@@ -180,6 +180,38 @@ Desde la HU-34 todos los despliegues usan `deployK8s`: `helm upgrade --install -
 
 Jenkins tiene un solo ejecutor: mientras el `input` espera aprobación, los demás builds quedan en cola. El timeout global del pipeline sigue en 60 minutos y el `input` tiene un límite de 15.
 
+## Terraform en el pipeline (HU-32)
+
+Cuando `detectChangedServices` detecta cambios bajo `infra/terraform/` (y no solo documentación):
+
+- **PR:** `Terraform plan (PR)` ejecuta `terraform plan` para `dev`, `stage` y `prod`; el resultado queda en el log del build. No aplica nada.
+- **Merge a `main`:** `Terraform plan (main)` genera los tres planes; `Terraform apply dev` y `Terraform apply stage` aplican solo si el plan tiene cambios.
+- **Producción:** `Approve Terraform prod` es un `input` de 15 minutos que solo `admin` puede aprobar; después, `Terraform apply prod` aplica el plan guardado.
+- Si un ambiente no tiene cambios, el `apply` de ese ambiente se omite.
+- El `.tfplan` se aplica tal cual. Si el state cambió entre el plan y el apply, Terraform falla con `Saved plan is stale` y no aplica algo distinto a lo revisado.
+- El `.tfplan` no se archiva como artefacto porque puede contener valores sensibles; viaja por `stash`/`unstash` dentro del mismo build.
+- La detección usa el diff del PR o `HEAD^1` en `main`, no el fallback de "todos los servicios": un merge solo ve los archivos de `infra/terraform/` que trajo su PR. Los `.md` no cuentan.
+
+Credenciales de Jenkins que usa (ver `casc.yaml`):
+
+| Credencial | Uso |
+|:---|:---|
+| `aws-terraform` | Archivo de credenciales AWS del usuario que aplica la infraestructura. |
+| `prometheus-ssh-key` | Llave privada para el provisioner de observability. |
+| `prometheus-grafana-password` | Contraseña de Grafana del release de observability. |
+
+El paso usa `K8S_HOST_<AMBIENTE>` como `TF_VAR_prometheus_ssh_host`. Debe ser la **IP privada** del nodo: el Security Group solo abre el puerto 22 desde la IP privada de Jenkins.
+
+Carga manual en el host de CI (una vez, o al rotar credenciales):
+
+```bash
+sudo ./infra/bootstrap/load-terraform-credential.sh aws    < ~/.aws/credentials-terraform
+sudo ./infra/bootstrap/load-terraform-credential.sh ssh    < ~/.ssh/circleguard-admin-key
+sudo ./infra/bootstrap/load-terraform-credential.sh grafana < ~/grafana-admin-password.txt
+```
+
+Cada comando escribe el archivo en `infra/compose/ci/secrets/` y recarga JCasC. El usuario AWS necesita permisos sobre el bucket/tabla del state y sobre los recursos del proyecto (EC2, ECR, S3, CloudWatch, SNS, SSM). El usuario `circleguard-terraform-ci` ya los tiene.
+
 ## Rollback (HU-17, HU-52)
 
 El job `circleguard-rollback` (fuera del multibranch, declarado en `casc.yaml`) vuelve atrás un ambiente en su clúster k3s. Se lanza desde Jenkins con **Build with Parameters**:
