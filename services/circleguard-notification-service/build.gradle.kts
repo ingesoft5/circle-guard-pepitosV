@@ -16,7 +16,7 @@ dependencies {
     implementation("io.micrometer:micrometer-tracing-bridge-otel")
     implementation("io.opentelemetry:opentelemetry-exporter-otlp")
     implementation("org.springframework.boot:spring-boot-starter-mail")
-    implementation("com.twilio.sdk:twilio:10.1.1")
+    implementation("com.twilio.sdk:twilio:13.2.1")
     implementation("org.springframework.boot:spring-boot-starter-webflux")
     implementation("org.springframework.boot:spring-boot-starter-freemarker")
     implementation("org.springframework.retry:spring-retry")
