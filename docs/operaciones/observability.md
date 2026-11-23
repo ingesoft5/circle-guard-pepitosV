@@ -303,8 +303,9 @@ se usa `webhook_url_file` en `alertmanager.config` porque el operador de esta ve
 | `ServiceDown` | Prometheus no puede leer `/actuator/prometheus` de un pod (`up == 0`) | 1 min | `critical` |
 | `HighErrorRate` | Más del 5 % de respuestas 5xx en 5 min, con al menos 3 solicitudes por minuto | 2 min | `critical` |
 | `HighLatencyP95` | p95 HTTP por encima de 1 s en 5 min, con al menos 3 solicitudes por minuto | 5 min | `warning` |
+| `CircuitBreakerOpen` | Un circuit breaker de Resilience4j (hoy `redisHealth` del gateway) estuvo `open` o `half_open` en el último minuto | 1 min | `critical` |
 
-Las tres excluyen `/actuator`. El mínimo de tráfico evita que una sola solicitud fallida o lenta en
+Las tres alertas HTTP excluyen `/actuator`. El mínimo de tráfico evita que una sola solicitud fallida o lenta en
 un servicio sin uso dispare la alerta. Mientras un servicio tiene una alerta `critical`, sus
 `warning` no se envían. Alertmanager agrupa por alerta, namespace y servicio, repite cada 4 horas
 si sigue activa y avisa cuando se resuelve.
@@ -330,7 +331,7 @@ si sigue activa y avisa cuando se resuelve.
    kubectl -n monitoring get alertmanagerconfig circleguard
    ```
 
-   En Prometheus, **Alerts** debe listar las tres reglas en `Inactive`.
+   En Prometheus, **Alerts** debe listar las cuatro reglas en `Inactive`.
 4. Aplica Terraform en el ambiente (o corre `install-observability.sh`) para que Alertmanager use
    el `AlertmanagerConfig`. Hazlo después del paso 3: si el objeto o el Secret no existen, el
    operador no actualiza Alertmanager y lo registra en su log.
@@ -365,7 +366,8 @@ Si no llega, revisa `kubectl -n monitoring logs alertmanager-kube-prometheus-sta
 
 ### Provocar cada alerta
 
-Hazlo en dev, con una versión desplegada que incluya HU-39 y HU-40 (métricas y buckets). Los
+Hazlo en dev o en stage, con una versión desplegada que incluya HU-39 y HU-40 (métricas y
+buckets). Los ejemplos usan `circleguard-dev`; cambia el namespace para stage. Los
 comandos van en el nodo, con `sudo k3s kubectl` o con tu kubeconfig. Cada prueba deja dos
 mensajes en Discord: `FIRING` y, al revertir, `RESOLVED`.
 
@@ -415,7 +417,27 @@ La alerta llega a los 6 o 7 minutos (5 de espera más la ventana de 5 minutos); 
 unos 8. Si Neo4j se reinicia durante la prueba, el retraso desaparece con el contenedor viejo:
 vuelve a calcular `CID` y `PID`.
 
+**CircuitBreakerOpen.** Apaga Redis y envía check-ins al gateway con un token QR válido (el
+cliente web lo genera en `/api/v1/auth/qr/generate`). Cada respuesta es `Access Denied: Health
+status unavailable`, el circuito `redisHealth` abre y la alerta llega a los 2 o 3 minutos:
+
+```bash
+kubectl -n circleguard-dev scale deployment/redis --replicas=0
+for i in $(seq 1 360); do
+  curl -s -X POST -H 'Content-Type: application/json' -d "{\"token\":\"$QR_TOKEN\"}" \
+    http://<node_public_ip>/svc/gateway/api/v1/gate/validate; echo
+  sleep 0.5
+done | sort | uniq -c
+kubectl -n circleguard-dev scale deployment/redis --replicas=1
+```
+
+Después de restaurar Redis, envía unos check-ins más: un circuito abierto solo pasa a
+`half_open` cuando recibe una llamada, y cada pod del gateway tiene el suyo.
+
 ### Evidencia
+
+La prueba del 22 de noviembre de 2026 en stage, con la línea de tiempo, los comandos y el estado de
+Alertmanager, está en [`evidencias/hu-41/`](evidencias/hu-41/README.md).
 
 Guarda en `docs/operaciones/evidencias/hu-41/` una captura del mensaje `FIRING` y otra del
 `RESOLVED` de cada alerta, más la vista **Alerts** de Prometheus con la regla en `Firing`. Usa

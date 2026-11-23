@@ -1,0 +1,31 @@
+[
+  {
+    "annotations": {
+      "description": "El circuit breaker redisHealth está abierto desde hace más de 1 minuto: la dependencia falla y el gateway niega todas las entradas. Revisa Redis con kubectl -n circleguard-stage get pods -l app.kubernetes.io/name=redis.",
+      "summary": "Circuito redisHealth abierto en gateway (circleguard-stage)"
+    },
+    "endsAt": "2026-11-22T23:47:20.725Z",
+    "receivers": [
+      {
+        "name": "monitoring/circleguard/discord"
+      }
+    ],
+    "startsAt": "2026-11-22T23:40:20.725Z",
+    "status": {
+      "inhibitedBy": [],
+      "silencedBy": [],
+      "state": "active"
+    },
+    "updatedAt": "2026-11-22T23:43:20.727Z",
+    "labels": {
+      "alertname": "CircuitBreakerOpen",
+      "environment": "stage",
+      "name": "redisHealth",
+      "namespace": "circleguard-stage",
+      "project": "circleguard",
+      "prometheus": "monitoring/kube-prometheus-stack-prometheus",
+      "service": "gateway",
+      "severity": "critical"
+    }
+  }
+]
