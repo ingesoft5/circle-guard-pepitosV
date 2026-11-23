@@ -10,8 +10,10 @@ metricsServer: http://kube-prometheus-stack-prometheus.monitoring:9090/prometheu
 configTracking:
   enabled: false
 # The chart default injects Linkerd into Flagger. It only calls the API server and Prometheus,
-# so a proxy there would be memory spent for nothing.
-podAnnotations: {}
+# so a proxy there would be memory spent for nothing. Helm merges maps, so an empty map would
+# keep the default annotation; it has to be overridden with "disabled".
+podAnnotations:
+  linkerd.io/inject: disabled
 resources:
   requests:
     cpu: 10m

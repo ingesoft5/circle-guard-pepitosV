@@ -176,6 +176,36 @@ kubectl -n circleguard-dev set env deployment/gateway SPRING_DATA_REDIS_HOST=red
 kubectl -n circleguard-dev set env deployment/gateway SPRING_DATA_REDIS_HOST-
 ```
 
+## Interfaces
+
+| Qué | Dónde | Acceso |
+|:---|:---|:---|
+| Panel de Linkerd (linkerd-viz) | `https://linkerd.<ip-del-nodo>.sslip.io/` | Mismo usuario BasicAuth que `/prometheus` |
+| Canary y malla en Grafana | `/grafana`, panel **CircleGuard · Canary y malla** | Usuario de Grafana |
+
+**Flagger no tiene interfaz propia.** Su estado se ve con `kubectl get canary` y con el panel de
+Grafana, que lee sus métricas (`flagger_canary_status`, `flagger_canary_weight` y
+`flagger_canary_metric_analysis`). El panel muestra el estado del último análisis, el peso de
+primary y canary, el valor de cada comprobación y, desde los proxies, la tasa de éxito, la latencia
+p99 y la parte del tráfico que entra con mTLS.
+
+**Linkerd sí tiene panel: linkerd-viz.** Se instala con
+`deploy/k8s/scripts/install-linkerd-viz.sh` y lee el Prometheus del clúster, sin instalar uno
+propio. Muestra el tráfico entre Deployments, la tasa de éxito, las rutas y `tap` en vivo.
+
+- **Dominio propio.** El panel solo funciona desde la raíz, así que se publica en un nombre propio
+  (`linkerd.<ip>.sslip.io`) en lugar de una ruta como `/grafana`.
+- **Validación del `Host`.** El panel rechaza cualquier `Host` que no conoce, como protección
+  contra DNS rebinding. `dashboard.enforcedHostRegexp` agrega ese nombre a los que acepta.
+- **Certificado.** Lo emite la CA del laboratorio, así que el navegador muestra la misma advertencia
+  que en `/grafana`.
+
+```bash
+export KUBECONFIG=<kubeconfig de k3s-dev>
+deploy/k8s/scripts/install-linkerd-viz.sh            # o: ... install-linkerd-viz.sh linkerd.<ip>.sslip.io
+kubectl apply -k observability/grafana               # panel de Grafana; deployK8s también lo aplica
+```
+
 ## Memoria
 
 | Pieza | Estimado |
@@ -183,6 +213,7 @@ kubectl -n circleguard-dev set env deployment/gateway SPRING_DATA_REDIS_HOST-
 | Control plane (destination, identity, proxy-injector y sus proxies) | 150-250 MiB |
 | 9 proxies de la aplicación (11 en `prod` por el HPA) | 90-220 MiB |
 | Flagger y load tester (con proxy) | 50-80 MiB |
+| linkerd-viz sin Prometheus propio (4 pods con proxy) | 150-200 MiB |
 | Pod extra de `gateway-canary` durante un análisis | 300-450 MiB (JVM) |
 
 En `dev` caben con margen (unos 1,7 GB libres). En `prod`, el pod extra del análisis es lo que

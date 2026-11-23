@@ -27,6 +27,8 @@ deploy/k8s/
 ├── mesh/                      # Linkerd y Flagger (docs/arquitectura/service-mesh.md)
 │   ├── linkerd-identity.yaml  # trust anchor y emisor de identidad con cert-manager
 │   ├── linkerd-values.yaml
+│   ├── linkerd-viz-values.yaml
+│   ├── linkerd-viz-ingress.yaml  # panel de Linkerd en linkerd.<ip>.sslip.io
 │   ├── flagger-values.yaml
 │   └── loadtester-values.yaml
 └── scripts/
@@ -37,6 +39,7 @@ deploy/k8s/
     ├── check-rbac.sh          # kubectl auth can-i del deployer y del viewer
     ├── install-linkerd.sh     # Gateway API, identidad y control plane de Linkerd
     ├── install-flagger.sh     # Flagger y su load tester
+    ├── install-linkerd-viz.sh # panel de Linkerd y su Ingress
     ├── wait-canary.sh         # espera el análisis de Flagger; lo llama deployK8s
     └── inventario.sh          # inventario de solo lectura de un nodo (HU-54)
 ```

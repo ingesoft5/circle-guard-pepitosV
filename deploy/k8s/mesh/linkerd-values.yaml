@@ -60,7 +60,8 @@ policyController:
 # one adds the deployment label that the canary queries filter on.
 podMonitor:
   enabled: false
-  scrapeInterval: 30s
+  # linkerd-viz queries 1-minute windows; the scrape interval has to be well below that.
+  scrapeInterval: 15s
   scrapeTimeout: 10s
   controller:
     enabled: true
