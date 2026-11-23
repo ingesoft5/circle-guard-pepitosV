@@ -76,10 +76,30 @@ for image, items in sorted(by_image.items()):
 print(f"{len(components)} tags in {repo}; {deleted} prerelease tags {'to delete' if dry_run else 'deleted'}")
 
 if deleted and not dry_run:
-    for task in call("GET", "/service/rest/v1/tasks?type=assetBlob.cleanup")["items"]:
-        if "docker" in task["name"].lower():
-            call("POST", f"/service/rest/v1/tasks/{task['id']}/run")
-            print(f"started task: {task['name']}")
+    # Deleting a tag frees no disk in Nexus OSS: the layers stay until the Docker GC drops the
+    # unreferenced ones and the compact task removes the soft-deleted blobs. Without them the
+    # tools disk filled up and SonarQube's Elasticsearch went read-only (flood stage, 95 %).
+    # Run in order and wait for each, because each step feeds the next.
+    import time
+    tasks = call("GET", "/service/rest/v1/tasks")["items"]
+    steps = [
+        ("assetBlob.cleanup", lambda t: "docker" in t["name"].lower()),
+        ("repository.docker.gc", lambda t: True),
+        ("blobstore.compact", lambda t: True),
+    ]
+    for task_type, match in steps:
+        found = [t for t in tasks if t["type"] == task_type and match(t)]
+        if not found:
+            print(f"missing task {task_type}: create it in Nexus (Settings > System > Tasks)", file=sys.stderr)
+            continue
+        task = found[0]
+        call("POST", f"/service/rest/v1/tasks/{task['id']}/run")
+        print(f"started task: {task['name']}")
+        time.sleep(5)
+        for _ in range(180):
+            if call("GET", f"/service/rest/v1/tasks/{task['id']}")["currentState"] == "WAITING":
+                break
+            time.sleep(10)
 PY
 }
 

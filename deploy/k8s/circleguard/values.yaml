@@ -137,7 +137,9 @@ services:
     spring: true
     image: gateway-service
     port: 8087
-    readinessGroup: readinessState,redis
+    # Not redis: when Redis fails the redisHealth breaker answers "health status unavailable"
+    # (fail closed). With redis here the pod left the Service and every check-in got a 502.
+    readinessGroup: readinessState
     config:
       SPRING_DATA_REDIS_HOST: redis
     secrets:
