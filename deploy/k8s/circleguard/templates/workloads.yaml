@@ -87,6 +87,13 @@ spec:
   replicas: {{ $spec.replicas | default 1 }}
   {{- end }}
   revisionHistoryLimit: 5
+  {{- if not $spec.storage }}
+  # One 2 vCPU node: stop the old pod before starting the new one. With a surge every service
+  # ran two JVMs (and two Linkerd proxies) during a release and the node stopped answering.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxSurge: 0, maxUnavailable: 1}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "circleguard.selector" $ctx | nindent 6 }}
