@@ -429,7 +429,7 @@ pipeline {
                     usernameVariable: 'E2E_USERNAME',
                     passwordVariable: 'E2E_PASSWORD'
                 )]) {
-                    withEnv(["E2E_BASE_URL=http://${env.K8S_HOST_STAGE}"]) {
+                    withEnv(["E2E_BASE_URL=https://${env.K8S_HOST_STAGE}"]) {
                         sh 'bash tests/e2e-playwright/run-e2e.sh'
                     }
                 }
@@ -608,7 +608,7 @@ pipeline {
                     usernameVariable: 'E2E_USERNAME',
                     passwordVariable: 'E2E_PASSWORD'
                 )]) {
-                    withEnv(["E2E_BASE_URL=http://${env.K8S_HOST_DEV}"]) {
+                    withEnv(["E2E_BASE_URL=https://${env.K8S_HOST_DEV}"]) {
                         sh 'bash tests/e2e-playwright/run-e2e.sh'
                     }
                 }
