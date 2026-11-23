@@ -4,6 +4,46 @@ Todas las versiones de CircleGuard. Este archivo lo genera el pipeline de Jenkin
 los Conventional Commits (HU-22): no se edita a mano.
 Esquema de versiones: [docs/release-notes/etiquetado.md](docs/release-notes/etiquetado.md).
 
+## [0.9.0](https://github.com/ingesoft5/circle-guard-pepitosV/compare/v0.8.0...v0.9.0) (2026-11-23)
+
+### Features
+
+- **k8s:** add install-mesh.sh and enable the mesh in stage and prod ([#162](https://github.com/ingesoft5/circle-guard-pepitosV/pull/162)) ([7eeccf0](https://github.com/ingesoft5/circle-guard-pepitosV/commit/7eeccf005ff490f24bec4ace3d0e893d312e1b4c))
+
+### Fixes
+
+- **deploy:** issue the TLS certificate for the sslip.io name ([#169](https://github.com/ingesoft5/circle-guard-pepitosV/pull/169)) ([3eef080](https://github.com/ingesoft5/circle-guard-pepitosV/commit/3eef080c499337d124c067e9b39efbb277639716))
+- **deploy:** replace pods without surge on the single-node clusters ([#169](https://github.com/ingesoft5/circle-guard-pepitosV/pull/169)) ([50c7def](https://github.com/ingesoft5/circle-guard-pepitosV/commit/50c7defa4aee3db40fefb786d8bb622cbde5958f))
+- **deploy:** lower the cpu request of the services in every environment ([#166](https://github.com/ingesoft5/circle-guard-pepitosV/pull/166)) ([dff1086](https://github.com/ingesoft5/circle-guard-pepitosV/commit/dff108648291dd480099405145033be0a0dbd232))
+- **deploy:** lower the cpu request of the dev services ([#165](https://github.com/ingesoft5/circle-guard-pepitosV/pull/165)) ([8498a89](https://github.com/ingesoft5/circle-guard-pepitosV/commit/8498a89a111b7c836ab0d67b96affd7cb4dc860a))
+
+## [0.8.0](https://github.com/ingesoft5/circle-guard-pepitosV/compare/v0.7.0...v0.8.0) (2026-11-23)
+
+### Features
+
+- **k8s:** add Flagger canary for the gateway ([#159](https://github.com/ingesoft5/circle-guard-pepitosV/pull/159)) ([634c54a](https://github.com/ingesoft5/circle-guard-pepitosV/commit/634c54a72722f01d7872deeac7e86fd824ab248a))
+- **k8s:** add Flagger canary for the gateway ([#158](https://github.com/ingesoft5/circle-guard-pepitosV/pull/158)) ([a11de15](https://github.com/ingesoft5/circle-guard-pepitosV/commit/a11de15c49427a6af85955263feeb67e6e02e68d))
+- **k8s:** add Linkerd mesh with mTLS between the services ([#157](https://github.com/ingesoft5/circle-guard-pepitosV/pull/157)) ([3ea4fe5](https://github.com/ingesoft5/circle-guard-pepitosV/commit/3ea4fe528fe8ffeb87e377ff792eb0aa42b4f5c9))
+- **deploy:** point file-service at the bucket of each environment ([#152](https://github.com/ingesoft5/circle-guard-pepitosV/pull/152)) ([2895b47](https://github.com/ingesoft5/circle-guard-pepitosV/commit/2895b47f25953f6f5f2e2939293c20cd20be2b14))
+- **file:** store uploads in the environment s3 bucket ([#152](https://github.com/ingesoft5/circle-guard-pepitosV/pull/152)) ([d8f180a](https://github.com/ingesoft5/circle-guard-pepitosV/commit/d8f180a3c595ccdee64f06cfeda4197a6836fa5a))
+- **infra:** give the k3s node an iam role for its bucket ([#152](https://github.com/ingesoft5/circle-guard-pepitosV/pull/152)) ([755e191](https://github.com/ingesoft5/circle-guard-pepitosV/commit/755e191422012948857a09ffbaa86c851a1a03cc))
+- **jenkins:** audit the release notes of every tag ([#145](https://github.com/ingesoft5/circle-guard-pepitosV/pull/145)) ([afb8f87](https://github.com/ingesoft5/circle-guard-pepitosV/commit/afb8f870e84a24534c688c5c22f561b4ba349c04))
+- **jenkins:** record each deployment in github and a log branch ([#145](https://github.com/ingesoft5/circle-guard-pepitosV/pull/145)) ([64fe264](https://github.com/ingesoft5/circle-guard-pepitosV/commit/64fe2641f282cf1867cff1cbbf89055f8c60c0de))
+- **k8s:** serve the ingress over TLS and redirect HTTP ([#143](https://github.com/ingesoft5/circle-guard-pepitosV/pull/143)) ([8e65877](https://github.com/ingesoft5/circle-guard-pepitosV/commit/8e65877eaef7903a68dc6f8755c9c40f726bafa2))
+- **infra:** add critical circuit breaker open alert ([#142](https://github.com/ingesoft5/circle-guard-pepitosV/pull/142)) ([eaa30fa](https://github.com/ingesoft5/circle-guard-pepitosV/commit/eaa30faa3ef9ccc58bcfdee997589f55458cf692))
+- **access:** split jenkins and cluster roles ([#138](https://github.com/ingesoft5/circle-guard-pepitosV/pull/138)) ([e4ed99f](https://github.com/ingesoft5/circle-guard-pepitosV/commit/e4ed99f2c6dfaabe8b343c8d344f152a8303cf9d))
+
+### Fixes
+
+- **jenkins:** create the zap work directory before the baseline scan ([#153](https://github.com/ingesoft5/circle-guard-pepitosV/pull/153)) ([39f4738](https://github.com/ingesoft5/circle-guard-pepitosV/commit/39f47383e5e462005bb7423ec0b2701d9fc98c8c))
+- **file:** drop the apache5 http client from the s3 sdk ([#152](https://github.com/ingesoft5/circle-guard-pepitosV/pull/152)) ([36b4fa2](https://github.com/ingesoft5/circle-guard-pepitosV/commit/36b4fa22115f6ba23c6999e93f307a32d0ce483a))
+- **mobile:** forward the browser scheme to the services ([#151](https://github.com/ingesoft5/circle-guard-pepitosV/pull/151)) ([182a789](https://github.com/ingesoft5/circle-guard-pepitosV/commit/182a7891881bdab8180f21d2d38a3ad5b18faf7e))
+- **jenkins:** run the k8s smoke test over https ([#148](https://github.com/ingesoft5/circle-guard-pepitosV/pull/148)) ([a951610](https://github.com/ingesoft5/circle-guard-pepitosV/commit/a9516101a5ee6c75a6d48f4c3c978f02d370a2a0))
+- **jenkins:** report the real error when a k8s deploy fails ([#147](https://github.com/ingesoft5/circle-guard-pepitosV/pull/147)) ([f70c88a](https://github.com/ingesoft5/circle-guard-pepitosV/commit/f70c88a6b0d4c0bc8dce8160973078ddf2c9c7a0))
+- **deploy:** make cert-manager and node ip scripts executable ([#147](https://github.com/ingesoft5/circle-guard-pepitosV/pull/147)) ([eb71a38](https://github.com/ingesoft5/circle-guard-pepitosV/commit/eb71a381f413b89448c311f1b40715197365691c))
+- **infra:** free nexus disk after image retention ([#142](https://github.com/ingesoft5/circle-guard-pepitosV/pull/142)) ([278c2b7](https://github.com/ingesoft5/circle-guard-pepitosV/commit/278c2b78a5736a63232892f3b3170691e0e2517b))
+- **gateway:** fail fast on redis and keep readiness off redis ([#142](https://github.com/ingesoft5/circle-guard-pepitosV/pull/142)) ([62d8f7d](https://github.com/ingesoft5/circle-guard-pepitosV/commit/62d8f7dd886d757a2923c25d8f04c5ec29a4de7c))
+
 ## [0.7.0](https://github.com/ingesoft5/circle-guard-pepitosV/compare/v0.6.0...v0.7.0) (2026-11-22)
 
 ### Features
