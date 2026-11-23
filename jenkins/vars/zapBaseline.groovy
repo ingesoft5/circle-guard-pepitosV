@@ -20,11 +20,17 @@ def call() {
         withEnv(["ZAP_TARGET=${target}"]) {
             sh '''
                 cid="$(docker create --network host ghcr.io/zaproxy/zaproxy:stable \
-                    zap-baseline.py -t "$ZAP_TARGET" -c /zap/wrk/rules.tsv \
-                        -r /zap/wrk/zap-baseline.html -J /zap/wrk/zap-baseline.json -I)"
+                    zap-baseline.py -t "$ZAP_TARGET" -c rules.tsv \
+                        -r zap-baseline.html -J zap-baseline.json -I)"
                 cleanup() { docker rm "$cid" >/dev/null 2>&1 || true; }
                 trap cleanup EXIT
-                docker cp tests/security-zap/rules.tsv "$cid":/zap/wrk/rules.tsv
+                # Recent zaproxy images no longer ship /zap/wrk. Stream it in as a tar owned
+                # by the zap user (1000), so ZAP can write its reports there.
+                wrk="$(mktemp -d)"
+                mkdir "$wrk/wrk"
+                cp tests/security-zap/rules.tsv "$wrk/wrk/rules.tsv"
+                tar -C "$wrk" --owner=1000 --group=1000 -cf - wrk | docker cp -a - "$cid":/zap
+                rm -rf "$wrk"
                 rc=0
                 docker start -a "$cid" || rc=$?
                 docker cp "$cid":/zap/wrk/zap-baseline.html build/reports/zap/zap-baseline.html || true
