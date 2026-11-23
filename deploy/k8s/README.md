@@ -17,12 +17,24 @@ deploy/k8s/
 │       ├── workloads.yaml     # ConfigMap + Deployment/StatefulSet + Service por componente
 │       ├── hpa.yaml
 │       ├── servicemonitor.yaml  # scraping de /actuator/prometheus (HU-39)
-│       ├── ingress.yaml
-│       └── rbac.yaml          # deployer y viewer del namespace
+│       ├── ingress.yaml       # HTTP y, con TLS, redirección a HTTPS
+│       ├── certificate.yaml   # certificado de cert-manager (desde 0.8.0)
+│       ├── circuit-dashboard.yaml  # panel del circuito redisHealth para Grafana
+│       └── rbac.yaml          # deployer y viewer del namespace (desde 0.8.0)
+├── cert-manager/
+│   └── issuers.yaml           # emisores circleguard-ca y letsencrypt (desde 0.8.0)
 └── scripts/
     ├── apply-secrets.sh       # crea el Secret del ambiente sin versionar valores
-    └── check-rbac.sh          # kubectl auth can-i del deployer y del viewer
+    ├── install-sealed-secrets.sh
+    ├── install-cert-manager.sh  # cert-manager y emisores, lo llama deployK8s (desde 0.8.0)
+    ├── node-external-ip.sh    # IP externa del nodo para el nombre <ip>.sslip.io
+    ├── check-rbac.sh          # kubectl auth can-i del deployer y del viewer
+    └── inventario.sh          # inventario de solo lectura de un nodo (HU-54)
 ```
+
+Lo marcado "desde 0.8.0" está en `dev` y entra con esa versión; la `0.7.0`, que corre hoy en los
+tres ambientes, no lo tiene. Qué corre en cada clúster, componente por componente, está en
+[`docs/arquitectura/kubernetes.md`](../../docs/arquitectura/kubernetes.md).
 
 ## Cómo está organizado
 

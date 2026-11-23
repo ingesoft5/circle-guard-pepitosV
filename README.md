@@ -22,7 +22,8 @@ To provision Jenkins, SonarQube, the Nexus registry and the three environments f
 | Infrastructure costs | [docs/costos/README.md](docs/costos/README.md) |
 | Executive summary (English) | [docs/executive-summary.md](docs/executive-summary.md) |
 | Sprints 0 and 1 | [docs/agil/sprints-0-y-1.md](docs/agil/sprints-0-y-1.md) |
-| Architecture and Pipeline Diagrams | [docs/arquitectura/](docs/arquitectura/) |
+| Technical documentation index | [docs/README.md](docs/README.md) |
+| Architecture and diagrams | [docs/arquitectura/README.md](docs/arquitectura/README.md) |
 | Jira Board | <https://circleguard.atlassian.net> (`CGR` project) |
 
 CircleGuard is a state-of-the-art university contact tracing and fencing system designed to identify interconnected contact groups ("Circles") and apply rapid health fences while preserving individual anonymity.
@@ -69,7 +70,7 @@ CircleGuard follows a **Microservice Architecture** built on a **Hybrid Data Mod
 - **Form Service**: Dynamic health questionnaire engine.
 - **Gateway Service**: Campus entry validation via signed, time-limited QR tokens.
 - **Dashboard Service**: Geospatial hotspot analytics (Privacy-preserving).
-- **File Service**: Secure certificate and document storage (S3-compatible).
+- **File Service**: Certificate and document uploads, stored on the pod's disk (the Terraform S3 bucket is not wired yet).
 
 ---
 
@@ -83,7 +84,7 @@ CircleGuard follows a **Microservice Architecture** built on a **Hybrid Data Mod
 | **Message Bus** | Apache Kafka 7.6 | Persistent, audit-trailed event log for status dispatches. |
 | **Caching** | Redis 7.2 | L2 distributed cache for rapid entry-gate status validation. |
 | **Mobile/Web** | Expo (React Native) | Unified codebase across iOS, Android, and Browser. |
-| **Infra** | Kubernetes | Orchestration for high availability and auto-scaling. |
+| **Infra** | k3s (Kubernetes), Helm, Terraform on AWS | One single-node cluster per environment, with HPA on the busiest services. |
 
 ---
 

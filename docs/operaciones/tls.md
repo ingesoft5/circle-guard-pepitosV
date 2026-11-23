@@ -1,5 +1,9 @@
 # TLS
 
+> **Estado.** Este cambio está en `dev` y entra con la versión `0.8.0`. La `0.7.0`, que corre hoy en
+> los tres ambientes, sirve la aplicación y el monitoreo por HTTP en el puerto 80, y ningún clúster
+> tiene cert-manager todavía ([`../arquitectura/coherencia.md`](../arquitectura/coherencia.md)).
+
 Los clústeres k3s 1.30 no tienen un nombre DNS propio. El Ingress público es la IP elástica.
 `<ip>.sslip.io` resuelve a esa IP, pero es un dominio compartido y Let's Encrypt suele
 rechazarlo por el límite de certificados. Por eso el certificado de cada ambiente lo firma

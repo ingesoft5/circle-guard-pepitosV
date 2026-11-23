@@ -1,6 +1,8 @@
 # README operativo
 
-Guía para dejar CircleGuard funcionando desde una cuenta de nube vacía y el repositorio clonado, y para operar el entorno que ya existe. Al terminar quedan el host de CI (Jenkins, SonarQube y el registro de Nexus) y un host por ambiente (`dev`, `stage` y `prod`).
+Guía para dejar CircleGuard funcionando desde una cuenta de nube vacía y el repositorio clonado, y para operar el entorno que ya existe. Al terminar quedan los hosts de CI (Jenkins con dos workers, y SonarQube con el registro de Nexus en `tools`) y un clúster k3s por ambiente (`dev`, `stage` y `prod`).
+
+> **Parte 1 y Parte 2.** En la Parte 1 cada ambiente era un host con Docker Compose (`circleguard-dev`, `circleguard-stage` y `circleguard-prod`). Desde la Parte 2 cada ambiente es un clúster k3s creado con Terraform (`circleguard-k3s-<env>`, [`infra/terraform/README.md`](../../infra/terraform/README.md)) y el pipeline despliega con Helm. Los hosts Compose siguen creados, pero detenidos, y ya no reciben despliegues. Los pasos 6 y 7 de la reproducción son los de la Parte 1. La arquitectura vigente, con diagramas, está en [`../arquitectura/README.md`](../arquitectura/README.md).
 
 Los scripts son idempotentes: repetir un paso no duplica instancias, contenedores ni reglas. No se versiona ningún secreto. Las contraseñas viven en un `.env` del host, con permisos `600`.
 
@@ -13,6 +15,7 @@ El detalle de cada pieza está en:
 - [jenkins-pipeline.md](jenkins-pipeline.md): job multibranch, webhook, release y rollback.
 - [rollback.md](rollback.md): plan de rollback en Kubernetes.
 - [observability.md](observability.md): Prometheus, Grafana y Alertmanager en el clúster (HU-26 → HU-39/40/41).
+- [../README.md](../README.md): índice de la documentación técnica (arquitectura, IaC, Kubernetes, seguridad, pruebas).
 - [../costos/README.md](../costos/README.md): estimación y costo real de la infraestructura.
 - [../executive-summary.md](../executive-summary.md): resumen ejecutivo en inglés.
 - [../release-notes/etiquetado.md](../release-notes/etiquetado.md): cómo se calcula la versión.
@@ -115,24 +118,23 @@ El comando escribe `infra/cloud/aws/hosts.env`. Ese archivo está ignorado por G
 
 ### Entorno en uso
 
-Leído el 7 de noviembre de 2026. `dev`, `stage` y `prod` estaban apagados, así que no tenían IP pública. Antes de abrir una URL de ambiente, ejecutar `hosts.sh status` y usar la IP pública que aparezca.
+Leído el 22 de noviembre de 2026 con `aws ec2 describe-instances`. Los nodos k3s tienen Elastic IP, así que su IP pública no cambia al apagarlos y encenderlos. La IP pública de `tools` sí cambia: leerla con `hosts.sh status`.
 
 | Qué | URL |
 |:---|:---|
 | Jenkins | `http://184.196.87.200:8080` |
 | Webhook de GitHub | `http://184.196.87.200:8080/github-webhook/` |
-| SonarQube | `http://184.196.87.200:9000` |
-| Nexus | `http://184.196.87.200:8081` |
-| Registro Docker | `184.196.87.200:5000` |
+| SonarQube | `http://<ip-de-tools>:9000` (el 22 de noviembre, `32.196.134.140`) |
+| Nexus | `http://<ip-de-tools>:8081` |
+| Registro Docker, desde los clústeres | `172.31.3.197:5000` (IP privada de `tools`) |
 | CI, IP privada | `172.31.14.248` |
-| Aplicación `dev` | `http://<DEV_PUBLIC_IP>/` |
-| Aplicación `stage` | `http://<STAGE_PUBLIC_IP>/` |
-| Aplicación `prod` | `http://<PROD_PUBLIC_IP>/` |
-| `dev`, IP privada | `172.31.9.168` |
-| `stage`, IP privada | `172.31.5.2` |
-| `prod`, IP privada | `172.31.14.239` |
+| Aplicación `dev` | `http://52.204.64.188/` |
+| Aplicación `stage` | `http://3.221.162.144/` |
+| Aplicación `prod` | `http://34.227.254.255/` |
+| Grafana, Prometheus y Alertmanager | `http://<ip-del-nodo>/grafana`, `/prometheus`, `/alertmanager` |
+| Nodos k3s, IP privada | dev `10.10.1.112`, stage `10.20.1.59`, prod `10.30.1.238` |
 
-Jenkins, SonarQube, Nexus y el registro solo aceptan tráfico desde `ADMIN_CIDR` (el puerto `8080` de Jenkins también acepta los rangos de webhooks de GitHub). La aplicación de cada ambiente publica el puerto `80`. El `443` está abierto, pero el compose no termina TLS. Las APIs directas (`8180` y `8082`–`8088`) solo responden desde `ADMIN_CIDR`. PostgreSQL, Neo4j, Kafka, Redis, LDAP y el socket de Docker no se publican.
+Jenkins, SonarQube, Nexus y el registro solo aceptan tráfico desde `ADMIN_CIDR` (el puerto `8080` de Jenkins también acepta los rangos de webhooks de GitHub). Cada nodo k3s publica el `80` y el `443` (TLS entra con la versión `0.8.0`); el `22` y el `6443` solo responden a Jenkins y a las IP autorizadas con `hosts.sh allow`. Las bases, Kafka, Redis y LDAP no salen del clúster.
 
 Si se repite el alta en otra cuenta, las IP de esta tabla no sirven. Las nuevas salen de los scripts y de `hosts.sh status`.
 
@@ -149,7 +151,7 @@ Si se repite el alta en otra cuenta, las IP de esta tabla no sirven. Las nuevas 
 | Contraseña | `zI-0{g@%` |
 | Región | `us-east-1` (Norte de Virginia) |
 
-En la consola, ir a **EC2 → Instances** y filtrar por `circleguard`. Son cuatro máquinas: `circleguard-ci`, `circleguard-dev`, `circleguard-stage` y `circleguard-prod`. Si están apagadas, seleccionarlas y usar **Instance state → Start**. La IP pública de cada una aparece en la columna *Public IPv4 address*. La de CI es fija (Elastic IP) y las de los ambientes cambian al encenderlas.
+En la consola, ir a **EC2 → Instances** y filtrar por `circleguard`. Las que se usan son siete: `circleguard-ci`, `circleguard-ci-agent-1`, `circleguard-ci-agent-2`, `circleguard-tools` y los nodos `circleguard-k3s-dev`, `circleguard-k3s-stage` y `circleguard-k3s-prod`. `circleguard-dev`, `circleguard-stage` y `circleguard-prod` son los hosts Compose de la Parte 1 y quedan detenidos. Si una máquina está apagada, seleccionarla y usar **Instance state → Start**. La IP pública aparece en la columna *Public IPv4 address*; la de CI y las de los nodos k3s son fijas (Elastic IP).
 
 ### 2. Habilitar la IP propia
 
@@ -168,21 +170,24 @@ infra/cloud/aws/hosts.sh status         # estado e IP de cada máquina
 
 1. Ir a **EC2 → Security Groups**.
 2. Abrir `circleguard-ci-sg` → **Edit inbound rules** → **Add rule** para cada puerto de CI de la tabla de la sección 3 (`22`, `8080`, `9000`, `8081` y `5000`), con *Source* en **My IP**.
-3. Repetir en `circleguard-dev-sg`, `circleguard-stage-sg` y `circleguard-prod-sg` para `22`, `8180` y `8082-8088`, si se quieren las APIs directas. La aplicación (puerto `80`) ya está abierta a todos.
-4. **Save rules**.
+3. Abrir `circleguard-tools-sg` y agregar `9000`, `8081` y `5000`.
+4. Para usar `kubectl` o SSH en un clúster, repetir en `circleguard-k3s-dev-sg`, `circleguard-k3s-stage-sg` y `circleguard-k3s-prod-sg` para `22` y `6443`. La aplicación (puertos `80` y `443`) ya está abierta a todos.
+5. **Save rules**.
 
 ### 3. Puertos
 
 | Máquina | Puerto | Servicio |
 |:---|:---|:---|
 | CI | `8080` | Jenkins |
-| CI | `9000` | SonarQube |
-| CI | `8081` | Nexus (interfaz web) |
-| CI | `5000` | Registro Docker de Nexus |
-| CI y ambientes | `22` | SSH |
-| dev, stage y prod | `80` | Aplicación (cliente web, que enruta `/svc/<servicio>/` a cada servicio) |
-| dev, stage y prod | `8180` | API directa de auth |
-| dev, stage y prod | `8082`–`8088` | APIs directas de notification, identity, dashboard, file, form, gateway y promotion |
+| tools | `9000` | SonarQube |
+| tools | `8081` | Nexus (interfaz web) |
+| tools | `5000` | Registro Docker de Nexus |
+| Todas | `22` | SSH |
+| Nodos k3s | `80` | Aplicación (cliente web, que enruta `/svc/<servicio>/` a cada servicio), `/grafana`, `/prometheus` y `/alertmanager` |
+| Nodos k3s | `443` | Abierto; TLS desde la versión `0.8.0` |
+| Nodos k3s | `6443` | API de Kubernetes, para Jenkins y las IP autorizadas |
+
+Los hosts Compose de la Parte 1 publicaban además las APIs directas (`8180` y `8082`–`8088`). En k3s no hay acceso directo: todo pasa por el Ingress.
 
 ### 4. Usuarios, contraseñas y permisos
 
@@ -190,8 +195,8 @@ infra/cloud/aws/hosts.sh status         # estado e IP de cada máquina
 |:---|:---|:---|:---|:---|
 | Jenkins | `http://<IP de CI>:8080` | `admin` | `admin123` | Administrador. Es el único que aprueba el despliegue a `prod` (paso `input` del pipeline y del rollback) |
 | Jenkins | `http://<IP de CI>:8080` | `dev` | `dev12345` | Lanza, cancela y revisa builds, incluido el rollback. No administra Jenkins ni aprueba `prod` |
-| SonarQube | `http://<IP de CI>:9000` | `admin` | `admin123` | Administrador |
-| Nexus | `http://<IP de CI>:8081` | `admin` | `admin123` | Administrador |
+| SonarQube | `http://<IP de tools>:9000` | `admin` | `admin123` | Administrador |
+| Nexus | `http://<IP de tools>:8081` | `admin` | `admin123` | Administrador |
 
 Nexus tiene además dos usuarios técnicos con contraseña generada en el `.env` del host de CI: `ci-publisher`, que Jenkins usa para publicar imágenes, y `deploy-puller`, de solo lectura, que usan los ambientes para descargarlas.
 
@@ -309,6 +314,8 @@ Con el token de escritura y `manageHooks`, Jenkins registra el webhook al escane
 
 ### 6. Los tres ambientes
 
+> Este paso y el siguiente crean los ambientes de la Parte 1 (hosts Compose). Los ambientes vigentes son los clústeres k3s: se crean con Terraform siguiendo [`infra/terraform/README.md`](../../infra/terraform/README.md), y Jenkins despliega en ellos con la credencial `kubeconfig-<env>` y `K8S_HOST_<ENV>` (ver [Despliegues](#despliegues)).
+
 `JENKINS_CIDR` es la IP privada de CI, no la pública. Sale de `hosts.sh status` o de la consola de EC2.
 
 ```bash
@@ -364,9 +371,9 @@ Desde una IP cubierta por `ADMIN_CIDR`:
 
 ```bash
 curl -fsS -o /dev/null -w '%{http_code}\n' http://<ip-de-ci>:8080/login
-curl -fsS http://<ip-de-ci>:9000/api/system/status
-curl -fsS http://<ip-de-ci>:8081/service/rest/v1/status
-curl -fsS -o /dev/null -w '%{http_code}\n' http://<ip-de-ci>:5000/v2/
+curl -fsS http://<ip-de-tools>:9000/api/system/status
+curl -fsS http://<ip-de-tools>:8081/service/rest/v1/status
+curl -fsS -o /dev/null -w '%{http_code}\n' http://<ip-de-tools>:5000/v2/
 ```
 
 Jenkins debe mostrar el job `circleguard` y el job `circleguard-rollback`. SonarQube responde `"status":"UP"`. Nexus responde en el status y el registro responde `200` en `/v2/`.
@@ -422,8 +429,8 @@ El job lee su pipeline de `ROLLBACK_BRANCH` (por defecto `main`). Los datos de P
 
 ```bash
 infra/cloud/aws/hosts.sh status
-infra/cloud/aws/hosts.sh stop envs
-infra/cloud/aws/hosts.sh start ci
+infra/cloud/aws/hosts.sh stop k3s       # nodos k3s de la Parte 2; envs son los hosts Compose
+infra/cloud/aws/hosts.sh start ci       # ci, tools y los dos workers
 infra/cloud/aws/hosts.sh allow
 ```
 
