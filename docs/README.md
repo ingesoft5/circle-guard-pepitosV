@@ -15,6 +15,7 @@ desplegada ([revisión cruzada](arquitectura/coherencia.md)).
 | Patrones | [`patrones/existentes.md`](patrones/existentes.md) | Catálogo de 17 patrones con evidencia en el código, y los tres de la Parte 2 |
 | Observabilidad | [`arquitectura/observabilidad.md`](arquitectura/observabilidad.md) | Métricas, logs, trazas, paneles y alertas |
 | Seguridad | [`arquitectura/seguridad.md`](arquitectura/seguridad.md) | Red, acceso, secretos, cargas de trabajo, cadena de suministro y brechas |
+| Service mesh | [`arquitectura/service-mesh.md`](arquitectura/service-mesh.md) | Linkerd con mTLS entre servicios y canary de `gateway` con Flagger (en `dev`) |
 | Análisis de pruebas | [`operaciones/informe-pruebas.md`](operaciones/informe-pruebas.md) | Cobertura y quality gate, integración, E2E, carga, ZAP y Trivy, con su análisis |
 | Coherencia con lo desplegado | [`arquitectura/coherencia.md`](arquitectura/coherencia.md) | Matriz componente por componente y cómo repetirla |
 

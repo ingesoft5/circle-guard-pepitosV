@@ -1,4 +1,7 @@
 environment: dev
+# Linkerd starts in dev (docs/arquitectura/service-mesh.md).
+mesh:
+  enabled: true
 services:
   file:
     config:

@@ -1,0 +1,64 @@
+# Linkerd identity issued by cert-manager (deploy/k8s/scripts/install-linkerd.sh applies it).
+#
+#   circleguard-selfsigned (ClusterIssuer)
+#     -> linkerd-trust-anchor   root of the mesh, 10 years, rotated by hand
+#        -> linkerd-identity-issuer   intermediate CA, 48 h, renewed by cert-manager
+#           -> one certificate per proxy, 24 h, issued by linkerd-identity
+#
+# Linkerd reads the issuer from the Secret linkerd-identity-issuer (scheme kubernetes.io/tls)
+# and picks up each renewal without a restart. Linkerd requires ECDSA P-256 keys.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: linkerd-trust-anchor
+  namespace: linkerd
+spec:
+  isCA: true
+  commonName: root.linkerd.cluster.local
+  secretName: linkerd-trust-anchor
+  # Renewing the trust anchor without first distributing the new one breaks every mTLS
+  # connection, so it is long-lived and rotated by hand (docs/arquitectura/service-mesh.md).
+  duration: 87600h
+  renewBefore: 720h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Never
+  issuerRef:
+    name: circleguard-selfsigned
+    kind: ClusterIssuer
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: linkerd-trust-anchor
+  namespace: linkerd
+spec:
+  ca:
+    secretName: linkerd-trust-anchor
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: linkerd-identity-issuer
+  namespace: linkerd
+spec:
+  isCA: true
+  commonName: identity.linkerd.cluster.local
+  dnsNames:
+    - identity.linkerd.cluster.local
+  secretName: linkerd-identity-issuer
+  duration: 48h
+  renewBefore: 25h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  usages:
+    - cert sign
+    - crl sign
+    - server auth
+    - client auth
+  issuerRef:
+    name: linkerd-trust-anchor
+    kind: Issuer
