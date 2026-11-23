@@ -19,6 +19,8 @@ dependencies {
     implementation(platform("software.amazon.awssdk:bom:2.56.0"))
     implementation("software.amazon.awssdk:s3") {
         exclude(group = "software.amazon.awssdk", module = "apache-client")
+        // Default HTTP client since SDK 2.3x; it pulls httpcore5 5.3.x (CVE-2026-54399/54428).
+        exclude(group = "software.amazon.awssdk", module = "apache5-client")
         exclude(group = "software.amazon.awssdk", module = "netty-nio-client")
     }
     implementation("software.amazon.awssdk:url-connection-client")
