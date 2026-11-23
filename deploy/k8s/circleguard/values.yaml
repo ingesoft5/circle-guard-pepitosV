@@ -76,9 +76,14 @@ spring:
     MANAGEMENT_HEALTH_READINESSSTATE_ENABLED: "true"
   # The root filesystem is read-only; Tomcat and the JVM write only here.
   writablePaths: [/tmp]
+<<<<<<< Updated upstream
   # Each node has 2 vCPU. With the mesh every service adds a Linkerd proxy and the canary runs
   # <service>-primary next to <service>; at 100m per service the pods left no room and
   # gateway-primary stayed Pending. Idle services use about 5-20m.
+=======
+  # The nodes have 2 vCPU. With the mesh and the canary, 100m left no room for a rolling update
+  # (pods Pending, Insufficient cpu). There is no CPU limit, so startup can still burst.
+>>>>>>> Stashed changes
   resources:
     requests: {cpu: 50m, memory: 256Mi}
     limits: {memory: 768Mi}
