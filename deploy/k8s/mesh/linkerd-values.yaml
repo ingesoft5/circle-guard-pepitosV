@@ -1,5 +1,5 @@
 # Values of linkerd-control-plane for the single-node k3s clusters (8 GB). Keep it free of
-# secrets: the trust anchor comes from cert-manager at install time (install-linkerd.sh).
+# secrets: the trust anchor comes from cert-manager at install time (install-mesh.sh).
 controllerReplicas: 1
 # No weekly CronJob that reports usage to the Linkerd project.
 disableHeartBeat: true
@@ -56,7 +56,7 @@ policyController:
       limit: 128Mi
 
 # PodMonitors for the kube-prometheus-stack in monitoring (it reads PodMonitors of every
-# namespace). install-linkerd.sh turns them on only when the PodMonitor CRD exists. The proxy
+# namespace). install-mesh.sh turns them on only when the PodMonitor CRD exists. The proxy
 # one adds the deployment label that the canary queries filter on.
 podMonitor:
   enabled: false
