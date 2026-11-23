@@ -1,6 +1,8 @@
 environment: dev
-# Linkerd starts in dev (docs/arquitectura/service-mesh.md).
+# Linkerd and the gateway canary start in dev (docs/arquitectura/service-mesh.md).
 mesh:
+  enabled: true
+canary:
   enabled: true
 services:
   file:

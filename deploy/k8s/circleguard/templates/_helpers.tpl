@@ -22,3 +22,14 @@ app.kubernetes.io/instance: {{ .root.Release.Name }}
 {{ $v.registry }}/circleguard/{{ .spec.image }}:{{ $v.tag }}
 {{- end -}}
 {{- end }}
+
+{{/*
+"true" when Flagger runs the canary of .Values.canary.service: canary and mesh enabled and the
+cluster has the Flagger and Gateway API CRDs. Flagger then owns that workload's Services.
+*/}}
+{{- define "circleguard.canaryOn" -}}
+{{- $v := .Values -}}
+{{- if and $v.canary.enabled $v.mesh.enabled (.Capabilities.APIVersions.Has "flagger.app/v1beta1/Canary") (.Capabilities.APIVersions.Has "gateway.networking.k8s.io/v1/HTTPRoute") -}}
+true
+{{- end -}}
+{{- end }}
