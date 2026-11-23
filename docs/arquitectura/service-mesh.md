@@ -1,9 +1,13 @@
 # Service mesh: Linkerd con mTLS y canary con Flagger
 
 La malla cifra con mTLS las llamadas entre los servicios de la aplicación y permite liberar
-`gateway` de forma progresiva. Empieza en `dev`: el chart lo activa en `values-dev.yaml`
-(`mesh.enabled` y `canary.enabled`), y `stage` y `prod` siguen igual que antes hasta medir el
-consumo de memoria en `dev`.
+`gateway` de forma progresiva. Cada ambiente lo activa en su `values-<env>.yaml`:
+
+| Ambiente | Malla y mTLS (`mesh.enabled`) | Canary de `gateway` (`canary.enabled`) | Panel de Linkerd |
+|:---|:---|:---|:---|
+| `dev` | Sí | Sí | Sí |
+| `stage` | Sí | Sí | Sí |
+| `prod` | Sí | No, por memoria ([Memoria](#memoria)) | No |
 
 ## Decisión
 
@@ -21,9 +25,9 @@ publica Buoyant; las *edge* son las del proyecto de código abierto.
 
 | Componente | Versión | Dónde se fija |
 |:---|:---|:---|
-| Linkerd (`linkerd-crds`, `linkerd-control-plane`) | edge-25.11.3 | `deploy/k8s/scripts/install-linkerd.sh` |
+| Linkerd (`linkerd-crds`, `linkerd-control-plane`, `linkerd-viz`) | edge-25.11.3 | `deploy/k8s/scripts/install-mesh.sh` |
 | Gateway API (canal estándar) | v1.2.1 | Mismo script; Linkerd 2.19 acepta 1.1.1 a 1.2.1 |
-| Flagger | 1.45.0 | `deploy/k8s/scripts/install-flagger.sh` |
+| Flagger | 1.45.0 | `deploy/k8s/scripts/install-mesh.sh` |
 | Flagger load tester | 0.39.0 | Mismo script |
 
 ## Qué entra en la malla
@@ -119,92 +123,124 @@ Las métricas de `gateway-primary` y `gateway-canary` siguen apareciendo como `s
 `job="gateway"` en Prometheus. El ServiceMonitor del chart toma la etiqueta
 `app.kubernetes.io/name`, así que los paneles y las alertas existentes no cambian.
 
-## Instalación en un clúster
+## Instalación por ambiente
 
-Se instala una vez por clúster con el kubeconfig del ambiente, igual que el monitoreo. Los scripts
-son idempotentes.
+El pipeline no instala la malla. Se instala una vez por clúster, como el monitoreo, con
+`deploy/k8s/scripts/install-mesh.sh`, que es idempotente: volver a correrlo actualiza o aplica
+cambios de `deploy/k8s/mesh/`. Las opciones dicen qué se instala:
 
-```bash
-export KUBECONFIG=<kubeconfig de k3s-dev>
-deploy/k8s/scripts/install-linkerd.sh     # Gateway API, cert-manager, identidad y control plane
-deploy/k8s/scripts/install-flagger.sh     # Flagger y load tester en flagger-system
-# El siguiente despliegue de dev crea el Canary; o a mano:
-helm upgrade --install circleguard deploy/k8s/circleguard -n circleguard-dev \
-  -f deploy/k8s/circleguard/values-dev.yaml \
-  --set image.registry=<ip-privada-tools>:5000 --set image.tag=<versión>
-# Los pods que ya corrían entran a la malla al reiniciarse:
-kubectl -n circleguard-dev rollout restart deployment
+| Ambiente | Comando | Instala |
+|:---|:---|:---|
+| `dev` | `install-mesh.sh --canary --viz linkerd.52.204.64.188.sslip.io` | Linkerd, Flagger, load tester y panel |
+| `stage` | `install-mesh.sh --canary --viz linkerd.3.221.162.144.sslip.io` | Lo mismo |
+| `prod` | `install-mesh.sh` | Solo Linkerd |
+
+Siempre instala Gateway API (v1.2.1), cert-manager, la identidad de la malla y el control plane.
+`--viz` necesita el Secret de BasicAuth de `/prometheus` (`infra/bootstrap/load-monitoring-auth.sh`).
+
+Desde Windows se corre en el nodo por SSH. El bloque de PowerShell no debe llevar comillas dobles,
+porque PowerShell las quita al pasarle el texto a `ssh`:
+
+```powershell
+$key = "<llave .pem>"; $node = "52.204.64.188"   # dev; stage 3.221.162.144; prod 34.227.254.255
+ssh -i $key ubuntu@$node "rm -rf ~/cg && mkdir -p ~/cg/deploy"
+scp -i $key -r deploy/k8s ubuntu@${node}:~/cg/deploy/
+ssh -i $key ubuntu@$node @'
+cd ~/cg
+find deploy -type f \( -name '*.sh' -o -name '*.yaml' \) -exec sed -i 's/\r$//' {} +
+sudo env KUBECONFIG=/etc/rancher/k3s/k3s.yaml PATH=$PATH bash deploy/k8s/scripts/install-mesh.sh --canary --viz linkerd.52.204.64.188.sslip.io
+rm -rf ~/cg
+'@
 ```
+
+El `sed` quita los finales de línea de Windows. Después de instalar, el siguiente despliegue del
+chart pone el proxy en los pods. Los que ya corrían entran a la malla al reiniciarse:
+`kubectl -n circleguard-<env> rollout restart deployment`.
 
 Para revisar el chart sin clúster, `helm template` necesita las API de Flagger y Gateway API, o
 el Canary no se genera:
 
 ```bash
 helm template circleguard deploy/k8s/circleguard -n circleguard-dev \
-  -f deploy/k8s/circleguard/values-dev.yaml \
-  --set image.registry=r:5000 --set image.tag=0.0.0 \
-  --api-versions flagger.app/v1beta1/Canary \
-  --api-versions gateway.networking.k8s.io/v1/HTTPRoute \
+  -f deploy/k8s/circleguard/values-dev.yaml --set image.registry=r:5000 --set image.tag=0.0.0 \
+  --api-versions flagger.app/v1beta1/Canary --api-versions gateway.networking.k8s.io/v1/HTTPRoute \
   --api-versions monitoring.coreos.com/v1/ServiceMonitor
 ```
+
+## Uso
+
+### Dónde mirar
+
+| Qué | Dónde | Acceso |
+|:---|:---|:---|
+| Panel de Linkerd | `https://linkerd.<ip-del-nodo>.sslip.io/` (dev y stage) | Usuario BasicAuth de `/prometheus` |
+| Canary y malla | Grafana (`/grafana`), panel **CircleGuard · Canary y malla** | Usuario de Grafana |
+| Estado del canary | `kubectl -n circleguard-<env> get canary gateway` | kubeconfig del ambiente |
+| Alerta de canary fallido | Discord, `CanaryFailed` | — |
+
+- **Panel de Linkerd (linkerd-viz):** muestra el tráfico entre Deployments, la tasa de éxito, la
+  latencia, las rutas y `tap` en vivo. Un candado en una conexión indica mTLS.
+  - Usa un nombre propio, `linkerd.<ip>.sslip.io`, porque solo funciona desde la raíz.
+  - Rechaza cualquier `Host` que no conoce (protección contra DNS rebinding);
+    `dashboard.enforcedHostRegexp` agrega ese nombre a los aceptados.
+  - El certificado es de la CA del laboratorio, con la misma advertencia que `/grafana`.
+- **Flagger no tiene interfaz propia.** El panel de Grafana lee sus métricas:
+  - `flagger_canary_status`: estado del último análisis.
+  - `flagger_canary_weight`: peso de primary y canary.
+  - `flagger_canary_metric_analysis`: valor de cada comprobación.
+
+  Junto a esas, el panel muestra, desde los proxies, la tasa de éxito, la latencia p99 y la parte
+  del tráfico que entra con mTLS.
+
+### Liberar una versión con canary
+
+No hay pasos extra: el pipeline despliega como siempre. Lo que cambia es lo que pasa después.
+
+1. Helm actualiza el Deployment `gateway`. Flagger detecta la revisión nueva en el siguiente minuto.
+2. El load tester comprueba la readiness de `gateway-canary`. Después el tráfico sube 20 % por
+   minuto hasta el 60 %, mientras se miden éxito ≥ 99 % y p99 ≤ 1 s.
+3. Con todo bien, la versión pasa a `gateway-primary` (`Succeeded`). `deployK8s` espera ese
+   resultado con `wait-canary.sh` antes del smoke test.
+4. Con 3 comprobaciones fallidas, el tráfico vuelve al primario (`Failed`). La etapa falla, el
+   registro de HU-51 la anota como fallida y llega `CanaryFailed` a Discord.
+
+```bash
+kubectl -n circleguard-<env> get canary gateway -w           # fases y peso
+kubectl -n circleguard-<env> describe canary gateway | tail   # eventos de cada comprobación
+kubectl -n circleguard-<env> get httproute gateway -o yaml    # pesos actuales
+```
+
+### Operaciones frecuentes
+
+| Necesidad | Cómo |
+|:---|:---|
+| Provocar un análisis sin versión nueva | `kubectl -n circleguard-<env> patch deployment gateway --type merge -p '{"spec":{"template":{"metadata":{"annotations":{"circleguard.io/canary-test":"1"}}}}}'` (cambiar el valor cada vez) |
+| Probar una reversión | `kubectl -n circleguard-<env> set env deployment/gateway SPRING_DATA_REDIS_HOST=redis-inexistente`. `/actuator/health` responde 503 y Flagger revierte. Se deshace con `... SPRING_DATA_REDIS_HOST-` |
+| Promover sin análisis (urgencia) | `kubectl -n circleguard-<env> patch canary gateway --type merge -p '{"spec":{"skipAnalysis":true}}'`. El siguiente despliegue del chart lo vuelve a `false` |
+| Volver a la versión anterior | Job de rollback (`docs/operaciones/rollback.md`). Cambia el Deployment, así que también pasa por un análisis |
+| Sacar un servicio de la malla | Anotación `linkerd.io/inject: disabled` en el pod, o `mesh.enabled: false` para todo el ambiente |
+| Apagar el canary de un ambiente | `canary.enabled: false` en `values-<env>.yaml` y desplegar. El chart vuelve a crear el Service `gateway` |
+| Ver la identidad de un proxy | `kubectl -n circleguard-<env> logs deploy/auth -c linkerd-proxy \| grep -i identity` |
+
+### Problemas conocidos
+
+| Síntoma | Causa y arreglo |
+|:---|:---|
+| Pods en `1/1` después de instalar | Arrancaron antes que Linkerd. `rollout restart deployment` |
+| Pod detenido en `linkerd-init` | Reglas de iptables. Revisar `kubectl logs <pod> -c linkerd-init`; los nodos usan `nft` |
+| Canary en `Progressing` sin avanzar, con "no values found" | No hay tráfico medido. Revisar que el load tester esté en `2/2` y que existan los PodMonitors (`kubectl get podmonitor -A`) |
+| El panel de Linkerd responde "It appears that you are trying to reach this service with a host of..." | El nombre no coincide con `enforcedHostRegexp` de `linkerd-viz-values.yaml` |
+| `https://linkerd.<ip>.sslip.io` abre la aplicación | No existe el Ingress del panel. Correr `install-mesh.sh --viz <host>` |
+| `install-mesh.sh` falla con `permission denied` en `k3s.yaml` | Se corrió sin `sudo env KUBECONFIG=...` |
 
 ## Verificación
 
 | Qué | Cómo |
 |:---|:---|
 | Control plane sano | `kubectl -n linkerd get pods` y, con la CLI de Linkerd, `linkerd check` |
-| Pods con proxy | `kubectl -n circleguard-dev get pods`: los servicios muestran `2/2`, el middleware `1/1` |
-| Identidad del proxy | `kubectl -n circleguard-dev logs deploy/auth -c linkerd-proxy \| grep -i identity` |
-| Tráfico con mTLS | En Prometheus: `sum by (deployment, tls) (rate(response_total{namespace="circleguard-dev", direction="inbound"}[5m]))`. Lo que llega de `web` sale con `tls="true"` |
-| Estado del canary | `kubectl -n circleguard-dev get canary gateway -w` y `kubectl -n circleguard-dev get httproute gateway -o yaml` (pesos) |
-
-Para provocar un análisis sin una versión nueva, basta con cambiar una anotación del Deployment:
-
-```bash
-kubectl -n circleguard-dev patch deployment gateway --type merge \
-  -p "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"circleguard.io/canary-test\":\"$(date +%s)\"}}}}}"
-kubectl -n circleguard-dev get canary gateway -w
-```
-
-Para ver una reversión, se puede apuntar el canary a un Redis que no existe. `/actuator/health`
-responde 503, la tasa de éxito cae y Flagger revierte a las 3 comprobaciones. La alerta
-`CanaryFailed` llega a Discord. Quitar la variable arranca otro análisis, que debe pasar.
-
-```bash
-kubectl -n circleguard-dev set env deployment/gateway SPRING_DATA_REDIS_HOST=redis-inexistente
-# Después de la reversión:
-kubectl -n circleguard-dev set env deployment/gateway SPRING_DATA_REDIS_HOST-
-```
-
-## Interfaces
-
-| Qué | Dónde | Acceso |
-|:---|:---|:---|
-| Panel de Linkerd (linkerd-viz) | `https://linkerd.<ip-del-nodo>.sslip.io/` | Mismo usuario BasicAuth que `/prometheus` |
-| Canary y malla en Grafana | `/grafana`, panel **CircleGuard · Canary y malla** | Usuario de Grafana |
-
-**Flagger no tiene interfaz propia.** Su estado se ve con `kubectl get canary` y con el panel de
-Grafana, que lee sus métricas (`flagger_canary_status`, `flagger_canary_weight` y
-`flagger_canary_metric_analysis`). El panel muestra el estado del último análisis, el peso de
-primary y canary, el valor de cada comprobación y, desde los proxies, la tasa de éxito, la latencia
-p99 y la parte del tráfico que entra con mTLS.
-
-**Linkerd sí tiene panel: linkerd-viz.** Se instala con
-`deploy/k8s/scripts/install-linkerd-viz.sh` y lee el Prometheus del clúster, sin instalar uno
-propio. Muestra el tráfico entre Deployments, la tasa de éxito, las rutas y `tap` en vivo.
-
-- **Dominio propio.** El panel solo funciona desde la raíz, así que se publica en un nombre propio
-  (`linkerd.<ip>.sslip.io`) en lugar de una ruta como `/grafana`.
-- **Validación del `Host`.** El panel rechaza cualquier `Host` que no conoce, como protección
-  contra DNS rebinding. `dashboard.enforcedHostRegexp` agrega ese nombre a los que acepta.
-- **Certificado.** Lo emite la CA del laboratorio, así que el navegador muestra la misma advertencia
-  que en `/grafana`.
-
-```bash
-export KUBECONFIG=<kubeconfig de k3s-dev>
-deploy/k8s/scripts/install-linkerd-viz.sh            # o: ... install-linkerd-viz.sh linkerd.<ip>.sslip.io
-kubectl apply -k observability/grafana               # panel de Grafana; deployK8s también lo aplica
-```
+| Pods con proxy | `kubectl -n circleguard-<env> get pods`: los servicios muestran `2/2`, el middleware `1/1` |
+| Tráfico con mTLS | Panel de Linkerd (candado) o, en Prometheus, `sum by (deployment, tls) (rate(response_total{namespace="circleguard-dev", direction="inbound"}[5m]))`. Lo que llega de `web` sale con `tls="true"` |
+| Canary | Promoción y reversión como en [Operaciones frecuentes](#operaciones-frecuentes) |
 
 ## Memoria
 
@@ -216,9 +252,15 @@ kubectl apply -k observability/grafana               # panel de Grafana; deployK
 | linkerd-viz sin Prometheus propio (4 pods con proxy) | 150-200 MiB |
 | Pod extra de `gateway-canary` durante un análisis | 300-450 MiB (JVM) |
 
-En `dev` caben con margen (unos 1,7 GB libres). En `prod`, el pod extra del análisis es lo que
-aprieta. Antes de activar la malla en `stage` y `prod` hay que medir `dev` con
-`kubectl top pods -A`.
+Medido en `dev`: cert-manager, Linkerd, Flagger y el load tester bajaron la memoria disponible de
+1737 a 1322 MiB, y linkerd-viz la dejó en 1238 MiB.
+
+- **`stage`:** con 1556 MiB libres antes de la malla, le queda espacio para todo, incluido el pod
+  extra de cada análisis.
+- **`prod`:** con 1148 MiB libres y `gateway` y `form` en 2 réplicas, solo lleva la malla. Con
+  canary y linkerd-viz quedaría con unos 100 MiB durante un análisis, y eso arriesga OOM. Para
+  activar el canary en `prod` hay que agrandar el nodo (tipo de instancia en Terraform) y poner
+  `canary.enabled: true` en `values-prod.yaml`.
 
 ## Límites conocidos
 

@@ -37,9 +37,7 @@ deploy/k8s/
     ├── install-cert-manager.sh  # cert-manager y emisores, lo llama deployK8s (desde 0.8.0)
     ├── node-external-ip.sh    # IP externa del nodo para el nombre <ip>.sslip.io
     ├── check-rbac.sh          # kubectl auth can-i del deployer y del viewer
-    ├── install-linkerd.sh     # Gateway API, identidad y control plane de Linkerd
-    ├── install-flagger.sh     # Flagger y su load tester
-    ├── install-linkerd-viz.sh # panel de Linkerd y su Ingress
+    ├── install-mesh.sh        # Linkerd y, con opciones, Flagger y el panel de Linkerd
     ├── wait-canary.sh         # espera el análisis de Flagger; lo llama deployK8s
     └── inventario.sh          # inventario de solo lectura de un nodo (HU-54)
 ```
@@ -117,8 +115,8 @@ no se genera. Las métricas, sus etiquetas y cómo verificarlas están en
 
 Con `mesh.enabled`, los servicios y el cliente web llevan el proxy de Linkerd y una
 ServiceAccount propia: las llamadas entre ellos van con mTLS. Con `canary.enabled`, Flagger
-libera `gateway` por pasos y el chart deja de crear su Service. Por ahora ambos están activos
-solo en `values-dev.yaml`. La instalación, la verificación y los límites están en
+libera `gateway` por pasos y el chart deja de crear su Service. Están activos en dev y stage; prod
+solo lleva la malla. La instalación, la verificación y los límites están en
 [`docs/arquitectura/service-mesh.md`](../../docs/arquitectura/service-mesh.md).
 
 ## Desplegar a mano

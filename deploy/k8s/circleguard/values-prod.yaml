@@ -1,4 +1,8 @@
 environment: prod
+# Linkerd (mTLS) only. No canary: an analysis starts one more gateway JVM and the prod node
+# does not have the memory for it (docs/arquitectura/service-mesh.md#memoria).
+mesh:
+  enabled: true
 middleware:
   postgres:
     storage: {size: 5Gi}
