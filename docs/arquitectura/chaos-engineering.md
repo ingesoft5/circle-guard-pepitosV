@@ -68,8 +68,9 @@ caída de la tasa de éxito.
 | Fecha | Ambiente | Experimento | ¿Se cumplió la hipótesis? | Observaciones |
 |:---|:---|:---|:---|:---|
 | 2026-11-23 | `dev` | `postgres-pod-kill` | Sí | `postgres-0` volvió en menos de 16 s. `auth`, `form`, `dashboard` e `identity` fallaron la readiness unos segundos y se recuperaron con 0 reinicios |
-| 2026-11-23 | `dev` | `gateway-pod-kill` | No (primera corrida) | El pod no se pudo recrear: un despliegue a medias había dejado los Deployments apuntando a ServiceAccounts que no existían. Los pods viejos ocultaban el fallo; dev quedó sin `gateway`. Se repite con el ambiente estable |
-| 2026-11-23 | `dev` | `gateway-redis-partition` | Sin resultado | No había pods de `gateway` que seleccionar (`no pod is selected`). Se repite |
+| 2026-11-23 | `dev` | `gateway-pod-kill` (1.ª corrida) | No | El pod no se pudo recrear: un despliegue a medias había dejado los Deployments apuntando a ServiceAccounts que no existían. Los pods viejos ocultaban el fallo; dev quedó sin `gateway` |
+| 2026-11-23 | `dev` | `gateway-pod-kill` (2.ª corrida) | Sí | Mató `gateway-primary` (el que sirve con el canary). El pod nuevo estuvo Ready en unos 30 s, con el proxy de Linkerd inyectado y su certificado mTLS emitido al arrancar. Los demás servicios, sin reinicios |
+| 2026-11-23 | `dev` | `gateway-redis-partition` | Sí | Partición de `gateway-primary` hacia Redis durante 4 min, aplicada y recuperada por Chaos Mesh. `gateway-primary` siguió Ready y sin reinicios (Redis no está en su grupo de readiness, a propósito). Apertura del circuito y alerta `CircuitBreakerOpen`: ver capturas de Grafana y Discord |
 
 ### Hallazgos
 
