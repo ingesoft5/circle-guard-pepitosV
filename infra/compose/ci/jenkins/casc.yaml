@@ -281,6 +281,30 @@ jobs:
         }
       }
   - script: |
+      pipelineJob('circleguard-release-notes') {
+        description('Checks that every vX.Y.Z tag has its GitHub Release notes and completes the missing ones (HU-51)')
+        // Same parameter as jenkins/release-notes.Jenkinsfile, so a recreated job offers
+        // "Build with Parameters" before its first run.
+        parameters {
+          booleanParam('APPLY', false, 'Crea los releases que faltan y reemplaza las notas distintas. Sin marcar, solo informa.')
+        }
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote {
+                  url("https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}.git")
+                  credentials('github-pat')
+                }
+                branch('*/main')
+              }
+            }
+            scriptPath('jenkins/release-notes.Jenkinsfile')
+            lightweight(true)
+          }
+        }
+      }
+  - script: |
       pipelineJob('circleguard-prod-image-scan') {
         description('Scans the stable images that prod runs and notifies Discord on a high or critical finding')
         triggers {
