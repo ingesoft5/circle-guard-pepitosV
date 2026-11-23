@@ -30,6 +30,27 @@ mesh:
   enabled: false
   skipOutboundPorts: "389,4318,5432,6379,7687,9092"
 
+# Progressive delivery of one service with Flagger (deploy/k8s/scripts/install-flagger.sh).
+# Needs mesh.enabled; the Canary is created only when the cluster has the Flagger and Gateway
+# API CRDs. Flagger then owns the Services <service>, <service>-primary and <service>-canary,
+# so the chart stops rendering the Service of that workload.
+canary:
+  enabled: false
+  service: gateway
+  prometheusUrl: http://kube-prometheus-stack-prometheus.monitoring:9090/prometheus
+  loadtesterUrl: http://flagger-loadtester.flagger-system/
+  # 20 % more traffic per minute up to 60 %, then promotion; 3 failed checks roll back.
+  analysis:
+    interval: 1m
+    threshold: 3
+    stepWeight: 20
+    maxWeight: 60
+  # Percentage of non-5xx responses and p99 latency, read from the Linkerd proxies.
+  minSuccessRate: 99
+  maxLatencyMs: 1000
+  # Requests the load tester sends during the analysis (hey), on a path without a token.
+  loadPath: /actuator/health
+
 ingress:
   enabled: true
   className: traefik
