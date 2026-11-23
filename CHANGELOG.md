@@ -4,6 +4,13 @@ Todas las versiones de CircleGuard. Este archivo lo genera el pipeline de Jenkin
 los Conventional Commits (HU-22): no se edita a mano.
 Esquema de versiones: [docs/release-notes/etiquetado.md](docs/release-notes/etiquetado.md).
 
+## [0.10.1](https://github.com/ingesoft5/circle-guard-pepitosV/compare/v0.10.0...v0.10.1) (2026-11-23)
+
+### Fixes
+
+- **deploy:** avoid unbound timeout variable in sealed-secrets wait ([#179](https://github.com/ingesoft5/circle-guard-pepitosV/pull/179)) ([23bfb73](https://github.com/ingesoft5/circle-guard-pepitosV/commit/23bfb730e0df28731f5e3aa400c8131df2e1afc2))
+- **deploy:** wait for sealed-secrets endpoints before kubeseal ([#177](https://github.com/ingesoft5/circle-guard-pepitosV/pull/177)) ([1a0b7a1](https://github.com/ingesoft5/circle-guard-pepitosV/commit/1a0b7a17f90d8498f41496124a33b0a03a41cdfd))
+
 ## [0.10.0](https://github.com/ingesoft5/circle-guard-pepitosV/compare/v0.9.0...v0.10.0) (2026-11-23)
 
 ### Features
