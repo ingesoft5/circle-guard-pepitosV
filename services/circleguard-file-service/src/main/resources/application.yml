@@ -1,16 +1,24 @@
 spring:
   application:
     name: circleguard-file-service
-
-# Placeholder for S3/MinIO configuration if needed later
-# aws:
-#   s3:
-#     endpoint: http://localhost:9000
-#     access-key: minioadmin
-#     secret-key: minioadmin
+  servlet:
+    multipart:
+      # Same limit as client_max_body_size of the web client's nginx (the default is 1 MB).
+      max-file-size: 20MB
+      max-request-size: 20MB
 
 server:
   port: 8085
+
+circleguard:
+  storage:
+    # Empty bucket: files go to local-dir (development, Docker Compose). The chart sets the
+    # bucket of each environment through CIRCLEGUARD_STORAGE_S3_BUCKET.
+    local-dir: uploads
+    s3:
+      bucket: ""
+      region: ${AWS_REGION:us-east-1}
+      prefix: uploads/
 
 management:
   endpoints:
