@@ -15,11 +15,20 @@
  *
  * After the rollout it applies the Grafana dashboards of observability/grafana (HU-40) and the
  * alert rules of observability/alerts (HU-41).
+ *
+ * HU-51: every call is recorded with recordDeployment, success or failure (GitHub Deployment and
+ * a row in registro-ambientes.md), and the Helm revision carries the same data in its
+ * description (helm history). approver says who approved it; record: false leaves the record to
+ * the caller (the rollback job records once for both of its paths).
+ *
+ *   deployK8s(environment: 'prod', version: '1.4.0', approver: env.PROD_APPROVER)
  */
 def call(Map config = [:]) {
     String environment = config.environment
     String version = config.version
     String timeout = config.timeout ?: '10m'
+    String approver = (config.approver ?: 'unknown').toString()
+    boolean record = config.record != false
     if (!(environment in ['dev', 'stage', 'prod'])) {
         error("deployK8s: unknown environment '${environment}'")
     }
@@ -35,12 +44,29 @@ def call(Map config = [:]) {
     if (!env.NEXUS_REGISTRY) {
         error('deployK8s: NEXUS_REGISTRY is not set')
     }
+    String kind = config.kind ?: (releaseCandidate ? 'rc' : 'deploy')
+    String description = "${kind} ${version} | approver: ${approver} | ${env.JOB_NAME ?: 'build'} #${env.BUILD_NUMBER ?: '?'}"
 
+    String result = 'failure'
+    try {
+        rollout(environment, version, timeout, description)
+        k8sSmokeTest(environment: environment)
+        result = 'success'
+    } finally {
+        if (record) {
+            recordDeployment(environment: environment, version: version, kind: kind,
+                    approver: approver, result: result)
+        }
+    }
+}
+
+def rollout(String environment, String version, String timeout, String description) {
     withEnv([
         "DEPLOY_ENV=${environment}",
         "DEPLOY_NAMESPACE=circleguard-${environment}",
         "DEPLOY_VERSION=${version}",
-        "DEPLOY_TIMEOUT=${timeout}"
+        "DEPLOY_TIMEOUT=${timeout}",
+        "DEPLOY_DESCRIPTION=${description}"
     ]) {
         withCredentials([file(credentialsId: "kubeconfig-${environment}", variable: 'KUBECONFIG')]) {
             try {
@@ -57,6 +83,7 @@ def call(Map config = [:]) {
                       -f "deploy/k8s/circleguard/values-$DEPLOY_ENV.yaml" \
                       --set image.registry="$NEXUS_REGISTRY" \
                       --set image.tag="$DEPLOY_VERSION" \
+                      --description "$DEPLOY_DESCRIPTION" \
                       "$@" \
                       --atomic --wait --timeout "$DEPLOY_TIMEOUT"
                     kubectl -n "$DEPLOY_NAMESPACE" wait certificate/circleguard-tls \
@@ -91,5 +118,4 @@ def call(Map config = [:]) {
             }
         }
     }
-    k8sSmokeTest(environment: environment)
 }

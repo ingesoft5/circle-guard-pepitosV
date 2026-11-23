@@ -21,6 +21,7 @@ Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`), 
 - Después, la etapa `E2E tests on dev` corre las pruebas de Playwright contra dev y publica sus resultados (HU-20).
 - Si las E2E pasan, `Deploy to stage` despliega la misma versión en `stage`; si fallan, el pipeline se detiene y la versión no se promueve.
 - `Approve production` detiene el pipeline en un `input` de 15 minutos. Solo el usuario `admin` puede aprobarlo (`submitter: 'admin'`, HU-21); el usuario `dev` no puede. Ver la [política de cambios](../release-notes/politica-cambios.md). Al aprobar, `Deploy to prod` despliega la misma versión en `prod`; si se rechaza o expira, prod no cambia.
+- Cada despliegue (`deployK8s`) y cada rollback quedan registrados, salgan bien o mal, con `recordDeployment` (HU-51): un GitHub Deployment del ambiente y una fila en `docs/release-notes/registro-ambientes.md` de la rama `registro-despliegues`, con fecha, versión, ambiente, aprobador y resultado. La revisión de Helm lleva los mismos datos en su descripción. Ver [trazabilidad](../release-notes/trazabilidad.md).
 - Cuando un build falla o queda inestable, `notifyDiscord` envía un mensaje al canal de Discord con rama, servicio, etapa, autor y enlace al build. Si el build siguiente se recupera, envía un mensaje de recuperación.
 - La librería se carga desde `jenkins/vars/` usando `libraryPath: "jenkins"`, en la versión de la misma rama que se está construyendo.
 - Jenkins publica el resultado como estado de commit en GitHub. Para builds de PR el contexto es `continuous-integration/jenkins/pr-merge`.
@@ -49,6 +50,8 @@ Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`), 
 | `jenkins/vars/releaseNotes.groovy` | Genera las release notes y el `CHANGELOG.md` desde los commits y PR. |
 | `jenkins/vars/publishGithubRelease.groovy` | Crea o actualiza el GitHub Release de cada versión. |
 | `jenkins/vars/openChangelogPr.groovy` | Abre o actualiza el PR del `CHANGELOG.md` hacia `dev`. |
+| `jenkins/vars/recordDeployment.groovy` | Registra cada despliegue en GitHub Deployments y en `registro-ambientes.md` (HU-51). |
+| `jenkins/release-notes.Jenkinsfile` | Job `circleguard-release-notes`: comprueba y completa las release notes de cada tag (HU-51). |
 | `jenkins/vars/sonarScan.groovy` | Paso reutilizable de análisis SonarQube por servicio (HU-12). |
 | `jenkins/vars/notifyDiscord.groovy` | Notificaciones de fallo, inestabilidad y recuperación en Discord. |
 | `jenkins/rollback.Jenkinsfile` | Job `circleguard-rollback`: redespliega una versión publicada (HU-17). |
@@ -239,7 +242,7 @@ Estos pasos no se pueden dejar solo en código porque dependen de credenciales y
 
 ### 1. Token de GitHub
 
-1. Crear un token con permiso de **escritura** sobre el repositorio (classic: `repo`; fine-grained: *Contents: Read and write*) y `admin:repo_hook` para registrar el webhook. La escritura la necesitan `pushReleaseTag` para publicar los tags (HU-15) y `publishGithubRelease` y `openChangelogPr` para crear releases, la rama `chore/changelog` y su PR (HU-22). Con un token fine-grained, agregar también *Pull requests: Read and write*.
+1. Crear un token con permiso de **escritura** sobre el repositorio (classic: `repo`; fine-grained: *Contents: Read and write*) y `admin:repo_hook` para registrar el webhook. La escritura la necesitan `pushReleaseTag` para publicar los tags (HU-15) y `publishGithubRelease` y `openChangelogPr` para crear releases, la rama `chore/changelog` y su PR (HU-22). Con un token fine-grained, agregar también *Pull requests: Read and write* y, para el registro de despliegues de HU-51, *Deployments: Read and write*.
 2. En el host CI, editar `infra/compose/ci/.env`:
 
 ```bash

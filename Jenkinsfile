@@ -18,6 +18,9 @@ def SERVICES = [
 def releaseVersion = null
 // Set by 'Resolve version': SNAPSHOT on dev, release candidate on a dev -> main promotion PR.
 def prereleaseVersion = null
+// HU-51: who approved each deploy, for the deployment record. On main it is the author of the
+// merge commit (who merged the promotion PR); prod uses the 'Approve production' answer.
+def mergeAuthor = null
 
 // PR dev -> main: builds the release candidate that main later promotes to stable.
 def promotionPr = env.CHANGE_ID != null && env.CHANGE_TARGET == 'main' && env.CHANGE_BRANCH == 'dev' && env.CHANGE_FORK == null
@@ -412,7 +415,15 @@ pipeline {
                 }
             }
             steps {
-                deployK8s(environment: 'stage', version: prereleaseVersion)
+                script {
+                    deployK8s(
+                        environment: 'stage',
+                        version: prereleaseVersion,
+                        approver: env.CHANGE_ID ?
+                                "automatic: PR #${env.CHANGE_ID} by ${env.CHANGE_AUTHOR ?: 'unknown'}" :
+                                "automatic: ${env.BRANCH_NAME}"
+                    )
+                }
             }
         }
 
@@ -481,6 +492,7 @@ pipeline {
                     }
                     releaseVersion = release.version
                     currentBuild.description = "v${releaseVersion}"
+                    mergeAuthor = sh(script: "git log -1 --format='%an'", returnStdout: true).trim() ?: 'unknown'
                 }
             }
         }
@@ -571,7 +583,7 @@ pipeline {
                 }
             }
             steps {
-                deployK8s(environment: 'dev', version: releaseVersion)
+                deployK8s(environment: 'dev', version: releaseVersion, approver: "automatic: merge by ${mergeAuthor}")
             }
         }
 
@@ -637,7 +649,7 @@ pipeline {
                 }
             }
             steps {
-                deployK8s(environment: 'stage', version: releaseVersion)
+                deployK8s(environment: 'stage', version: releaseVersion, approver: "automatic: merge by ${mergeAuthor}")
             }
         }
 
@@ -725,7 +737,7 @@ pipeline {
                 }
             }
             steps {
-                deployK8s(environment: 'prod', version: releaseVersion)
+                deployK8s(environment: 'prod', version: releaseVersion, approver: env.PROD_APPROVER)
             }
         }
     }

@@ -85,3 +85,5 @@ Una emergencia usa el mismo flujo de ramas y las mismas reglas de protección: `
 ## Registro
 
 Un cambio queda trazado por su historia en Jira, su pull request, la ejecución del pipeline y el tag de la versión. Las release notes y el esquema de versiones se generan según [`etiquetado.md`](etiquetado.md).
+
+Cada despliegue a dev, stage o prod, y cada rollback, queda registrado con fecha, versión, ambiente, quién lo aprobó y resultado, en GitHub Deployments y en `registro-ambientes.md` ([`trazabilidad.md`](trazabilidad.md)).
