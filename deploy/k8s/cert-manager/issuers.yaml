@@ -1,0 +1,51 @@
+# Lab CA. The clusters are reached by IP. Let's Encrypt on <ip>.sslip.io shares one
+# public domain and is often refused for rate limit, so the chart uses this CA.
+# Browsers do not trust it until the CA certificate is installed.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: circleguard-selfsigned
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: circleguard-ca
+  namespace: cert-manager
+spec:
+  isCA: true
+  commonName: circleguard-lab-ca
+  secretName: circleguard-ca
+  duration: 8760h
+  renewBefore: 720h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: circleguard-selfsigned
+    kind: ClusterIssuer
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: circleguard-ca
+spec:
+  ca:
+    secretName: circleguard-ca
+---
+# Present for a real DNS name. Not the chart default. Replace the email before use.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt
+spec:
+  acme:
+    email: acme@example.com
+    server: https://acme-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      name: letsencrypt-account
+    solvers:
+      - http01:
+          ingress:
+            class: traefik

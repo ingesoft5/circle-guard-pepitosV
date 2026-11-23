@@ -1,0 +1,20 @@
+# Optional HTTPS proxy. Does not replace port 8080 or 9000.
+#   docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d tls-proxy
+services:
+  tls-proxy:
+    image: caddy:2.8.4
+    container_name: ${CI_PROJECT:-circleguard-ci}-tls
+    restart: unless-stopped
+    ports:
+      - "${TLS_PORT:-8443}:443"
+    environment:
+      TLS_UPSTREAM: ${TLS_UPSTREAM:-jenkins:8080}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - tls_data:/data
+    networks:
+      - ci
+
+volumes:
+  tls_data:
+    name: ${CI_PROJECT:-circleguard-ci}-tls

@@ -27,6 +27,14 @@ ingress:
   className: traefik
   # Empty host answers on any name (the node's public IP); set it to a DNS name per environment.
   host: ""
+  tls:
+    enabled: true
+    # Lab CA. Switch to "letsencrypt" only when host is a name Let's Encrypt can reach.
+    # sslip.io is a shared domain and often exceeds the public rate limit.
+    issuer: circleguard-ca
+    secretName: circleguard-tls
+    # Optional extra name, usually <public-ip>.sslip.io. deployK8s sets it from the node address.
+    dnsName: ""
 
 # Browser origins allowed by the services that check CORS.
 corsAllowedOrigins: "http://localhost:8080"
