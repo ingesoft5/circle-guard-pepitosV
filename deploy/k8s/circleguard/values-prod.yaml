@@ -1,4 +1,8 @@
 environment: prod
+# Linkerd (mTLS) only. No canary: an analysis starts one more gateway JVM and the prod node
+# does not have the memory for it (docs/arquitectura/service-mesh.md#memoria).
+mesh:
+  enabled: true
 middleware:
   postgres:
     storage: {size: 5Gi}
@@ -17,3 +21,8 @@ services:
     hpa: {minReplicas: 2, maxReplicas: 4}
   form:
     hpa: {minReplicas: 2, maxReplicas: 4}
+# The k3s node has no ExternalIP, so deployK8s cannot find the public name. The Elastic IP is
+# fixed in Terraform (docs/arquitectura/infraestructura.md).
+ingress:
+  tls:
+    dnsName: 34.227.254.255.sslip.io

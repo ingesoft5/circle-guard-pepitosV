@@ -1,5 +1,5 @@
 # Publishes the Linkerd dashboard at https://linkerd.<node-ip>.sslip.io behind the same BasicAuth
-# user as Prometheus and Alertmanager. install-linkerd-viz.sh replaces __HOST__ and creates the
+# user as Prometheus and Alertmanager. install-mesh.sh --viz replaces __HOST__ and creates the
 # Secret viz-basic-auth from monitoring/monitoring-basic-auth (never versioned).
 # Linkerd's dashboard only works from the root path, so it gets its own host instead of a path.
 apiVersion: traefik.io/v1alpha1

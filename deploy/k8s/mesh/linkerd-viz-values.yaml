@@ -1,4 +1,4 @@
-# Values of linkerd-viz, the Linkerd dashboard (install-linkerd-viz.sh). It reads the cluster's
+# Values of linkerd-viz, the Linkerd dashboard (install-mesh.sh --viz). It reads the cluster's
 # kube-prometheus-stack, which scrapes the proxies through the PodMonitors of the control plane,
 # so the extension's own Prometheus is not installed.
 prometheus:

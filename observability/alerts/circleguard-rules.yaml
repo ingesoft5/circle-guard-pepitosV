@@ -103,7 +103,7 @@ spec:
     - name: circleguard.delivery
       rules:
         - alert: CanaryFailed
-          # Flagger (deploy/k8s/scripts/install-flagger.sh) reports 0 running, 1 promoted and
+          # Flagger (deploy/k8s/scripts/install-mesh.sh --canary) reports 0 running, 1 promoted and
           # 2 failed per Canary. A failed analysis sent all the traffic back to the primary, so
           # the new version is deployed but serves nothing until the next deploy promotes one.
           expr: max by (namespace, name) (flagger_canary_status{namespace=~"circleguard-.+"}) == 2

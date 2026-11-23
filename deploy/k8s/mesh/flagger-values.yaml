@@ -1,4 +1,4 @@
-# Values of the Flagger chart (install-flagger.sh). Flagger shifts the traffic of a Canary by
+# Values of the Flagger chart (install-mesh.sh --canary). Flagger shifts the traffic of a Canary by
 # editing a Gateway API HTTPRoute whose parent is the Service; Linkerd applies those weights to
 # every meshed client.
 meshProvider: gatewayapi:v1
@@ -21,7 +21,7 @@ resources:
   limits:
     memory: 128Mi
 # flagger_canary_status for the CanaryFailed alert (observability/alerts). honorLabels keeps the
-# namespace of the canary instead of flagger-system. install-flagger.sh turns it on.
+# namespace of the canary instead of flagger-system. install-mesh.sh turns it on.
 podMonitor:
   enabled: false
   interval: 30s
