@@ -9,6 +9,15 @@ String targetVersion = null
 String targetRevision = null
 String currentVersion = null
 String requestedBy = null
+// HU-51: who answered 'Approve production' (prod only) and whether the environment was touched.
+String approvedBy = null
+boolean rollbackStarted = false
+
+// Records the rollback once, for both paths (helm rollback and redeploy of a version).
+void recordRollback(String result, String environment, String version, String approver) {
+    recordDeployment(environment: environment, version: version ?: 'unknown', kind: 'rollback',
+            approver: approver, result: result)
+}
 
 // Image tag the environment runs now, or of one Helm revision.
 String releaseImageTag(String namespace, String revision = null) {
@@ -119,15 +128,23 @@ pipeline {
         stage('Approve production') {
             when { expression { params.ENVIRONMENT == 'prod' } }
             steps {
-                // Only the admin account approves prod (docs/release-notes/politica-cambios.md)
-                input message: "Roll back prod from ${currentVersion} to ${targetVersion}?", ok: 'Roll back',
-                        submitter: 'admin'
+                script {
+                    // Only the admin account approves prod (docs/release-notes/politica-cambios.md)
+                    approvedBy = input(
+                        message: "Roll back prod from ${currentVersion} to ${targetVersion}?",
+                        ok: 'Roll back',
+                        submitter: 'admin',
+                        submitterParameter: 'APPROVER'
+                    )
+                    echo "Production rollback approved by ${approvedBy}"
+                }
             }
         }
 
         stage('Roll back') {
             steps {
                 script {
+                    rollbackStarted = true
                     String target = targetRevision ? "revision ${targetRevision} (${targetVersion})" : targetVersion
                     currentBuild.description = "${params.ENVIRONMENT}: ${currentVersion} -> ${target} by ${requestedBy}"
                     echo "Rollback of ${params.ENVIRONMENT} from ${currentVersion} to ${target}, requested by ${requestedBy}"
@@ -144,7 +161,8 @@ pipeline {
                         k8sSmokeTest(environment: params.ENVIRONMENT)
                     } else {
                         // Helm upgrade with --atomic, rollout wait and smoke test.
-                        deployK8s(environment: params.ENVIRONMENT, version: targetVersion)
+                        deployK8s(environment: params.ENVIRONMENT, version: targetVersion, kind: 'rollback',
+                                approver: params.ENVIRONMENT == 'prod' ? approvedBy : requestedBy, record: false)
                     }
                 }
             }
@@ -153,10 +171,21 @@ pipeline {
 
     post {
         success {
+            script {
+                recordRollback('success', params.ENVIRONMENT, targetVersion,
+                        params.ENVIRONMENT == 'prod' ? approvedBy : requestedBy)
+            }
             echo "ROLLBACK OK | environment=${params.ENVIRONMENT} | from=${currentVersion} | " +
                     "to=${targetVersion} | revision=${targetRevision ?: 'new'} | by=${requestedBy}"
         }
         failure {
+            script {
+                // A rollback that stopped before 'Roll back' did not touch the environment.
+                if (rollbackStarted) {
+                    recordRollback('failure', params.ENVIRONMENT, targetVersion ?: params.VERSION,
+                            params.ENVIRONMENT == 'prod' ? approvedBy : requestedBy)
+                }
+            }
             echo "ROLLBACK FAILED | environment=${params.ENVIRONMENT} | from=${currentVersion ?: 'unknown'} | " +
                     "to=${targetVersion ?: params.VERSION} | by=${requestedBy ?: 'unknown'}"
         }
