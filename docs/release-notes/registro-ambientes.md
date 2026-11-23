@@ -11,3 +11,4 @@ El mismo registro está en GitHub, en [Deployments](https://github.com/ingesoft5
 | 2026-11-23 02:26 UTC | stage | 0.7.0 | rollback | admin (admin) | fallo | [circleguard-rollback #12](http://184.196.87.200:8080/job/circleguard-rollback/12/) |
 | 2026-11-23 02:38 UTC | stage | 0.6.0 | rollback | admin (admin) | éxito | [circleguard-rollback #13](http://184.196.87.200:8080/job/circleguard-rollback/13/) |
 | 2026-11-23 02:41 UTC | stage | 0.7.0 | rollback | admin (admin) | éxito | [circleguard-rollback #14](http://184.196.87.200:8080/job/circleguard-rollback/14/) |
+| 2026-11-23 02:59 UTC | stage | 0.8.0-rc.6f6b4bc | release candidate | automatic: PR #150 by DavidRamirez206 | éxito | [circleguard/PR-150 #1](http://184.196.87.200:8080/job/circleguard/job/PR-150/1/) |
