@@ -1,4 +1,9 @@
 environment: stage
+# Linkerd (mTLS) and the gateway canary, as in dev (docs/arquitectura/service-mesh.md).
+mesh:
+  enabled: true
+canary:
+  enabled: true
 services:
   file:
     config:

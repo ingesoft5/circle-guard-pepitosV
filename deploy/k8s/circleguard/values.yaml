@@ -22,7 +22,7 @@ metrics:
     path: /actuator/prometheus
     interval: 30s
 
-# Service mesh (Linkerd, deploy/k8s/scripts/install-linkerd.sh). Only the application
+# Service mesh (Linkerd, deploy/k8s/scripts/install-mesh.sh). Only the application
 # workloads (services below) get the proxy: calls between them use mTLS with one identity per
 # ServiceAccount. The middleware stays outside the mesh, so meshed pods reach it without the
 # proxy on these ports. Without Linkerd in the cluster the annotation does nothing.
@@ -30,7 +30,7 @@ mesh:
   enabled: false
   skipOutboundPorts: "389,4318,5432,6379,7687,9092"
 
-# Progressive delivery of one service with Flagger (deploy/k8s/scripts/install-flagger.sh).
+# Progressive delivery of one service with Flagger (install-mesh.sh --canary).
 # Needs mesh.enabled; the Canary is created only when the cluster has the Flagger and Gateway
 # API CRDs. Flagger then owns the Services <service>, <service>-primary and <service>-canary,
 # so the chart stops rendering the Service of that workload.
