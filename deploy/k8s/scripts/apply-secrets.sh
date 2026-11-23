@@ -43,7 +43,8 @@ ensure_kubeseal() {
 # deployment can still be rolling out or have no endpoints. kubeseal talks to
 # its Service, so wait for both before asking for the certificate.
 wait_for_sealed_secrets() {
-  local timeout="${SEALED_SECRETS_TIMEOUT:-180}" deadline=$((SECONDS + timeout)) endpoints
+  local wait_seconds="${SEALED_SECRETS_TIMEOUT:-180}"
+  local deadline=$((SECONDS + wait_seconds)) endpoints
   echo "apply-secrets: waiting for sealed-secrets-controller to be ready"
   while (( SECONDS < deadline )); do
     if kubectl --request-timeout=10s -n kube-system rollout status \
@@ -55,7 +56,7 @@ wait_for_sealed_secrets() {
     sleep 2
   done
   kubectl -n kube-system get pods,deploy,endpoints -l name=sealed-secrets-controller >&2 || true
-  die "sealed-secrets-controller has no ready endpoints after ${timeout}s; kubeseal cannot fetch its certificate"
+  die "sealed-secrets-controller has no ready endpoints after ${wait_seconds}s; kubeseal cannot fetch its certificate"
 }
 
 generate_env_file() {
