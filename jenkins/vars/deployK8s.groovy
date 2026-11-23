@@ -107,7 +107,7 @@ def rollout(String environment, String version, String timeout, String descripti
                         "If the Helm upgrade started, --atomic restored the previous revision " +
                         "(rollout timeout ${timeout}).")
             }
-            // Service mesh: with a Flagger Canary (dev for now) the new gateway only takes traffic
+            // Service mesh: with a Flagger Canary (dev and stage) the new gateway only takes traffic
             // after the analysis passes. Helm has already finished, so a failure here leaves the
             // previous gateway serving instead of restoring the Helm revision.
             try {

@@ -2,80 +2,21 @@
   "uid": "circleguard-canary",
   "title": "CircleGuard · Canary y malla",
   "description": "Análisis de Flagger y métricas de los proxies de Linkerd (docs/arquitectura/service-mesh.md).",
-  "tags": [
-    "circleguard",
-    "linkerd",
-    "flagger"
-  ],
+  "tags": ["circleguard", "linkerd", "flagger"],
   "timezone": "browser",
   "editable": true,
   "graphTooltip": 1,
   "schemaVersion": 39,
   "version": 1,
   "refresh": "30s",
-  "time": {
-    "from": "now-1h",
-    "to": "now"
-  },
-  "templating": {
-    "list": [
-      {
-        "name": "datasource",
-        "label": "Datasource",
-        "type": "datasource",
-        "query": "prometheus",
-        "current": {},
-        "hide": 0,
-        "refresh": 1,
-        "regex": "",
-        "options": []
-      },
-      {
-        "name": "namespace",
-        "label": "Ambiente",
-        "type": "query",
-        "datasource": {
-          "type": "prometheus",
-          "uid": "${datasource}"
-        },
-        "query": {
-          "query": "label_values(flagger_canary_status, namespace)",
-          "refId": "namespace"
-        },
-        "definition": "label_values(flagger_canary_status, namespace)",
-        "refresh": 2,
-        "sort": 1,
-        "hide": 0,
-        "current": {},
-        "options": [],
-        "regex": ""
-      },
-      {
-        "name": "canary",
-        "label": "Canary",
-        "type": "query",
-        "datasource": {
-          "type": "prometheus",
-          "uid": "${datasource}"
-        },
-        "query": {
-          "query": "label_values(flagger_canary_status{namespace=\"$namespace\"}, name)",
-          "refId": "canary"
-        },
-        "definition": "label_values(flagger_canary_status{namespace=\"$namespace\"}, name)",
-        "refresh": 2,
-        "sort": 1,
-        "hide": 0,
-        "current": {},
-        "options": [],
-        "regex": ""
-      }
-    ]
-  },
-  "annotations": {
-    "list": []
-  },
+  "time": {"from": "now-1h", "to": "now"},
+  "annotations": {"list": []},
   "links": [],
+  "templating": {"list": [
+    {"name": "datasource", "label": "Datasource", "type": "datasource", "query": "prometheus", "current": {}, "hide": 0, "refresh": 1, "regex": "", "options": []},
+    {"name": "namespace", "label": "Ambiente", "type": "query", "datasource": {"type": "prometheus", "uid": "${datasource}"}, "query": {"query": "label_values(flagger_canary_status, namespace)", "refId": "namespace"}, "definition": "label_values(flagger_canary_status, namespace)", "refresh": 2, "sort": 1, "hide": 0, "current": {}, "options": [], "regex": ""},
+    {"name": "canary", "label": "Canary", "type": "query", "datasource": {"type": "prometheus", "uid": "${datasource}"}, "query": {"query": "label_values(flagger_canary_status{namespace=\"$namespace\"}, name)", "refId": "canary"}, "definition": "label_values(flagger_canary_status{namespace=\"$namespace\"}, name)", "refresh": 2, "sort": 1, "hide": 0, "current": {}, "options": [], "regex": ""}
+  ]},
   "panels": [
     {"id": 1, "type": "row", "title": "Canary (Flagger)", "collapsed": false, "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0}, "panels": []},
     {"type": "stat", "title": "Estado", "description": "Último resultado de Flagger: en análisis, promovido o revertido.", "targets": [{"refId": "A", "expr": "max(flagger_canary_status{namespace=\"$namespace\", name=\"$canary\"})", "datasource": {"type": "prometheus", "uid": "${datasource}"}}], "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "En análisis", "color": "blue"}, "1": {"text": "Promovido", "color": "green"}, "2": {"text": "Revertido", "color": "red"}}}], "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]}}, "overrides": []}, "options": {"colorMode": "background", "graphMode": "none", "textMode": "value", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}}, "gridPos": {"h": 6, "w": 6, "x": 0, "y": 1}, "id": 2, "datasource": {"type": "prometheus", "uid": "${datasource}"}},

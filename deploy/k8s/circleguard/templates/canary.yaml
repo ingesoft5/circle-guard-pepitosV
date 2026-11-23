@@ -44,17 +44,11 @@ metadata:
   labels:
     {{- include "circleguard.labels" $ctx | nindent 4 }}
 spec:
-  targetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: {{ $name }}
+  targetRef: {apiVersion: apps/v1, kind: Deployment, name: {{ $name }}}
   {{- if $spec.hpa }}
-  # Flagger copies the HPA to <service>-primary. The original stays on the canary Deployment,
-  # which sits at 0 replicas between analyses, so it does not scale anything then.
-  autoscalerRef:
-    apiVersion: autoscaling/v2
-    kind: HorizontalPodAutoscaler
-    name: {{ $name }}
+  # Flagger copies the HPA to <service>-primary; the original targets the canary Deployment,
+  # which sits at 0 replicas between analyses.
+  autoscalerRef: {apiVersion: autoscaling/v2, kind: HorizontalPodAutoscaler, name: {{ $name }}}
   {{- end }}
   progressDeadlineSeconds: 600
   service:
@@ -64,11 +58,7 @@ spec:
     portName: http
     # The HTTPRoute hangs from the Service itself (Linkerd's GAMMA mode), not from a Gateway.
     gatewayRefs:
-      - group: core
-        kind: Service
-        name: {{ $name }}
-        namespace: {{ $ns }}
-        port: {{ $spec.port }}
+      - {group: core, kind: Service, name: {{ $name }}, namespace: {{ $ns }}, port: {{ $spec.port }}}
     apex:
       labels:
         {{- include "circleguard.labels" $ctx | nindent 8 }}
@@ -87,18 +77,8 @@ spec:
     stepWeight: {{ $c.analysis.stepWeight }}
     maxWeight: {{ $c.analysis.maxWeight }}
     metrics:
-      - name: success-rate
-        templateRef:
-          name: linkerd-success-rate
-        thresholdRange:
-          min: {{ $c.minSuccessRate }}
-        interval: 1m
-      - name: latency-p99
-        templateRef:
-          name: linkerd-latency
-        thresholdRange:
-          max: {{ $c.maxLatencyMs }}
-        interval: 1m
+      - {name: success-rate, templateRef: {name: linkerd-success-rate}, thresholdRange: {min: {{ $c.minSuccessRate }}}, interval: 1m}
+      - {name: latency-p99, templateRef: {name: linkerd-latency}, thresholdRange: {max: {{ $c.maxLatencyMs }}}, interval: 1m}
     webhooks:
       # Before any traffic moves: the new pods answer readiness through the mesh.
       - name: acceptance

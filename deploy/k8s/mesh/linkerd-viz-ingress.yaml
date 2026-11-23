@@ -1,15 +1,13 @@
-# Publishes the Linkerd dashboard at https://linkerd.<node-ip>.sslip.io behind the same BasicAuth
-# user as Prometheus and Alertmanager. install-linkerd-viz.sh replaces __HOST__ and creates the
-# Secret viz-basic-auth from monitoring/monitoring-basic-auth (never versioned).
-# Linkerd's dashboard only works from the root path, so it gets its own host instead of a path.
+# Linkerd dashboard at https://__HOST__ behind the BasicAuth user of /prometheus. install-mesh.sh
+# replaces __HOST__ and copies the Secret viz-basic-auth from monitoring (never versioned). The
+# dashboard only works from the root path, so it gets its own host.
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: basic-auth
   namespace: linkerd-viz
 spec:
-  basicAuth:
-    secret: viz-basic-auth
+  basicAuth: {secret: viz-basic-auth}
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -18,12 +16,9 @@ metadata:
   namespace: linkerd-viz
 spec:
   secretName: linkerd-viz-tls
-  issuerRef:
-    name: circleguard-ca
-    kind: ClusterIssuer
+  issuerRef: {name: circleguard-ca, kind: ClusterIssuer}
   commonName: __HOST__
-  dnsNames:
-    - __HOST__
+  dnsNames: [__HOST__]
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -35,18 +30,9 @@ metadata:
     traefik.ingress.kubernetes.io/router.middlewares: linkerd-viz-basic-auth@kubernetescrd
 spec:
   ingressClassName: traefik
-  tls:
-    - secretName: linkerd-viz-tls
-      hosts:
-        - __HOST__
+  tls: [{secretName: linkerd-viz-tls, hosts: [__HOST__]}]
   rules:
     - host: __HOST__
       http:
         paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: web
-                port:
-                  number: 8084
+          - {path: /, pathType: Prefix, backend: {service: {name: web, port: {number: 8084}}}}

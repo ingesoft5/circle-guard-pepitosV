@@ -1,15 +1,6 @@
-# Values of the Flagger load tester (install-flagger.sh). It runs the canary webhooks: the
-# acceptance check before any traffic moves and the load during the analysis. It is meshed so
-# its requests to gateway follow the HTTPRoute weights like the web client's.
-# The Canary in the chart calls http://flagger-loadtester.flagger-system/ (port 80).
+# Flagger load tester: runs the canary webhooks. Meshed, so its load follows the HTTPRoute weights.
+# The Canary calls http://flagger-loadtester.flagger-system/.
 fullnameOverride: flagger-loadtester
-podAnnotations:
-  linkerd.io/inject: enabled
-securityContext:
-  enabled: true
-resources:
-  requests:
-    cpu: 10m
-    memory: 32Mi
-  limits:
-    memory: 128Mi
+podAnnotations: {linkerd.io/inject: enabled}
+securityContext: {enabled: true}
+resources: {requests: {cpu: 10m, memory: 32Mi}, limits: {memory: 128Mi}}
