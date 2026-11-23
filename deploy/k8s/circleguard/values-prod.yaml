@@ -5,6 +5,10 @@ middleware:
   neo4j:
     storage: {size: 3Gi}
 services:
+  file:
+    config:
+      # Bucket of Terraform (output storage_bucket of envs/prod).
+      CIRCLEGUARD_STORAGE_S3_BUCKET: circleguard-k3s-prod-files-028658486093
   auth:
     config:
       QR_EXPIRATION: "30000"
