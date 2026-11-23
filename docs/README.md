@@ -42,6 +42,14 @@ desplegada ([revisión cruzada](arquitectura/coherencia.md)).
 | [`operaciones/secretos.md`](operaciones/secretos.md) | Escaneo del historial y Sealed Secrets |
 | [`operaciones/terraform-state-lock.md`](operaciones/terraform-state-lock.md) | Bloqueo del estado de Terraform |
 
+## Gestión ágil
+
+| Documento | Para qué |
+|:---|:---|
+| [`agil/sprints-0-y-1.md`](agil/sprints-0-y-1.md) | Planeación, review y retrospectiva de los sprints 0 y 1 |
+| [`agil/sprint-2.md`](agil/sprint-2.md) | Planeación, review, retrospectiva, burndown y comparación con el Sprint 1 |
+| [`agil/branching.md`](agil/branching.md) | Estrategia de ramas |
+
 ## Releases y costos
 
 | Documento | Para qué |
