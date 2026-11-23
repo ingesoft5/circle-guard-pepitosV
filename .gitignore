@@ -69,3 +69,7 @@ crash.log
 # Bytecode de Python (Locust y scripts locales)
 __pycache__/
 *.pyc
+
+# Inventario de los clústeres y de Terraform (HU-54): nombres internos e IP privadas
+.inventario/
+.inventario-hu54/
