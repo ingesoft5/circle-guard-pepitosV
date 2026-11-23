@@ -22,3 +22,4 @@ El mismo registro está en GitHub, en [Deployments](https://github.com/ingesoft5
 | 2026-11-23 07:00 UTC | stage | 0.9.0-rc.2f84550 | release candidate | automatic: PR #167 by DavidRamirez206 | fallo | [circleguard/PR-167 #1](http://184.196.87.200:8080/job/circleguard/job/PR-167/1/) |
 | 2026-11-23 07:04 UTC | stage | 0.9.0-rc.8e35103 | release candidate | automatic: PR #167 by DavidRamirez206 | fallo | [circleguard/PR-167 #2](http://184.196.87.200:8080/job/circleguard/job/PR-167/2/) |
 | 2026-11-23 07:07 UTC | stage | 0.9.0-rc.8e35103 | release candidate | automatic: PR #167 by DavidRamirez206 | fallo | [circleguard/PR-167 #3](http://184.196.87.200:8080/job/circleguard/job/PR-167/3/) |
+| 2026-11-23 07:22 UTC | stage | 0.9.0-rc.8e35103 | release candidate | automatic: PR #167 by DavidRamirez206 | éxito | [circleguard/PR-167 #4](http://184.196.87.200:8080/job/circleguard/job/PR-167/4/) |
