@@ -21,7 +21,7 @@ output "registry_host" {
 }
 
 output "storage_bucket" {
-  description = "S3 bucket for the file service attachments and backups."
+  description = "S3 bucket of file-service uploads (CIRCLEGUARD_STORAGE_S3_BUCKET in the chart)."
   value       = module.storage.bucket_id
 }
 
@@ -33,4 +33,9 @@ output "observability_topic_arn" {
 output "monitoring_namespace" {
   description = "Namespace of kube-prometheus-stack, or null when it is not installed."
   value       = module.observability.monitoring_namespace
+}
+
+output "node_role_name" {
+  description = "IAM role of the k3s node (access to storage_bucket)."
+  value       = module.k3s.node_role_name
 }
