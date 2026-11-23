@@ -8,3 +8,4 @@ El mismo registro está en GitHub, en [Deployments](https://github.com/ingesoft5
 | Fecha | Ambiente | Versión | Tipo | Aprobó | Resultado | Build |
 |:---|:---|:---|:---|:---|:---|:---|
 | 2026-11-23 02:15 UTC | stage | 0.7.0 | rollback | admin (admin) | fallo | [circleguard-rollback #11](http://184.196.87.200:8080/job/circleguard-rollback/11/) |
+| 2026-11-23 02:26 UTC | stage | 0.7.0 | rollback | admin (admin) | fallo | [circleguard-rollback #12](http://184.196.87.200:8080/job/circleguard-rollback/12/) |
