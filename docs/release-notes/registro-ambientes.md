@@ -16,3 +16,4 @@ El mismo registro está en GitHub, en [Deployments](https://github.com/ingesoft5
 | 2026-11-23 04:19 UTC | stage | 0.8.0-rc.e7e4b65 | release candidate | automatic: PR #150 by DavidRamirez206 | éxito | [circleguard/PR-150 #3](http://184.196.87.200:8080/job/circleguard/job/PR-150/3/) |
 | 2026-11-23 04:27 UTC | stage | 0.8.0-rc.06154f5 | release candidate | automatic: PR #150 by DavidRamirez206 | éxito | [circleguard/PR-150 #4](http://184.196.87.200:8080/job/circleguard/job/PR-150/4/) |
 | 2026-11-23 04:38 UTC | stage | 0.8.0-rc.06154f5 | release candidate | automatic: PR #150 by DavidRamirez206 | éxito | [circleguard/PR-150 #5](http://184.196.87.200:8080/job/circleguard/job/PR-150/5/) |
+| 2026-11-23 05:42 UTC | stage | 0.8.0-rc.51b74a5 | release candidate | automatic: PR #160 by DavidRamirez206 | éxito | [circleguard/PR-160 #1](http://184.196.87.200:8080/job/circleguard/job/PR-160/1/) |
