@@ -1,0 +1,14 @@
+# Hypothesis: Kubernetes recreates a killed gateway pod and it is Ready again in under 90 s.
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: gateway-pod-kill
+spec:
+  action: pod-kill
+  mode: one
+  gracePeriod: 0
+  selector:
+    labelSelectors: {app.kubernetes.io/instance: circleguard}
+    # gateway-primary when the Flagger canary is on.
+    expressionSelectors:
+      - {key: app.kubernetes.io/name, operator: In, values: [gateway, gateway-primary]}

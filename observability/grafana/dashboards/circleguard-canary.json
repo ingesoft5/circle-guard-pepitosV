@@ -39,10 +39,10 @@
           "uid": "${datasource}"
         },
         "query": {
-          "query": "label_values(flagger_canary_status, namespace)",
+          "query": "label_values(kube_pod_info{namespace=~\"circleguard-.+\"}, namespace)",
           "refId": "namespace"
         },
-        "definition": "label_values(flagger_canary_status, namespace)",
+        "definition": "label_values(kube_pod_info{namespace=~\"circleguard-.+\"}, namespace)",
         "refresh": 2,
         "sort": 1,
         "hide": 0,
@@ -53,22 +53,20 @@
       {
         "name": "canary",
         "label": "Canary",
-        "type": "query",
-        "datasource": {
-          "type": "prometheus",
-          "uid": "${datasource}"
-        },
-        "query": {
-          "query": "label_values(flagger_canary_status{namespace=\"$namespace\"}, name)",
-          "refId": "canary"
-        },
-        "definition": "label_values(flagger_canary_status{namespace=\"$namespace\"}, name)",
-        "refresh": 2,
-        "sort": 1,
+        "type": "custom",
         "hide": 0,
-        "current": {},
-        "options": [],
-        "regex": ""
+        "current": {
+          "text": "gateway",
+          "value": "gateway"
+        },
+        "options": [
+          {
+            "text": "gateway",
+            "value": "gateway",
+            "selected": true
+          }
+        ],
+        "query": "gateway"
       }
     ]
   },
@@ -77,14 +75,364 @@
   },
   "links": [],
   "panels": [
-    {"id": 1, "type": "row", "title": "Canary (Flagger)", "collapsed": false, "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0}, "panels": []},
-    {"type": "stat", "title": "Estado", "description": "Último resultado de Flagger: en análisis, promovido o revertido.", "targets": [{"refId": "A", "expr": "max(flagger_canary_status{namespace=\"$namespace\", name=\"$canary\"})", "datasource": {"type": "prometheus", "uid": "${datasource}"}}], "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "En análisis", "color": "blue"}, "1": {"text": "Promovido", "color": "green"}, "2": {"text": "Revertido", "color": "red"}}}], "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]}}, "overrides": []}, "options": {"colorMode": "background", "graphMode": "none", "textMode": "value", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}}, "gridPos": {"h": 6, "w": 6, "x": 0, "y": 1}, "id": 2, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
-    {"type": "timeseries", "title": "Peso del tráfico", "description": "Porcentaje que Flagger envía a primary y canary por el HTTPRoute.", "targets": [{"refId": "A", "expr": "max by (workload) (flagger_canary_weight{namespace=\"$namespace\", workload=~\"$canary|$canary-primary\"})", "datasource": {"type": "prometheus", "uid": "${datasource}"}, "legendFormat": "{{workload}}"}], "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}, "overrides": []}, "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}}, "gridPos": {"h": 6, "w": 9, "x": 6, "y": 1}, "id": 3, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
-    {"type": "timeseries", "title": "Métricas del análisis", "description": "Valor de cada métrica en cada comprobación: success-rate (%) y latency-p99 (ms).", "targets": [{"refId": "A", "expr": "max by (metric) (flagger_canary_metric_analysis{namespace=\"$namespace\", name=\"$canary\"})", "datasource": {"type": "prometheus", "uid": "${datasource}"}, "legendFormat": "{{metric}}"}], "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}, "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}}, "gridPos": {"h": 6, "w": 9, "x": 15, "y": 1}, "id": 4, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
-    {"id": 5, "type": "row", "title": "Proxies de Linkerd", "collapsed": false, "gridPos": {"h": 1, "w": 24, "x": 0, "y": 7}, "panels": []},
-    {"type": "timeseries", "title": "Tasa de éxito", "description": "Respuestas no 5xx sobre el total, por Deployment, medidas por el proxy de entrada.", "targets": [{"refId": "A", "expr": "sum by (deployment) (rate(response_total{namespace=\"$namespace\", deployment=~\"$canary|$canary-primary\", direction=\"inbound\", classification!=\"failure\"}[1m])) / sum by (deployment) (rate(response_total{namespace=\"$namespace\", deployment=~\"$canary|$canary-primary\", direction=\"inbound\"}[1m])) * 100", "datasource": {"type": "prometheus", "uid": "${datasource}"}, "legendFormat": "{{deployment}}"}], "fieldConfig": {"defaults": {"unit": "percent", "max": 100}, "overrides": []}, "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}}, "gridPos": {"h": 7, "w": 8, "x": 0, "y": 8}, "id": 6, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
-    {"type": "timeseries", "title": "Latencia p99", "description": "Percentil 99 de la latencia de entrada por Deployment.", "targets": [{"refId": "A", "expr": "histogram_quantile(0.99, sum by (deployment, le) (rate(response_latency_ms_bucket{namespace=\"$namespace\", deployment=~\"$canary|$canary-primary\", direction=\"inbound\"}[1m])))", "datasource": {"type": "prometheus", "uid": "${datasource}"}, "legendFormat": "{{deployment}}"}], "fieldConfig": {"defaults": {"unit": "ms", "min": 0}, "overrides": []}, "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}}, "gridPos": {"h": 7, "w": 8, "x": 8, "y": 8}, "id": 7, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
-    {"type": "timeseries", "title": "Peticiones por segundo", "description": "Peticiones de entrada por Deployment.", "targets": [{"refId": "A", "expr": "sum by (deployment) (rate(response_total{namespace=\"$namespace\", deployment=~\"$canary|$canary-primary\", direction=\"inbound\"}[1m]))", "datasource": {"type": "prometheus", "uid": "${datasource}"}, "legendFormat": "{{deployment}}"}], "fieldConfig": {"defaults": {"unit": "reqps", "min": 0}, "overrides": []}, "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}}, "gridPos": {"h": 7, "w": 8, "x": 16, "y": 8}, "id": 8, "datasource": {"type": "prometheus", "uid": "${datasource}"}},
-    {"type": "timeseries", "title": "Tráfico con mTLS por servicio", "description": "Parte de las peticiones de entrada que llegan cifradas por la malla. Lo que entra de Traefik, del kubelet o de Prometheus no está en la malla.", "targets": [{"refId": "A", "expr": "sum by (deployment) (rate(response_total{namespace=\"$namespace\", direction=\"inbound\", tls=\"true\"}[5m])) / sum by (deployment) (rate(response_total{namespace=\"$namespace\", direction=\"inbound\"}[5m]))", "datasource": {"type": "prometheus", "uid": "${datasource}"}, "legendFormat": "{{deployment}}"}], "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}, "overrides": []}, "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}}, "gridPos": {"h": 7, "w": 24, "x": 0, "y": 15}, "id": 9, "datasource": {"type": "prometheus", "uid": "${datasource}"}}
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Canary (Flagger)",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": []
+    },
+    {
+      "type": "stat",
+      "title": "Estado",
+      "description": "Último resultado de Flagger: en análisis, promovido o revertido.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(flagger_canary_status{namespace=\"$namespace\", name=\"$canary\"})",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "En análisis",
+                  "color": "blue"
+                },
+                "1": {
+                  "text": "Promovido",
+                  "color": "green"
+                },
+                "2": {
+                  "text": "Revertido",
+                  "color": "red"
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
+      "id": 2,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Peso del tráfico",
+      "description": "Porcentaje que Flagger envía a primary y canary por el HTTPRoute.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (workload) (flagger_canary_weight{namespace=\"$namespace\", workload=~\"$canary|$canary-primary\"})",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "legendFormat": "{{workload}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 9,
+        "x": 6,
+        "y": 1
+      },
+      "id": 3,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Métricas del análisis",
+      "description": "Valor de cada métrica en cada comprobación: success-rate (%) y latency-p99 (ms).",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (metric) (flagger_canary_metric_analysis{namespace=\"$namespace\", name=\"$canary\"})",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "legendFormat": "{{metric}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 9,
+        "x": 15,
+        "y": 1
+      },
+      "id": 4,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "id": 5,
+      "type": "row",
+      "title": "Proxies de Linkerd",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 7
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Tasa de éxito",
+      "description": "Respuestas no 5xx sobre el total, por Deployment, medidas por el proxy de entrada.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (deployment) (rate(response_total{namespace=\"$namespace\", deployment=~\"$canary|$canary-primary\", direction=\"inbound\", classification!=\"failure\"}[1m])) / sum by (deployment) (rate(response_total{namespace=\"$namespace\", deployment=~\"$canary|$canary-primary\", direction=\"inbound\"}[1m])) * 100",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "legendFormat": "{{deployment}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "max": 100
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 8
+      },
+      "id": 6,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Latencia p99",
+      "description": "Percentil 99 de la latencia de entrada por Deployment.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.99, sum by (deployment, le) (rate(response_latency_ms_bucket{namespace=\"$namespace\", deployment=~\"$canary|$canary-primary\", direction=\"inbound\"}[1m])))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "legendFormat": "{{deployment}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 8
+      },
+      "id": 7,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Peticiones por segundo",
+      "description": "Peticiones de entrada por Deployment.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (deployment) (rate(response_total{namespace=\"$namespace\", deployment=~\"$canary|$canary-primary\", direction=\"inbound\"}[1m]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "legendFormat": "{{deployment}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 8
+      },
+      "id": 8,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Tráfico con mTLS por servicio",
+      "description": "Parte de las peticiones de entrada que llegan cifradas por la malla. Lo que entra de Traefik, del kubelet o de Prometheus no está en la malla.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (deployment) (rate(response_total{namespace=\"$namespace\", direction=\"inbound\", tls=\"true\"}[5m])) / sum by (deployment) (rate(response_total{namespace=\"$namespace\", direction=\"inbound\"}[5m]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "legendFormat": "{{deployment}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 15
+      },
+      "id": 9,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    }
   ]
 }

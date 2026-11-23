@@ -1,0 +1,12 @@
+# Hypothesis: while PostgreSQL restarts, identity, auth, form, promotion and dashboard leave
+# readiness (0/1 in their Endpoints) without restarting, and all return to Ready with no data lost.
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: postgres-pod-kill
+spec:
+  action: pod-kill
+  mode: one
+  gracePeriod: 0
+  selector:
+    labelSelectors: {app.kubernetes.io/name: postgres, app.kubernetes.io/instance: circleguard}
