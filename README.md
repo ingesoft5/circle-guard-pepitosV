@@ -16,6 +16,7 @@ To provision Jenkins, SonarQube, the Nexus registry and the three environments f
 | Document | Link |
 |:---|:---|
 | Part 1 Report (PDF) | [reporte_suarez_ocampo_chicue_barrionuevo.pdf](reporte_suarez_ocampo_chicue_barrionuevo.pdf) |
+| Part 2 Report (PDF) | [informe-parte-2-circleguard.pdf](informe-parte-2-circleguard.pdf) |
 | Generative AI Usage Log | [IAG_REGISTRO.md](IAG_REGISTRO.md) |
 | Operational README | [docs/operaciones/README.md](docs/operaciones/README.md) |
 | Operations manual | [docs/operaciones/manual.md](docs/operaciones/manual.md) |
