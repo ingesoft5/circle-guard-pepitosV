@@ -2,6 +2,8 @@
 
 Registro de imágenes de un ambiente. Declara un repositorio ECR por servicio, con escaneo al hacer push y una política de ciclo de vida que expira imágenes antiguas, para no duplicar configuración entre `dev`, `stage` y `prod`.
 
+**Uso actual:** el pipeline publica las imágenes en Nexus y los clústeres las descargan de `tools:5000` por el peering. Los repositorios ECR existen en los tres ambientes, pero están vacíos. Ver [`docs/arquitectura/infraestructura.md`](../../../../docs/arquitectura/infraestructura.md#recursos-sin-consumidor).
+
 ## Qué crea
 
 - Un `aws_ecr_repository` por cada nombre en `repository_names`, con nombre `<name_prefix>/<servicio>`.

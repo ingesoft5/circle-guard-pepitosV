@@ -38,6 +38,19 @@ abiertos son estos:
 - promotion, `HealthStatusService` líneas 37 y 189, `java:S2229`: `updateStatus` y
   `resolveStatus` se invocan desde la misma clase y su `@Transactional` no aplica.
 
+## Integración y E2E
+
+Las pruebas de integración (`./gradlew integrationTest`) tienen código en `auth`, `promotion` y
+`gateway`, y levantan PostgreSQL, Neo4j o Redis reales con Testcontainers. Jenkins las corre en un
+carril propio cuando cambia alguno de esos servicios o `form`, y en cada promoción.
+
+Las pruebas E2E con Playwright (`tests/e2e-playwright/`) cubren tres flujos contra un ambiente
+desplegado: login válido e inválido, envío del cuestionario de salud, y aprobación de un QR válido
+con rechazo de uno alterado. Corren dos veces por release: contra stage con el RC, como check
+obligatorio del PR de promoción, y contra dev con la versión estable, antes de pasar a stage. La
+`0.7.0` llegó a prod, así que superó las dos corridas: el pipeline solo despliega en stage si la E2E
+de dev pasa. El reporte JUnit y el HTML de cada corrida quedan archivados en el build de Jenkins.
+
 ## Locust
 
 Objetivos y corrida en `tests/performance-locust/OBJETIVOS.md`. Locust 2.32.4, headless,

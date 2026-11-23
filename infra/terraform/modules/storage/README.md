@@ -1,6 +1,6 @@
 # Módulo `storage`
 
-Almacenamiento de objetos de un ambiente: un bucket S3 para los adjuntos del `file-service` y respaldos. Versionado, cifrado y bloqueo de acceso público quedan declarados una vez y se reutilizan en `dev`, `stage` y `prod` con distintos valores.
+Almacenamiento de objetos de un ambiente: un bucket S3 pensado para los adjuntos del `file-service` y respaldos. Versionado, cifrado y bloqueo de acceso público quedan declarados una vez y se reutilizan en `dev`, `stage` y `prod` con distintos valores.
 
 ## Qué crea
 
@@ -28,6 +28,8 @@ Almacenamiento de objetos de un ambiente: un bucket S3 para los adjuntos del `fi
 | `bucket_domain_name` | Endpoint regional del bucket. |
 
 ## Notas
+
+- **Uso actual:** el bucket existe en los tres ambientes, pero todavía nadie lo usa. `file-service` no tiene cliente S3 y guarda los archivos en `/app/uploads` del pod. Ver [`docs/arquitectura/infraestructura.md`](../../../../docs/arquitectura/infraestructura.md#recursos-sin-consumidor).
 
 - El bucket es privado por diseño; la aplicación accede con su rol IAM, no con credenciales en el repositorio.
 - `force_destroy = true` solo en `dev` para que `terraform destroy` no falle; en `stage` y `prod` se conserva el contenido.
