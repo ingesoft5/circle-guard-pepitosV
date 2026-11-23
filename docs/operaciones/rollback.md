@@ -32,7 +32,9 @@ Helm vuelve solo a la revisión anterior y el build queda `FAILED` con notificac
 
 El job espera a que todos los rollouts terminen (`--wait`) y corre el smoke test por el Ingress.
 La descripción del build queda como `stage: 0.6.0 -> revision 7 (0.5.0) by <usuario>`, y el log
-termina en `ROLLBACK OK` o `ROLLBACK FAILED`.
+termina en `ROLLBACK OK` o `ROLLBACK FAILED`. El resultado queda en el registro de despliegues
+(HU-51), con quien lanzó el job como aprobador, o quien aprobó en prod
+([`trazabilidad.md`](../release-notes/trazabilidad.md)).
 
 ### A mano, si Jenkins no está disponible
 
