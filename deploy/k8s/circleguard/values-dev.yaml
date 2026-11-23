@@ -13,3 +13,8 @@ services:
     config:
       QR_EXPIRATION: "120000"
       CIRCLEGUARD_FEATURES_QR_DIAGNOSTICS: "true"
+# The k3s node has no ExternalIP, so deployK8s cannot find the public name. The Elastic IP is
+# fixed in Terraform (docs/arquitectura/infraestructura.md).
+ingress:
+  tls:
+    dnsName: 52.204.64.188.sslip.io
