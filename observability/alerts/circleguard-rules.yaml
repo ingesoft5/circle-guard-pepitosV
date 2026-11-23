@@ -99,3 +99,21 @@ spec:
               El circuit breaker {{ $labels.name }} está abierto desde hace más de 1 minuto: la
               dependencia falla y el gateway niega todas las entradas. Revisa Redis con
               kubectl -n {{ $labels.namespace }} get pods -l app.kubernetes.io/name=redis.
+
+    - name: circleguard.delivery
+      rules:
+        - alert: CanaryFailed
+          # Flagger (deploy/k8s/scripts/install-flagger.sh) reports 0 running, 1 promoted and
+          # 2 failed per Canary. A failed analysis sent all the traffic back to the primary, so
+          # the new version is deployed but serves nothing until the next deploy promotes one.
+          expr: max by (namespace, name) (flagger_canary_status{namespace=~"circleguard-.+"}) == 2
+          for: 1m
+          labels:
+            severity: warning
+            project: circleguard
+          annotations:
+            summary: "El canary de {{ $labels.name }} falló en {{ $labels.namespace }}"
+            description: >-
+              Flagger devolvió todo el tráfico a {{ $labels.name }}-primary: la versión nueva no
+              pasó el análisis de éxito o latencia. Revisa kubectl -n {{ $labels.namespace }}
+              describe canary {{ $labels.name }}.

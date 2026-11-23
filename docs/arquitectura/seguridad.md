@@ -94,7 +94,8 @@ Resultados de la última corrida en [`../operaciones/informe-pruebas.md`](../ope
 | Sin NetworkPolicy | Un pod comprometido alcanza a cualquier otro del namespace | Pendiente |
 | Cualquier pod del nodo puede usar el rol de IAM | Un pod comprometido lee o borra los archivos del bucket | La política se limita al bucket del ambiente; el bucket es versionado |
 | `file-service` no exige autenticación | Cualquiera que llegue a `/svc/file/` sube o descarga si conoce el nombre | Pendiente: validar el JWT como los demás servicios |
-| Tráfico interno sin cifrar (Kafka `PLAINTEXT`, `LDAP_TLS=false`) | Lectura del tráfico dentro del nodo | Aceptado: un solo nodo, sin red compartida |
+| Tráfico interno sin cifrar (Kafka `PLAINTEXT`, `LDAP_TLS=false`) | Lectura del tráfico dentro del nodo | Entre servicios, mTLS con Linkerd en `dev` ([`service-mesh.md`](service-mesh.md)); el middleware sigue sin cifrar, aceptado: un solo nodo |
+| Sin políticas de autorización en la malla | Cualquier pod de la malla llama a cualquier servicio | Pendiente: `AuthorizationPolicy` por ServiceAccount |
 | Jenkins y SonarQube en HTTP | Credenciales en claro hacia CI | Proxy TLS opcional en `infra/compose/ci/docker-compose.tls.yml`, no activado |
 | Lockfile de `mobile/` con 1 CRITICAL y 74 HIGH | Dependencias de build vulnerables | No están en las imágenes publicadas; pendiente de actualizar |
 | El cliente web no envía CSP, Permissions-Policy ni COEP | Avisos `WARN` de ZAP | Pendiente en el nginx del cliente |

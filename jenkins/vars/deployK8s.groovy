@@ -16,6 +16,9 @@
  * After the rollout it applies the Grafana dashboards of observability/grafana (HU-40) and the
  * alert rules of observability/alerts (HU-41).
  *
+ * When the namespace has a Flagger Canary (canary.enabled, docs/arquitectura/service-mesh.md) it
+ * waits for the analysis of gateway with deploy/k8s/scripts/wait-canary.sh before the smoke test.
+ *
  * HU-51: every call is recorded with recordDeployment, success or failure (GitHub Deployment and
  * a row in registro-ambientes.md), and the Helm revision carries the same data in its
  * description (helm history). approver says who approved it; record: false leaves the record to
@@ -99,6 +102,15 @@ def rollout(String environment, String version, String timeout, String descripti
                 '''
                 error("deployK8s: rollout of ${version} to ${environment} did not finish in ${timeout}; " +
                         'Helm restored the previous revision')
+            }
+            // Service mesh: with a Flagger Canary (dev for now) the new gateway only takes traffic
+            // after the analysis passes. Helm has already finished, so a failure here leaves the
+            // previous gateway serving instead of restoring the Helm revision.
+            try {
+                sh 'deploy/k8s/scripts/wait-canary.sh "$DEPLOY_NAMESPACE" gateway 900'
+            } catch (err) {
+                error("deployK8s: the canary analysis of gateway ${version} failed in ${environment}; " +
+                        'Flagger kept the previous version serving')
             }
             // Dashboards (HU-40) and alert rules (HU-41) as code: Grafana and Prometheus run in
             // the monitoring namespace of the same cluster. A cluster without the monitoring stack
