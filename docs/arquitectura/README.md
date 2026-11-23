@@ -11,6 +11,7 @@ versión `0.7.0` desplegada en `dev`, `stage` y `prod`. El resultado de esa comp
 | Kubernetes (k3s y chart de Helm) | [`kubernetes.md`](kubernetes.md) |
 | Observabilidad | [`observabilidad.md`](observabilidad.md) |
 | Seguridad | [`seguridad.md`](seguridad.md) |
+| Service mesh (Linkerd y canary con Flagger) | [`service-mesh.md`](service-mesh.md) |
 | Patrones de diseño | [`../patrones/existentes.md`](../patrones/existentes.md) |
 | Revisión cruzada con lo desplegado | [`coherencia.md`](coherencia.md) |
 

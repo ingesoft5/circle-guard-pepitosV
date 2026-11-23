@@ -22,6 +22,14 @@ metrics:
     path: /actuator/prometheus
     interval: 30s
 
+# Service mesh (Linkerd, deploy/k8s/scripts/install-linkerd.sh). Only the application
+# workloads (services below) get the proxy: calls between them use mTLS with one identity per
+# ServiceAccount. The middleware stays outside the mesh, so meshed pods reach it without the
+# proxy on these ports. Without Linkerd in the cluster the annotation does nothing.
+mesh:
+  enabled: false
+  skipOutboundPorts: "389,4318,5432,6379,7687,9092"
+
 ingress:
   enabled: true
   className: traefik

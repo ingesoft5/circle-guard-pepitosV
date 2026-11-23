@@ -1,0 +1,38 @@
+# Values of linkerd-viz, the Linkerd dashboard (install-linkerd-viz.sh). It reads the cluster's
+# kube-prometheus-stack, which scrapes the proxies through the PodMonitors of the control plane,
+# so the extension's own Prometheus is not installed.
+prometheus:
+  enabled: false
+prometheusUrl: http://kube-prometheus-stack-prometheus.monitoring:9090/prometheus
+
+dashboard:
+  # The dashboard rejects any Host it does not know (DNS rebinding protection). Besides the
+  # defaults, allow the Ingress name linkerd.<node-ip>.sslip.io.
+  enforcedHostRegexp: '^(localhost|127\.0\.0\.1|web\.linkerd-viz\.svc(\.cluster\.local)?|linkerd\.[0-9.]+\.sslip\.io)(:[0-9]+)?$'
+  resources:
+    cpu:
+      request: 10m
+    memory:
+      request: 24Mi
+      limit: 96Mi
+metricsAPI:
+  resources:
+    cpu:
+      request: 10m
+    memory:
+      request: 32Mi
+      limit: 128Mi
+tap:
+  resources:
+    cpu:
+      request: 10m
+    memory:
+      request: 32Mi
+      limit: 128Mi
+tapInjector:
+  resources:
+    cpu:
+      request: 10m
+    memory:
+      request: 16Mi
+      limit: 64Mi
