@@ -4,6 +4,12 @@ Todas las versiones de CircleGuard. Este archivo lo genera el pipeline de Jenkin
 los Conventional Commits (HU-22): no se edita a mano.
 Esquema de versiones: [docs/release-notes/etiquetado.md](docs/release-notes/etiquetado.md).
 
+## [0.10.0](https://github.com/ingesoft5/circle-guard-pepitosV/compare/v0.9.0...v0.10.0) (2026-11-23)
+
+### Features
+
+- **k8s:** add Chaos Mesh with three resilience experiments in dev ([#171](https://github.com/ingesoft5/circle-guard-pepitosV/pull/171)) ([d487dcb](https://github.com/ingesoft5/circle-guard-pepitosV/commit/d487dcb31d12beae97403f0adb75818f8e135383))
+
 ## [0.9.0](https://github.com/ingesoft5/circle-guard-pepitosV/compare/v0.8.0...v0.9.0) (2026-11-23)
 
 ### Features
