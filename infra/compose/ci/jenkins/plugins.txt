@@ -14,3 +14,4 @@ ssh-agent
 junit
 coverage
 matrix-auth
+role-strategy

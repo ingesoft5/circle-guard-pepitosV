@@ -9,9 +9,12 @@ El detalle de cada pieza está en:
 - [infra/cloud/aws/README.md](../../infra/cloud/aws/README.md): máquinas, Elastic IP y operación diaria.
 - [infra/compose/ci/README.md](../../infra/compose/ci/README.md): stack de CI, costos y diagnóstico.
 - [infra/security/security-groups.md](../../infra/security/security-groups.md): qué puerto se expone y desde dónde.
+- [manual.md](manual.md): manual de operaciones para incidentes comunes y rotación de secretos.
 - [jenkins-pipeline.md](jenkins-pipeline.md): job multibranch, webhook, release y rollback.
 - [rollback.md](rollback.md): plan de rollback en Kubernetes.
 - [observability.md](observability.md): Prometheus, Grafana y Alertmanager en el clúster (HU-26 → HU-39/40/41).
+- [../costos/README.md](../costos/README.md): estimación y costo real de la infraestructura.
+- [../executive-summary.md](../executive-summary.md): resumen ejecutivo en inglés.
 - [../release-notes/etiquetado.md](../release-notes/etiquetado.md): cómo se calcula la versión.
 - [../release-notes/politica-cambios.md](../release-notes/politica-cambios.md): quién aprueba cada ambiente.
 
@@ -273,7 +276,7 @@ sudo CI_ROLE=jenkins \
 
 El rol y las direcciones quedan guardados en el `.env`; las siguientes ejecuciones son solo `sudo ./infra/bootstrap/bootstrap-all.sh`.
 
-En el host `jenkins`, el bootstrap agrega el registro de `tools` a `insecure-registries` de Docker, porque Nexus sirve HTTP. En ambos hosts crea un swap de 4 GB (`ensure-swap.sh`). En `tools` además programa `nexus-retention.sh` (timer diario de systemd): conserva todas las versiones estables, que son las que usa el rollback, y los RC ya promovidos, y de las demás prerelease deja las 5 más recientes por imagen.
+En el host `jenkins`, el bootstrap agrega el registro de `tools` a `insecure-registries` de Docker, porque Nexus sirve HTTP. En ambos hosts crea un swap de 4 GB (`ensure-swap.sh`). En `tools` además programa `nexus-retention.sh` (timer diario de systemd): conserva todas las versiones estables, que son las que usa el rollback, y los RC ya promovidos, y de las demás prerelease deja las 5 más recientes por imagen. Después ejecuta, en orden, tres tareas de Nexus: *Cleanup unused docker blobs*, *Docker - Delete unused manifests and images* (sobre `docker-hosted`) y *Admin - Compact blob store default*. Borrar una etiqueta no libera disco por sí solo: sin la GC y la compactación el disco de `tools` llegó al 96 % y el Elasticsearch de SonarQube pasó a solo lectura, con lo que fallaba todo análisis. Las dos últimas tareas se crean una vez en *Settings → System → Tasks* (programación manual); si faltan, el script lo avisa.
 
 Responden:
 

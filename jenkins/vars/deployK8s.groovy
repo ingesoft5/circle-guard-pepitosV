@@ -71,14 +71,23 @@ def rollout(String environment, String version, String timeout, String descripti
         withCredentials([file(credentialsId: "kubeconfig-${environment}", variable: 'KUBECONFIG')]) {
             try {
                 sh '''
+                    deploy/k8s/scripts/install-cert-manager.sh
                     deploy/k8s/scripts/apply-secrets.sh "$DEPLOY_ENV"
+                    dns="$(deploy/k8s/scripts/node-external-ip.sh | tr -d '[:space:]')"
+                    set --
+                    if [ -n "$dns" ]; then
+                      set -- --set "ingress.tls.dnsName=${dns}.sslip.io"
+                    fi
                     helm upgrade --install circleguard deploy/k8s/circleguard \
                       --namespace "$DEPLOY_NAMESPACE" --create-namespace \
                       -f "deploy/k8s/circleguard/values-$DEPLOY_ENV.yaml" \
                       --set image.registry="$NEXUS_REGISTRY" \
                       --set image.tag="$DEPLOY_VERSION" \
                       --description "$DEPLOY_DESCRIPTION" \
+                      "$@" \
                       --atomic --wait --timeout "$DEPLOY_TIMEOUT"
+                    kubectl -n "$DEPLOY_NAMESPACE" wait certificate/circleguard-tls \
+                      --for=condition=Ready --timeout=180s
                     kubectl -n "$DEPLOY_NAMESPACE" get pods -o wide
                     helm -n "$DEPLOY_NAMESPACE" history circleguard --max 5
                 '''
@@ -99,6 +108,7 @@ def rollout(String environment, String version, String timeout, String descripti
                     message: 'deployK8s: the Grafana dashboards or the alert rules were not applied') {
                 sh '''
                     if kubectl get namespace monitoring >/dev/null 2>&1; then
+                      kubectl apply -f observability/tls/monitoring-certificate.yaml
                       kubectl apply -k observability/grafana
                       kubectl apply -k observability/alerts
                     else

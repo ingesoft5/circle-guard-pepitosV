@@ -30,8 +30,8 @@ readonly CI_KEY_NAME="${CI_KEY_NAME:?Define CI_KEY_NAME}"
 export AWS_DEFAULT_REGION="${AWS_REGION}"
 
 # Puertos abiertos a ADMIN_CIDR en cada host.
-ci_ports=(22 8080)
-tools_ports=(22 9000 8081 5000)
+ci_ports=(22 8080 8443)
+tools_ports=(22 8443 9000 8081 5000)
 
 resolve_root_device_name() {
   local ami="$1"
@@ -178,6 +178,8 @@ main() {
   # The agents share circleguard-ci-sg, so they reach SonarQube and Nexus like Jenkins does, and
   # connect to the controller (WebSocket on 8080) through this self reference.
   ensure_rule "${ci_sg}" 8080 --source-group "${ci_sg}"
+  # Gradle build cache node on the CI host, shared by the workers.
+  ensure_rule "${ci_sg}" 5071 --source-group "${ci_sg}"
 
   ci_id="$(ensure_instance "${CI_INSTANCE_NAME}" "${ami}" "${ci_sg}")"
   [[ "${ci_id}" == i-* ]] || die "No se pudo crear la instancia ${CI_INSTANCE_NAME}"

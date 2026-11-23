@@ -1,0 +1,7 @@
+# HTTPS entry for one tool. The plain port stays open for the pipeline.
+# CI: TLS_UPSTREAM=jenkins:8080. Tools: TLS_UPSTREAM=sonarqube:9000.
+# Grafana is not here; it is served by the cluster Ingress.
+:443 {
+	tls internal
+	reverse_proxy {$TLS_UPSTREAM:jenkins:8080}
+}

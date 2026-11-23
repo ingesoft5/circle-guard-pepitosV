@@ -16,3 +16,11 @@ ignore if {
 	some name in writable_root
 	contains(input.Message, sprintf("Container '%s' of", [name]))
 }
+
+# The deployer is the namespace account that installs the release. It may update
+# services, ingresses and namespaced roles. It cannot grant cluster-wide rights.
+# The viewer role does not match. Review date: 2027-02-17.
+ignore if {
+	input.AVDID in {"AVD-KSV-0050", "AVD-KSV-0056"}
+	contains(input.Message, "Role 'circleguard-deployer'")
+}

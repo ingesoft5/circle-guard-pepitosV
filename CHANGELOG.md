@@ -4,6 +4,18 @@ Todas las versiones de CircleGuard. Este archivo lo genera el pipeline de Jenkin
 los Conventional Commits (HU-22): no se edita a mano.
 Esquema de versiones: [docs/release-notes/etiquetado.md](docs/release-notes/etiquetado.md).
 
+## [0.7.0](https://github.com/ingesoft5/circle-guard-pepitosV/compare/v0.6.0...v0.7.0) (2026-11-22)
+
+### Features
+
+- **infra:** add two jenkins build workers ([#123](https://github.com/ingesoft5/circle-guard-pepitosV/pull/123)) ([badecab](https://github.com/ingesoft5/circle-guard-pepitosV/commit/badecaba7281acd64917474be8eb82f5d6e1d2a5))
+
+### Performance
+
+- **jenkins:** reuse the gradle daemon on the workers ([#125](https://github.com/ingesoft5/circle-guard-pepitosV/pull/125)) ([b1291d8](https://github.com/ingesoft5/circle-guard-pepitosV/commit/b1291d85d0ec61b2804add5e496de782d7330758))
+- **infra:** share a gradle build cache between the ci workers ([#125](https://github.com/ingesoft5/circle-guard-pepitosV/pull/125)) ([9debec2](https://github.com/ingesoft5/circle-guard-pepitosV/commit/9debec2b370e2a3270ac79febfc3d33714f7ca59))
+- **repo:** enable the gradle build cache and parallel projects ([#123](https://github.com/ingesoft5/circle-guard-pepitosV/pull/123)) ([2038475](https://github.com/ingesoft5/circle-guard-pepitosV/commit/20384757447f07b4be3c8d68fea195c1c807fdd6))
+
 ## [0.6.0](https://github.com/ingesoft5/circle-guard-pepitosV/compare/v0.5.0...v0.6.0) (2026-11-22)
 
 ### Features

@@ -1,0 +1,20 @@
+{{- if and .Values.ingress.enabled .Values.ingress.tls.enabled }}
+{{- $host := .Values.ingress.host | default .Values.ingress.tls.dnsName | default (printf "circleguard-%s.local" .Values.environment) }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: circleguard-tls
+  labels:
+    {{- include "circleguard.labels" (dict "root" . "name" "circleguard") | nindent 4 }}
+spec:
+  secretName: {{ .Values.ingress.tls.secretName }}
+  issuerRef:
+    name: {{ .Values.ingress.tls.issuer }}
+    kind: ClusterIssuer
+  commonName: {{ $host | quote }}
+  dnsNames:
+    - {{ $host | quote }}
+    {{- if and .Values.ingress.tls.dnsName (ne .Values.ingress.tls.dnsName $host) }}
+    - {{ .Values.ingress.tls.dnsName | quote }}
+    {{- end }}
+{{- end }}

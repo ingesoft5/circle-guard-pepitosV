@@ -43,6 +43,7 @@ services:
       NEXUS_CI_USER: ${NEXUS_CI_USER:-ci-publisher}
       NEXUS_CI_PASSWORD: ${NEXUS_CI_PASSWORD}
       SONAR_TOKEN: ${SONAR_TOKEN}
+      GRADLE_BUILD_CACHE_URL: ${GRADLE_BUILD_CACHE_URL:-}
     group_add:
       - "${DOCKER_GID:-0}"
     volumes:
@@ -133,6 +134,25 @@ services:
       retries: 30
       start_period: 60s
 
+  # Gradle build cache node (jenkins host): the workers share compilation and test results, so a
+  # lane reuses what the other worker already built. Started by bootstrap-jenkins.sh.
+  gradle-cache:
+    image: gradle/build-cache-node:21.2
+    container_name: ${CI_PROJECT:-circleguard-ci}-gradle-cache
+    restart: unless-stopped
+    # The node requires a writable config file, so the versioned one is copied in at each start.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - mkdir -p /data/conf && cp /config/config.yaml /data/conf/config.yaml && exec build-cache-node start --no-warn-anon-cache-write
+    ports:
+      - "${GRADLE_CACHE_PORT:-5071}:5071"
+    mem_limit: ${GRADLE_CACHE_MEM_LIMIT:-1g}
+    volumes:
+      - gradle_cache_node:/data
+      - ./gradle-cache/config.yaml:/config/config.yaml:ro
+    networks:
+      - ci
+
 networks:
   ci:
     name: ${CI_NETWORK:-circleguard-ci-net}
@@ -150,3 +170,5 @@ volumes:
     name: ${CI_PROJECT:-circleguard-ci}-sonar-logs
   nexus_data:
     name: ${CI_PROJECT:-circleguard-ci}-nexus-data
+  gradle_cache_node:
+    name: ${CI_PROJECT:-circleguard-ci}-gradle-cache

@@ -1,0 +1,13 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: monitoring-tls
+  namespace: monitoring
+spec:
+  secretName: monitoring-tls
+  issuerRef:
+    name: circleguard-ca
+    kind: ClusterIssuer
+  commonName: circleguard-monitoring.local
+  dnsNames:
+    - circleguard-monitoring.local

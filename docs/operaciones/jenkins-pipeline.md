@@ -10,7 +10,7 @@ Esta guía cubre la HU-09 (`CGR-32`), la HU-10 (`CGR-33`), la HU-11 (`CGR-34`), 
 - `infra/compose/ci/jenkins/casc.yaml` declara por JCasC el job multibranch `circleguard`, la credencial `github-pat`, la integración con GitHub y la Global Pipeline Library.
 - GitHub Branch Source escanea las ramas y los pull requests del repositorio y crea un build por rama o PR.
 - El `Jenkinsfile` de la raíz importa la Shared Library con `@Library` y usa `detectChangedServices` para calcular qué servicios y si el web client deben procesarse.
-- Jenkins trabaja como controlador y workers (ver [Controlador y workers](#controlador-y-workers)). La etapa `Build, test and package` abre un carril por servicio en los workers: compila (`gradleBuild`), prueba (`runTests`), analiza con Sonar y espera el quality gate (`sonarScan`), y después empaqueta (`dockerBuild`) o publica (`dockerPublish`) la imagen. Todos los carriles corren en paralelo.
+- Jenkins trabaja como controlador y workers (ver [Controlador y workers](#controlador-y-workers)). La etapa `Build, test and package` abre un carril por servicio en los workers: compila (`gradleBuild`), prueba (`runTests`), analiza con Sonar y espera el quality gate (`sonarScan`), y después empaqueta (`dockerBuild`) o publica (`dockerPublish`) la imagen. Todos los carriles corren en paralelo, y a la vez el controlador ejecuta `Static checks` (escaneo de dependencias, validación de la librería, escaneo de IaC y planes de Terraform). La etapa padre, `Checks, build and package`, usa `failFast`: el primer fallo detiene el resto.
 - Si el quality gate de un servicio falla, su carril se detiene antes de empaquetar o publicar la imagen, y el build falla.
 - El web client se empaqueta solo si cambió `mobile/` o si se ejecuta con `BUILD_ALL=true`.
 - `PR size policy` valida los cambios de cada Pull Request antes de compilar: máximo predeterminado de 700 adiciones, 300 eliminaciones y 1000 líneas modificadas; excluye Markdown, `docs/`, lockfiles, build output, generated output e imágenes/PDF. Los tres límites se configuran con `PR_MAX_ADDITIONS`, `PR_MAX_DELETIONS` y `PR_MAX_CHANGED_LINES` en el bloque `environment` del `Jenkinsfile`. Se omite solo para el PR de promoción `release/X.Y.Z` hacia `main`, cuyo pipeline ejecuta la validación completa del candidato.
@@ -373,11 +373,14 @@ Jenkins sigue el patrón controlador y workers, con tres máquinas `m7i-flex.lar
 SonarQube y Nexus siguen en `circleguard-tools`.
 
 - **Un build:** sus carriles (8 servicios, el cliente web y las pruebas de integración) se reparten entre los 4 ejecutores de los workers. Antes corrían en lotes de 3 en una sola máquina, con Sonar en serie después.
+- **Orden de la cola:** los carriles más largos piden worker primero (integración, cliente web, promotion, identity, notification…), para que un carril largo no arranque al final y alargue el build.
+- **Daemon de Gradle:** los workers reutilizan un daemon por ejecutor en lugar de arrancar una JVM en cada llamada (cada carril hace tres). Los helpers usan `JENKINS_NODE_COOKIE=dontKillMe` para que Jenkins no lo mate al terminar el paso, y `gradle.properties` lo apaga tras 30 minutos sin uso.
+- **Caché de Gradle compartida:** el servicio `gradle-cache` (Gradle Build Cache Node, en el host de CI, puerto 5071 solo dentro de `circleguard-ci-sg`) guarda compilaciones y resultados de pruebas. Jenkins publica `GRADLE_BUILD_CACHE_URL` en todos los nodos y `settings.gradle.kts` lo usa como caché remota: lo que compiló o probó un worker lo reutiliza el otro. Solo Jenkins escribe; en un equipo de desarrollo, sin la variable, Gradle usa solo su caché local. Guarda hasta 4 GB y descarta lo menos usado.
 - **Dos a cuatro builds:** cada uno ocupa un ejecutor del controlador y sus carriles se turnan en los workers. Ningún build espera a otro para empezar.
 - Los workers son `EXCLUSIVE`: solo reciben trabajo que pide la etiqueta `worker`. Cada carril hace su propio checkout y no mueve JAR entre máquinas.
 - Los despliegues y Terraform se quedan en el controlador, que es la única IP admitida por los clústeres k3s.
 
-Cada worker usa la misma imagen que el controlador (`infra/compose/ci/jenkins/Dockerfile`), iniciada como agente WebSocket por `infra/compose/ci-agent/docker-compose.yml`. Usa el Docker de su host, confía en Nexus como registro y guarda la caché de Gradle en su propio volumen. Para crear o recrear un worker:
+Cada worker usa la misma imagen que el controlador (`infra/compose/ci/jenkins/Dockerfile`), iniciada como agente WebSocket por `infra/compose/ci-agent/docker-compose.yml`. Usa el Docker de su host, confía en Nexus como registro y guarda las dependencias de Gradle en su propio volumen. Para crear o recrear un worker:
 
 ```bash
 # 1. Instancia (idempotente; CI_AGENT_COUNT define cuántos workers)

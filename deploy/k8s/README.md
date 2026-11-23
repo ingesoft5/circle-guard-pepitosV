@@ -17,8 +17,11 @@ deploy/k8s/
 │       ├── workloads.yaml     # ConfigMap + Deployment/StatefulSet + Service por componente
 │       ├── hpa.yaml
 │       ├── servicemonitor.yaml  # scraping de /actuator/prometheus (HU-39)
-│       └── ingress.yaml
-└── scripts/apply-secrets.sh   # crea el Secret del ambiente sin versionar valores
+│       ├── ingress.yaml
+│       └── rbac.yaml          # deployer y viewer del namespace
+└── scripts/
+    ├── apply-secrets.sh       # crea el Secret del ambiente sin versionar valores
+    └── check-rbac.sh          # kubectl auth can-i del deployer y del viewer
 ```
 
 ## Cómo está organizado

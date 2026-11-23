@@ -1,0 +1,7 @@
+# POST /api/v1/gate/validate with Redis down (status, seconds, body), first attempt and retry
+      1 200 
+     63 200 {"valid":false,"status":"RED","message":"Access Denied: Health status unavailable"}
+# After Redis was restored
+{"valid":true,"status":"GREEN","message":"Welcome to Campus"}
+{"valid":true,"status":"GREEN","message":"Welcome to Campus"}
+{"valid":true,"status":"GREEN","message":"Welcome to Campus"}

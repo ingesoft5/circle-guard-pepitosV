@@ -4,16 +4,18 @@
 
 grafana:
   enabled: true
-  # Published through the cluster's Traefik on the already open port 80, at /grafana, so no
-  # extra port is opened in the security group. Grafana keeps its own login. Prometheus and
-  # Alertmanager are published at /prometheus and /alertmanager behind the Traefik BasicAuth
-  # middleware (monitoring-basic-auth). HU-47 adds TLS.
+  # Published through Traefik. HTTP on the app Ingress redirects to HTTPS.
+  # The certificate is observability/tls/monitoring-certificate.yaml (lab CA).
   ingress:
     enabled: true
     ingressClassName: traefik
     path: /grafana
     pathType: Prefix
     hosts: []
+    annotations:
+      traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    tls:
+      - secretName: monitoring-tls
   grafana.ini:
     server:
       root_url: "%(protocol)s://%(domain)s/grafana/"
@@ -38,7 +40,10 @@ prometheus:
       - /prometheus
     hosts: []
     annotations:
+      traefik.ingress.kubernetes.io/router.entrypoints: websecure
       traefik.ingress.kubernetes.io/router.middlewares: monitoring-basic-auth@kubernetescrd
+    tls:
+      - secretName: monitoring-tls
   prometheusSpec:
     # The external URL needs the /prometheus path: without it, the root redirect goes to
     # /graph, which is not a Prometheus route and falls into the web client's 404.
@@ -71,7 +76,10 @@ alertmanager:
       - /alertmanager
     hosts: []
     annotations:
+      traefik.ingress.kubernetes.io/router.entrypoints: websecure
       traefik.ingress.kubernetes.io/router.middlewares: monitoring-basic-auth@kubernetescrd
+    tls:
+      - secretName: monitoring-tls
   alertmanagerSpec:
     routePrefix: /alertmanager
     # Notifications (HU-41): the whole Alertmanager configuration comes from the
