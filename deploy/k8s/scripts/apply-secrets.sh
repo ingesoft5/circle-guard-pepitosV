@@ -39,6 +39,25 @@ ensure_kubeseal() {
   export PATH="$(dirname "${dest}"):${PATH}"
 }
 
+# The deployment is created by install-sealed-secrets.sh, but an existing
+# deployment can still be rolling out or have no endpoints. kubeseal talks to
+# its Service, so wait for both before asking for the certificate.
+wait_for_sealed_secrets() {
+  local timeout="${SEALED_SECRETS_TIMEOUT:-180}" deadline=$((SECONDS + timeout)) endpoints
+  echo "apply-secrets: waiting for sealed-secrets-controller to be ready"
+  while (( SECONDS < deadline )); do
+    if kubectl --request-timeout=10s -n kube-system rollout status \
+        deployment/sealed-secrets-controller --timeout=10s >/dev/null 2>&1; then
+      endpoints="$(kubectl --request-timeout=10s -n kube-system get endpoints \
+        sealed-secrets-controller -o jsonpath='{.subsets[*].addresses[*].ip}' 2>/dev/null || true)"
+      [[ -n "${endpoints}" ]] && return 0
+    fi
+    sleep 2
+  done
+  kubectl -n kube-system get pods,deploy,endpoints -l name=sealed-secrets-controller >&2 || true
+  die "sealed-secrets-controller has no ready endpoints after ${timeout}s; kubeseal cannot fetch its certificate"
+}
+
 generate_env_file() {
   local example="$1" target="$2" line
   [[ -r "${example}" ]] || die "Template not found: ${example}"
@@ -76,17 +95,24 @@ main() {
     bash "${REPO_ROOT}/deploy/k8s/scripts/install-sealed-secrets.sh"
   fi
   ensure_kubeseal
+  wait_for_sealed_secrets
 
-  local plain sealed
+  local plain sealed attempt
   plain="$(mktemp)"
   sealed="$(mktemp)"
   # shellcheck disable=SC2064
   trap "rm -f '${TMP_FILE}' '${plain}' '${sealed}'" EXIT
   kubectl -n "${namespace}" create secret generic "${SECRET_NAME}" --from-env-file="${TMP_FILE}" \
     --dry-run=client -o yaml > "${plain}"
-  kubeseal --controller-name sealed-secrets-controller --controller-namespace kube-system \
-    --namespace "${namespace}" --scope namespace-wide --format yaml \
-    < "${plain}" > "${sealed}"
+  for attempt in $(seq 1 10); do
+    if kubeseal --controller-name sealed-secrets-controller --controller-namespace kube-system \
+        --namespace "${namespace}" --scope namespace-wide --format yaml \
+        < "${plain}" > "${sealed}"; then
+      break
+    fi
+    [[ "${attempt}" -lt 10 ]] || die "kubeseal could not fetch the sealed-secrets certificate"
+    sleep 2
+  done
   # A Secret created earlier by kubectl is not owned by the controller. Drop it so the
   # SealedSecret can recreate the same keys. The env file is unchanged, so the values are too.
   if kubectl -n "${namespace}" get secret "${SECRET_NAME}" >/dev/null 2>&1 \
