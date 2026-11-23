@@ -37,3 +37,4 @@ El mismo registro está en GitHub, en [Deployments](https://github.com/ingesoft5
 | 2026-11-23 11:02 UTC | stage | 0.10.1-rc.46ed25b | release candidate | automatic: PR #178 by Jo-Ssua | éxito | [circleguard/PR-178 #2](http://184.196.87.200:8080/job/circleguard/job/PR-178/2/) |
 | 2026-11-23 11:18 UTC | stage | 0.10.1-rc.46ed25b | release candidate | automatic: PR #178 by Jo-Ssua | éxito | [circleguard/PR-178 #3](http://184.196.87.200:8080/job/circleguard/job/PR-178/3/) |
 | 2026-11-23 11:26 UTC | dev | 0.10.1 | despliegue | automatic: merge by Johan Stiven Suarez Perdomo | fallo | [circleguard/main #22](http://184.196.87.200:8080/job/circleguard/job/main/22/) |
+| 2026-11-23 11:44 UTC | dev | 0.10.1 | despliegue | automatic: merge by Johan Stiven Suarez Perdomo | fallo | [circleguard/main #23](http://184.196.87.200:8080/job/circleguard/job/main/23/) |
