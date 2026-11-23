@@ -1,0 +1,20 @@
+# Hypothesis: with gateway cut off from Redis, the redisHealth circuit opens, gateway answers
+# "health status unavailable" (fail closed) without restarting, CircuitBreakerOpen reaches
+# Discord, and the circuit closes on its own once the partition ends.
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: gateway-redis-partition
+spec:
+  action: partition
+  mode: all
+  direction: to
+  duration: 4m
+  selector:
+    labelSelectors: {app.kubernetes.io/instance: circleguard}
+    expressionSelectors:
+      - {key: app.kubernetes.io/name, operator: In, values: [gateway, gateway-primary]}
+  target:
+    mode: all
+    selector:
+      labelSelectors: {app.kubernetes.io/name: redis, app.kubernetes.io/instance: circleguard}

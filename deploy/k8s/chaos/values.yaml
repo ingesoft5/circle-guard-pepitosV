@@ -1,0 +1,19 @@
+# Chaos Mesh 2.7.3 for the single-node k3s clusters (install-chaos-mesh.sh). 2.7.3 fixes the
+# "Chaotic Deputy" CVEs (CVE-2025-59358 to 59361); 2.8 lists Kubernetes 1.35+ only.
+chaosDaemon:
+  # k3s runs its own containerd; with the default socket network and stress chaos do nothing.
+  runtime: containerd
+  socketPath: /run/k3s/containerd/containerd.sock
+  resources: {requests: {cpu: 10m, memory: 32Mi}, limits: {memory: 128Mi}}
+controllerManager:
+  replicaCount: 1
+  leaderElection: {enabled: false}
+  # Experiments only run in namespaces annotated chaos-mesh.org/inject=enabled.
+  enableFilterNamespace: true
+  resources: {requests: {cpu: 10m, memory: 48Mi}, limits: {memory: 256Mi}}
+# No dashboard: experiments are versioned manifests, and results are read in Grafana.
+dashboard:
+  create: false
+# Only DNSChaos needs it, and its default request is 100m of CPU.
+dnsServer:
+  create: false
