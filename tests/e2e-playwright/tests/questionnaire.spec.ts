@@ -22,13 +22,19 @@ test.describe('Health questionnaire', () => {
         response.url().includes('/svc/form/api/v1/surveys') &&
         response.request().method() === 'POST',
     );
-    const confirmation = page.waitForEvent('dialog');
+    // The client calls alert() right after router.replace(). Accept it inside the event,
+    // as soon as it opens: accepting it later, after other awaits, sometimes hung until the
+    // test timeout on stage.
+    const confirmation = new Promise<string>((resolve) => {
+      page.once('dialog', (dialog) => {
+        resolve(dialog.message());
+        void dialog.accept();
+      });
+    });
     await visibleText(page, 'SUBMIT REPORT').click();
 
     expect((await submission).status(), 'survey submission').toBe(200);
-    const alert = await confirmation;
-    expect(alert.message()).toContain('Thank you for your report');
-    await alert.accept();
+    expect(await confirmation).toContain('Thank you for your report');
 
     await expect(homeScreen(page)).toBeVisible();
   });

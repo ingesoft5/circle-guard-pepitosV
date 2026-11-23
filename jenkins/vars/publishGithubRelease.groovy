@@ -6,6 +6,11 @@
  * Idempotente: si el release del tag ya existe (re-ejecución), actualiza sus notas.
  * El tag debe existir en GitHub (lo publica pushReleaseTag). Usa la credencial
  * github-pat, que necesita permiso de escritura sobre el repositorio.
+ *
+ * latest: false publica sin marcarlo como "Latest" (el job de auditoría de HU-51 lo usa al
+ * completar versiones anteriores). Por defecto es true.
+ *
+ *   Map found = publishGithubRelease.existing(version: '1.3.0')  // [found: true, body: '...']
  */
 def call(Map config = [:]) {
     String version = (config.version ?: '').toString().trim()
@@ -17,7 +22,8 @@ def call(Map config = [:]) {
     String api = config.apiUrl ?: (env.GITHUB_API_URL ?: 'https://api.github.com')
     String credentialsId = config.credentialsId ?: 'github-pat'
 
-    writeFile file: '.release-payload.json', text: payload(tag, withoutTitle(config.notes ?: ''))
+    boolean latest = config.latest != false
+    writeFile file: '.release-payload.json', text: payload(tag, withoutTitle(config.notes ?: ''), latest)
 
     withEnv(["GH_REPO_API=${api}/repos/${repo}", "RELEASE_TAG=${tag}"]) {
         withCredentials([usernamePassword(credentialsId: credentialsId,
@@ -61,6 +67,39 @@ def call(Map config = [:]) {
     }
 }
 
+/** El GitHub Release del tag vMAJOR.MINOR.PATCH: [found: false] si no existe, o [found: true, body: notas]. */
+def existing(Map config = [:]) {
+    String version = (config.version ?: '').toString().trim()
+    if (!semver.isVersion(version)) {
+        error("publishGithubRelease.existing: '${version}' no es una versión MAJOR.MINOR.PATCH")
+    }
+    String repo = config.repository ?: releaseNotes.repository()
+    String api = config.apiUrl ?: (env.GITHUB_API_URL ?: 'https://api.github.com')
+    String credentialsId = config.credentialsId ?: 'github-pat'
+
+    withEnv(["GH_REPO_API=${api}/repos/${repo}", "RELEASE_TAG=v${version}"]) {
+        withCredentials([usernamePassword(credentialsId: credentialsId,
+                usernameVariable: 'GH_USER', passwordVariable: 'GH_TOKEN')]) {
+            try {
+                String status = sh(script: '''
+                    curl -sS -o .release-existing.json -w '%{http_code}' \
+                      -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+                      "$GH_REPO_API/releases/tags/$RELEASE_TAG"
+                ''', returnStdout: true).trim()
+                if (status == '404') {
+                    return [found: false, body: '']
+                }
+                if (status != '200') {
+                    error("publishGithubRelease.existing: GitHub respondió HTTP ${status} al consultar v${version}")
+                }
+                return [found: true, body: jsonField(readFile('.release-existing.json'), 'body')]
+            } finally {
+                sh 'rm -f .release-existing.json'
+            }
+        }
+    }
+}
+
 /** El GitHub Release ya muestra la versión como título: se quita el "## ..." de la sección. */
 @NonCPS
 String withoutTitle(String notes) {
@@ -72,9 +111,9 @@ String withoutTitle(String notes) {
 }
 
 @NonCPS
-String payload(String tag, String body) {
+String payload(String tag, String body, boolean latest = true) {
     return groovy.json.JsonOutput.toJson([
-        tag_name: tag, name: tag, body: body, draft: false, prerelease: false, make_latest: 'true'
+        tag_name: tag, name: tag, body: body, draft: false, prerelease: false, make_latest: latest ? 'true' : 'false'
     ])
 }
 

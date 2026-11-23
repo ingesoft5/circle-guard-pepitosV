@@ -23,6 +23,8 @@ export default defineConfig({
   ],
   use: {
     baseURL,
+    // The lab CA is not a public CA. HTTPS checks still run; the certificate is not rejected.
+    ignoreHTTPSErrors: baseURL.startsWith('https://'),
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',

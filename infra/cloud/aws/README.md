@@ -1,6 +1,8 @@
 # Máquinas de CircleGuard en AWS
 
-Una máquina para CI (Jenkins, SonarQube y Nexus) y una por ambiente (`dev`, `stage` y `prod`), en la misma VPC y subred. Los Security Groups están en [security-groups.md](../../security/security-groups.md).
+Una máquina para CI (Jenkins, SonarQube y Nexus) y una por ambiente (`dev`, `stage` y `prod`), en la misma VPC y subred.
+
+> Desde la Parte 2, CI son cuatro máquinas (`ci`, `ci-agent-1`, `ci-agent-2` y `tools`) y los ambientes son clústeres k3s creados con Terraform en su propia VPC ([`infra/terraform`](../../terraform/README.md)). Las máquinas de ambiente de este documento (`circleguard-dev`, `-stage`, `-prod`) son las de la Parte 1 y quedan detenidas. Vista completa en [`docs/arquitectura/README.md`](../../../docs/arquitectura/README.md). Los Security Groups están en [security-groups.md](../../security/security-groups.md).
 
 ## Requisitos
 

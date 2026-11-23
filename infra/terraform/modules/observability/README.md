@@ -57,3 +57,7 @@ Observabilidad de un ambiente: por un lado, lo que vive en AWS (log group de Clo
 - El namespace `monitoring` se crea con `--create-namespace`; coordinar con HU-29 para no duplicar namespaces por ambiente.
 
 El `terraform_data` es idempotente: `helm upgrade --install` se puede repetir. Si el nodo, la versión del chart o los valores cambian, Terraform vuelve a ejecutar la instalación. Un cambio solo de contraseña de Grafana no dispara el recurso; se cambia con `helm upgrade` o editando el secreto del namespace.
+
+## Uso actual
+
+Ningún agente envía logs a los log groups de CloudWatch: los logs de los pods van a Loki por Promtail. El tema SNS no tiene suscripción porque `alarm_email` está vacío, así que las alarmas de CPU y de status check cambian de estado en CloudWatch sin avisar a nadie. Las alertas de la aplicación llegan a Discord por Alertmanager. Ver [`docs/arquitectura/observabilidad.md`](../../../../docs/arquitectura/observabilidad.md).

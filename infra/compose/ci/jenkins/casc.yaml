@@ -40,17 +40,20 @@ jenkins:
         # Non-admin account: runs, cancels and inspects builds, cannot approve prod.
         - id: "${JENKINS_DEV_ID}"
           password: "${JENKINS_DEV_PASSWORD}"
-  # Jenkins lets any administrator answer an input, so only the admin account
-  # gets Overall/Administer; every other account is a regular user.
+  # Role-based Strategy. The prod input submitter stays "admin" in the Jenkinsfile.
+  # Only the admin account has Overall/Administer, so a developer cannot approve it.
   authorizationStrategy:
-    globalMatrix:
-      entries:
-        - user:
-            name: "${JENKINS_ADMIN_ID}"
+    roleBased:
+      roles:
+        global:
+          - name: "admin"
+            description: "CircleGuard administrators"
             permissions:
               - "Overall/Administer"
-        - group:
-            name: "authenticated"
+            entries:
+              - user: "${JENKINS_ADMIN_ID}"
+          - name: "developer"
+            description: "Builds and reads. Cannot approve production."
             permissions:
               - "Overall/Read"
               - "Job/Build"
@@ -58,6 +61,16 @@ jenkins:
               - "Job/Read"
               - "Job/Workspace"
               - "View/Read"
+            entries:
+              - user: "${JENKINS_DEV_ID}"
+          - name: "approver"
+            description: "Account allowed to approve the production input."
+            permissions:
+              - "Overall/Read"
+              - "Job/Read"
+              - "View/Read"
+            entries:
+              - user: "${JENKINS_ADMIN_ID}"
   globalNodeProperties:
     - envVars:
         env:
@@ -279,6 +292,30 @@ jobs:
               }
             }
             scriptPath('jenkins/rollback.Jenkinsfile')
+            lightweight(true)
+          }
+        }
+      }
+  - script: |
+      pipelineJob('circleguard-release-notes') {
+        description('Checks that every vX.Y.Z tag has its GitHub Release notes and completes the missing ones (HU-51)')
+        // Same parameter as jenkins/release-notes.Jenkinsfile, so a recreated job offers
+        // "Build with Parameters" before its first run.
+        parameters {
+          booleanParam('APPLY', false, 'Crea los releases que faltan y reemplaza las notas distintas. Sin marcar, solo informa.')
+        }
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote {
+                  url("https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}.git")
+                  credentials('github-pat')
+                }
+                branch('*/main')
+              }
+            }
+            scriptPath('jenkins/release-notes.Jenkinsfile')
             lightweight(true)
           }
         }

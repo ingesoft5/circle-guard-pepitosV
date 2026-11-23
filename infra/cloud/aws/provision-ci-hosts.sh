@@ -30,8 +30,8 @@ readonly CI_KEY_NAME="${CI_KEY_NAME:?Define CI_KEY_NAME}"
 export AWS_DEFAULT_REGION="${AWS_REGION}"
 
 # Puertos abiertos a ADMIN_CIDR en cada host.
-ci_ports=(22 8080)
-tools_ports=(22 9000 8081 5000)
+ci_ports=(22 8080 8443)
+tools_ports=(22 8443 9000 8081 5000)
 
 resolve_root_device_name() {
   local ami="$1"

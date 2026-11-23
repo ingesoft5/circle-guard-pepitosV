@@ -18,6 +18,9 @@ def SERVICES = [
 def releaseVersion = null
 // Set by 'Resolve version': SNAPSHOT on dev, release candidate on a dev -> main promotion PR.
 def prereleaseVersion = null
+// HU-51: who approved each deploy, for the deployment record. On main it is the author of the
+// merge commit (who merged the promotion PR); prod uses the 'Approve production' answer.
+def mergeAuthor = null
 
 // PR dev -> main: builds the release candidate that main later promotes to stable.
 def promotionPr = env.CHANGE_ID != null && env.CHANGE_TARGET == 'main' && env.CHANGE_BRANCH == 'dev' && env.CHANGE_FORK == null
@@ -412,7 +415,15 @@ pipeline {
                 }
             }
             steps {
-                deployK8s(environment: 'stage', version: prereleaseVersion)
+                script {
+                    deployK8s(
+                        environment: 'stage',
+                        version: prereleaseVersion,
+                        approver: env.CHANGE_ID ?
+                                "automatic: PR #${env.CHANGE_ID} by ${env.CHANGE_AUTHOR ?: 'unknown'}" :
+                                "automatic: ${env.BRANCH_NAME}"
+                    )
+                }
             }
         }
 
@@ -429,7 +440,7 @@ pipeline {
                     usernameVariable: 'E2E_USERNAME',
                     passwordVariable: 'E2E_PASSWORD'
                 )]) {
-                    withEnv(["E2E_BASE_URL=http://${env.K8S_HOST_STAGE}"]) {
+                    withEnv(["E2E_BASE_URL=https://${env.K8S_HOST_STAGE}"]) {
                         sh 'bash tests/e2e-playwright/run-e2e.sh'
                     }
                 }
@@ -450,6 +461,23 @@ pipeline {
             }
         }
 
+        stage('ZAP baseline on stage') {
+            when {
+                expression {
+                    prereleaseVersion != null &&
+                        (promotionPr || (((env.CHANGE_BRANCH ?: env.BRANCH_NAME) ?: '') ==~ /release\/\d+\.\d+\.\d+/))
+                }
+            }
+            steps {
+                zapBaseline()
+            }
+            post {
+                failure {
+                    script { failedStage = failedStage ?: 'ZAP baseline on stage' }
+                }
+            }
+        }
+
         stage('Release version') {
             when {
                 branch 'main'
@@ -464,6 +492,7 @@ pipeline {
                     }
                     releaseVersion = release.version
                     currentBuild.description = "v${releaseVersion}"
+                    mergeAuthor = sh(script: "git log -1 --format='%an'", returnStdout: true).trim() ?: 'unknown'
                 }
             }
         }
@@ -554,7 +583,7 @@ pipeline {
                 }
             }
             steps {
-                deployK8s(environment: 'dev', version: releaseVersion)
+                deployK8s(environment: 'dev', version: releaseVersion, approver: "automatic: merge by ${mergeAuthor}")
             }
         }
 
@@ -591,7 +620,7 @@ pipeline {
                     usernameVariable: 'E2E_USERNAME',
                     passwordVariable: 'E2E_PASSWORD'
                 )]) {
-                    withEnv(["E2E_BASE_URL=http://${env.K8S_HOST_DEV}"]) {
+                    withEnv(["E2E_BASE_URL=https://${env.K8S_HOST_DEV}"]) {
                         sh 'bash tests/e2e-playwright/run-e2e.sh'
                     }
                 }
@@ -620,7 +649,24 @@ pipeline {
                 }
             }
             steps {
-                deployK8s(environment: 'stage', version: releaseVersion)
+                deployK8s(environment: 'stage', version: releaseVersion, approver: "automatic: merge by ${mergeAuthor}")
+            }
+        }
+
+        stage('ZAP baseline after stage deploy') {
+            when {
+                allOf {
+                    branch 'main'
+                    expression { releaseVersion != null }
+                }
+            }
+            steps {
+                zapBaseline()
+            }
+            post {
+                failure {
+                    script { failedStage = failedStage ?: 'ZAP baseline after stage deploy' }
+                }
             }
         }
 
@@ -691,7 +737,7 @@ pipeline {
                 }
             }
             steps {
-                deployK8s(environment: 'prod', version: releaseVersion)
+                deployK8s(environment: 'prod', version: releaseVersion, approver: env.PROD_APPROVER)
             }
         }
     }

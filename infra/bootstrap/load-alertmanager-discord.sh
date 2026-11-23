@@ -27,7 +27,7 @@ main() {
   local url
   local -a kubectl
 
-  url="$(tr -d '[:space:]')"
+  url="$(tr -d '[:space:]' | sed $'1s/^\xEF\xBB\xBF//')"
   [[ "${url}" =~ ^https://(discord\.com|discordapp\.com)/api/webhooks/[0-9]+/[A-Za-z0-9_-]+$ ]] \
     || die "Expected a Discord webhook URL (https://discord.com/api/webhooks/<id>/<token>) on stdin"
 

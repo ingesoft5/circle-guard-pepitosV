@@ -12,3 +12,8 @@ output "public_ip" {
 output "private_ip" {
   value = aws_instance.this.private_ip
 }
+
+output "node_role_name" {
+  description = "IAM role of the node, used by the pods through IMDSv2."
+  value       = aws_iam_role.node.name
+}

@@ -4,11 +4,14 @@ workload in .Values.services and .Values.middleware. Nothing is exposed with Nod
 enters through the Ingress (ingress.yaml).
 */ -}}
 {{- $root := . -}}
+{{- $canaryOn := eq (include "circleguard.canaryOn" .) "true" -}}
 {{- $workloads := dict -}}
 {{- range $name, $spec := .Values.middleware }}{{ $_ := set $workloads $name $spec }}{{ end -}}
 {{- range $name, $spec := .Values.services }}{{ $_ := set $workloads $name $spec }}{{ end -}}
 {{- range $name, $spec := $workloads }}
 {{- $ctx := dict "root" $root "name" $name "spec" $spec -}}
+{{- /* Application workloads join the Linkerd mesh, with their own ServiceAccount as identity. */ -}}
+{{- $meshed := and $root.Values.mesh.enabled (hasKey $root.Values.services $name) -}}
 {{- $config := dict -}}
 {{- $resources := $spec.resources -}}
 {{- $probes := $spec.probes | default dict -}}
@@ -33,6 +36,18 @@ data:
   {{- range $key, $value := $config }}
   {{ $key }}: {{ tpl ($value | toString) $root | quote }}
   {{- end }}
+{{- if $meshed }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "circleguard.labels" $ctx | nindent 4 }}
+automountServiceAccountToken: false
+{{- end }}
+{{- /* With the canary on, Flagger creates <name>, <name>-primary and <name>-canary (canary.yaml). */ -}}
+{{- if not (and $canaryOn (eq $name $root.Values.canary.service)) }}
 ---
 apiVersion: v1
 kind: Service
@@ -56,6 +71,7 @@ spec:
       port: {{ $extra.port }}
       targetPort: {{ $extra.name }}
     {{- end }}
+{{- end }}
 ---
 apiVersion: apps/v1
 kind: {{ if $spec.storage }}StatefulSet{{ else }}Deployment{{ end }}
@@ -81,10 +97,17 @@ spec:
       annotations:
         # A config change rolls the pods; secrets are read at start, so they roll with a restart.
         checksum/config: {{ toJson $config | sha256sum }}
+        {{- if $meshed }}
+        linkerd.io/inject: enabled
+        config.linkerd.io/skip-outbound-ports: {{ $root.Values.mesh.skipOutboundPorts | quote }}
+        {{- end }}
     spec:
       # Service links inject variables such as KAFKA_PORT that break the Confluent and Neo4j images.
       enableServiceLinks: false
       automountServiceAccountToken: false
+      {{- if $meshed }}
+      serviceAccountName: {{ $name }}
+      {{- end }}
       {{- with $root.Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}

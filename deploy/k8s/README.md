@@ -17,9 +17,36 @@ deploy/k8s/
 │       ├── workloads.yaml     # ConfigMap + Deployment/StatefulSet + Service por componente
 │       ├── hpa.yaml
 │       ├── servicemonitor.yaml  # scraping de /actuator/prometheus (HU-39)
-│       └── ingress.yaml
-└── scripts/apply-secrets.sh   # crea el Secret del ambiente sin versionar valores
+│       ├── ingress.yaml       # HTTP y, con TLS, redirección a HTTPS
+│       ├── certificate.yaml   # certificado de cert-manager (desde 0.8.0)
+│       ├── circuit-dashboard.yaml  # panel del circuito redisHealth para Grafana
+│       ├── canary.yaml        # Canary de gateway y métricas de Linkerd para Flagger
+│       └── rbac.yaml          # deployer y viewer del namespace (desde 0.8.0)
+├── cert-manager/
+│   └── issuers.yaml           # emisores circleguard-ca y letsencrypt (desde 0.8.0)
+├── mesh/                      # Linkerd y Flagger (docs/arquitectura/service-mesh.md)
+│   ├── linkerd-identity.yaml  # trust anchor y emisor de identidad con cert-manager
+│   ├── linkerd-values.yaml
+│   ├── linkerd-viz-values.yaml
+│   ├── linkerd-viz-ingress.yaml  # panel de Linkerd en linkerd.<ip>.sslip.io
+│   ├── flagger-values.yaml
+│   └── loadtester-values.yaml
+└── scripts/
+    ├── apply-secrets.sh       # crea el Secret del ambiente sin versionar valores
+    ├── install-sealed-secrets.sh
+    ├── install-cert-manager.sh  # cert-manager y emisores, lo llama deployK8s (desde 0.8.0)
+    ├── node-external-ip.sh    # IP externa del nodo para el nombre <ip>.sslip.io
+    ├── check-rbac.sh          # kubectl auth can-i del deployer y del viewer
+    ├── install-linkerd.sh     # Gateway API, identidad y control plane de Linkerd
+    ├── install-flagger.sh     # Flagger y su load tester
+    ├── install-linkerd-viz.sh # panel de Linkerd y su Ingress
+    ├── wait-canary.sh         # espera el análisis de Flagger; lo llama deployK8s
+    └── inventario.sh          # inventario de solo lectura de un nodo (HU-54)
 ```
+
+Lo marcado "desde 0.8.0" está en `dev` y entra con esa versión; la `0.7.0`, que corre hoy en los
+tres ambientes, no lo tiene. Qué corre en cada clúster, componente por componente, está en
+[`docs/arquitectura/kubernetes.md`](../../docs/arquitectura/kubernetes.md).
 
 ## Cómo está organizado
 
@@ -85,6 +112,14 @@ el chart se instala igual, sin ese recurso, y lo crea en el siguiente despliegue
 Con `helm template`, agrega `--api-versions monitoring.coreos.com/v1/ServiceMonitor` o el recurso
 no se genera. Las métricas, sus etiquetas y cómo verificarlas están en
 [`docs/operaciones/observability.md`](../../docs/operaciones/observability.md#métricas-de-los-servicios-hu-39).
+
+## Service mesh y canary
+
+Con `mesh.enabled`, los servicios y el cliente web llevan el proxy de Linkerd y una
+ServiceAccount propia: las llamadas entre ellos van con mTLS. Con `canary.enabled`, Flagger
+libera `gateway` por pasos y el chart deja de crear su Service. Por ahora ambos están activos
+solo en `values-dev.yaml`. La instalación, la verificación y los límites están en
+[`docs/arquitectura/service-mesh.md`](../../docs/arquitectura/service-mesh.md).
 
 ## Desplegar a mano
 

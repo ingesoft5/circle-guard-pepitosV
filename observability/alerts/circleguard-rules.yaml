@@ -77,3 +77,43 @@ spec:
               El percentil 95 de las respuestas HTTP es {{ $value | humanizeDuration }} desde hace
               5 minutos (umbral 1 s). Suele venir de una dependencia lenta: base de datos, Neo4j,
               Redis o Kafka.
+
+    - name: circleguard.resilience
+      rules:
+        - alert: CircuitBreakerOpen
+          # The gateway reads the health status from Redis through the redisHealth breaker
+          # (docs/patrones/resiliencia.md). Open or half-open means Redis is failing and every
+          # check-in is denied (fail closed). max_over_time keeps the alert steady while the
+          # breaker cycles open -> half-open -> open under traffic.
+          expr: |
+            max by (namespace, environment, service, name) (
+              max_over_time(resilience4j_circuitbreaker_state{namespace=~"circleguard-.+", state=~"open|half_open"}[1m])
+            ) == 1
+          for: 1m
+          labels:
+            severity: critical
+            project: circleguard
+          annotations:
+            summary: "Circuito {{ $labels.name }} abierto en {{ $labels.service }} ({{ $labels.namespace }})"
+            description: >-
+              El circuit breaker {{ $labels.name }} está abierto desde hace más de 1 minuto: la
+              dependencia falla y el gateway niega todas las entradas. Revisa Redis con
+              kubectl -n {{ $labels.namespace }} get pods -l app.kubernetes.io/name=redis.
+
+    - name: circleguard.delivery
+      rules:
+        - alert: CanaryFailed
+          # Flagger (deploy/k8s/scripts/install-flagger.sh) reports 0 running, 1 promoted and
+          # 2 failed per Canary. A failed analysis sent all the traffic back to the primary, so
+          # the new version is deployed but serves nothing until the next deploy promotes one.
+          expr: max by (namespace, name) (flagger_canary_status{namespace=~"circleguard-.+"}) == 2
+          for: 1m
+          labels:
+            severity: warning
+            project: circleguard
+          annotations:
+            summary: "El canary de {{ $labels.name }} falló en {{ $labels.namespace }}"
+            description: >-
+              Flagger devolvió todo el tráfico a {{ $labels.name }}-primary: la versión nueva no
+              pasó el análisis de éxito o latencia. Revisa kubectl -n {{ $labels.namespace }}
+              describe canary {{ $labels.name }}.

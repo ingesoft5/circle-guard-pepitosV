@@ -16,8 +16,9 @@ containment can happen in minutes, not days.
 CircleGuard is a cloud-native contact-tracing platform built as eight Spring Boot
 microservices. Kafka carries asynchronous events, Neo4j traverses contact circles, PostgreSQL
 stores transactional data, Redis keeps ephemeral health state, OpenLDAP supports campus
-authentication, and S3 holds certificates and attachments. A web client provides the student
-and health-center experience.
+authentication, and S3 holds uploaded certificates and documents, reached with the IAM role of
+the cluster node (no keys). A web client provides the student and health-center
+experience. The architecture, with diagrams, is in [arquitectura/README.md](arquitectura/README.md).
 
 Each environment runs its own single-node k3s cluster on AWS. The same Terraform modules and
 Kubernetes Helm chart deploy `dev`, `stage` and `prod`; only values such as VPC CIDR, log
@@ -50,11 +51,12 @@ rollback and secret rotation.
 ## Cost
 
 A full month of on-demand list pricing for the running infrastructure is estimated at about
-**$390 USD** (five instances, 260 GB EBS, public IPv4, logs and supporting services). The
-actual usage from November 1–22, 2026 was **$59.72**, fully covered by **$59.72 in credits**, for
-a net of approximately **$0**. The difference comes from the partial period, stopped legacy
-hosts, empty image/S3 storage and account credits. The environments remain active for the
-evaluation; the remaining costs and the future teardown procedure are documented separately.
+**$549 USD** (seven running instances, 400 GB EBS, public IPv4, logs and supporting services).
+The actual usage from November 1–22, 2026 was **$59.72**, fully covered by **$59.72 in
+credits**, for a net of approximately **$0**. The difference comes from the partial period,
+the two Jenkins build workers added near the end of that period, stopped legacy hosts, empty
+image/S3 storage and account credits. The environments remain active for the evaluation; the
+remaining costs and the future teardown procedure are documented separately.
 
 ## Limitations and next steps
 

@@ -140,10 +140,10 @@ allow_admin_ip() {
   [[ "${ip}" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || usage
   [[ "${owner}" =~ ^[A-Za-z0-9_-]+$ ]] || usage
   cidr="${ip}/32"
-  for port in 22 8080; do
+  for port in 22 8080 8443; do
     replace_owner_rule circleguard-ci-sg "${port}" "${port}" "${cidr}" "${owner}"
   done
-  for port in 22 9000 8081 5000; do
+  for port in 22 8443 9000 8081 5000; do
     replace_owner_rule circleguard-tools-sg "${port}" "${port}" "${cidr}" "${owner}"
   done
   for env_name in dev stage prod; do

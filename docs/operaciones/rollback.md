@@ -32,7 +32,9 @@ Helm vuelve solo a la revisión anterior y el build queda `FAILED` con notificac
 
 El job espera a que todos los rollouts terminen (`--wait`) y corre el smoke test por el Ingress.
 La descripción del build queda como `stage: 0.6.0 -> revision 7 (0.5.0) by <usuario>`, y el log
-termina en `ROLLBACK OK` o `ROLLBACK FAILED`.
+termina en `ROLLBACK OK` o `ROLLBACK FAILED`. El resultado queda en el registro de despliegues
+(HU-51), con quien lanzó el job como aprobador, o quien aprobó en prod
+([`trazabilidad.md`](../release-notes/trazabilidad.md)).
 
 ### A mano, si Jenkins no está disponible
 
@@ -69,10 +71,15 @@ del código no la deshace; esas migraciones deben ser compatibles hacia atrás.
 
 ## Evidencia del ensayo
 
-El ensayo se hace en `stage`: se despliega a propósito una revisión defectuosa, se ejecuta el job
-con `VERSION` vacío y se guardan las capturas en `docs/evidencias/rollback/`:
+El ensayo se hizo en `stage` el 23 de noviembre de 2026 con el job `circleguard-rollback`:
+stage pasó de 0.7.0 a 0.6.0 (build #13, 2 min 11 s). El smoke test por HTTPS respondió `UP` en
+los cinco servicios núcleo. Después, el mismo job devolvió stage a 0.7.0 (build #14).
 
-- `helm history` antes y después.
-- La ejecución del job `circleguard-rollback` (etapas y log con `ROLLBACK OK`).
-- `kubectl get pods` durante la falla y después del rollback.
-- El dashboard de Grafana durante el evento.
+Las capturas están en [`docs/evidencias/rollback/`](../evidencias/rollback/):
+
+| Captura | Qué muestra |
+|:---|:---|
+| `01-formulario-stage-0.6.0.jpg` | El formulario del job con `ENVIRONMENT=stage` y `VERSION=0.6.0` |
+| `02-etapas-build-13.jpg` | Las etapas del build #13 en verde |
+| `03-build-13-exitoso.jpg` | El build #13: `stage: 0.7.0 -> 0.6.0 by admin`, rama `dev` |
+| `04-consola-rollback-ok.jpg` | La consola con `ROLLBACK OK` y `Finished: SUCCESS` |

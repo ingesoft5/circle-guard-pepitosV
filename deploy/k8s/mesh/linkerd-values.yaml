@@ -1,0 +1,71 @@
+# Values of linkerd-control-plane for the single-node k3s clusters (8 GB). Keep it free of
+# secrets: the trust anchor comes from cert-manager at install time (install-linkerd.sh).
+controllerReplicas: 1
+# No weekly CronJob that reports usage to the Linkerd project.
+disableHeartBeat: true
+
+identity:
+  issuer:
+    # The issuer certificate lives in the Secret linkerd-identity-issuer, kept by cert-manager.
+    scheme: kubernetes.io/tls
+
+proxyInit:
+  # Ubuntu 24.04 and k3s use nf_tables; the legacy backend is not loaded on the nodes.
+  iptablesMode: nft
+
+# Default for every injected proxy, the control plane's included. A proxy of an idle service
+# uses about 10 MiB; the limit only stops a runaway one.
+proxy:
+  resources:
+    cpu:
+      request: 10m
+    memory:
+      request: 20Mi
+      limit: 96Mi
+
+destinationResources:
+  cpu:
+    request: 10m
+  memory:
+    request: 48Mi
+    limit: 256Mi
+identityResources:
+  cpu:
+    request: 10m
+  memory:
+    request: 16Mi
+    limit: 64Mi
+proxyInjectorResources:
+  cpu:
+    request: 10m
+  memory:
+    request: 24Mi
+    limit: 128Mi
+spValidatorResources:
+  cpu:
+    request: 10m
+  memory:
+    request: 16Mi
+    limit: 64Mi
+policyController:
+  resources:
+    cpu:
+      request: 10m
+    memory:
+      request: 32Mi
+      limit: 128Mi
+
+# PodMonitors for the kube-prometheus-stack in monitoring (it reads PodMonitors of every
+# namespace). install-linkerd.sh turns them on only when the PodMonitor CRD exists. The proxy
+# one adds the deployment label that the canary queries filter on.
+podMonitor:
+  enabled: false
+  # linkerd-viz queries 1-minute windows; the scrape interval has to be well below that.
+  scrapeInterval: 15s
+  scrapeTimeout: 10s
+  controller:
+    enabled: true
+  serviceMirror:
+    enabled: false
+  proxy:
+    enabled: true

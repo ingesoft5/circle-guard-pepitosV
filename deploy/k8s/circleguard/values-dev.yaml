@@ -1,5 +1,14 @@
 environment: dev
+# Linkerd and the gateway canary start in dev (docs/arquitectura/service-mesh.md).
+mesh:
+  enabled: true
+canary:
+  enabled: true
 services:
+  file:
+    config:
+      # Bucket of Terraform (output storage_bucket of envs/dev).
+      CIRCLEGUARD_STORAGE_S3_BUCKET: circleguard-k3s-dev-files-028658486093
   auth:
     config:
       QR_EXPIRATION: "120000"

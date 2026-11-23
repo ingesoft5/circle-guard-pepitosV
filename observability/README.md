@@ -22,7 +22,7 @@ observability/
 │   └── dashboards/                 # JSON: Servicios y Negocio
 └── alerts/             # alertas como código (HU-41)
     ├── kustomization.yaml          # aplica reglas y ruteo en monitoring
-    ├── circleguard-rules.yaml      # ServiceDown, HighErrorRate y HighLatencyP95
+    ├── circleguard-rules.yaml      # ServiceDown, HighErrorRate, HighLatencyP95 y CircuitBreakerOpen
     └── alertmanager-config.yaml    # ruta y receptor de Discord de Alertmanager
 ```
 
