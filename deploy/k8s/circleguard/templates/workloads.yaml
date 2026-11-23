@@ -4,7 +4,6 @@ workload in .Values.services and .Values.middleware. Nothing is exposed with Nod
 enters through the Ingress (ingress.yaml).
 */ -}}
 {{- $root := . -}}
-{{- $canaryOn := eq (include "circleguard.canaryOn" .) "true" -}}
 {{- $workloads := dict -}}
 {{- range $name, $spec := .Values.middleware }}{{ $_ := set $workloads $name $spec }}{{ end -}}
 {{- range $name, $spec := .Values.services }}{{ $_ := set $workloads $name $spec }}{{ end -}}
@@ -46,8 +45,6 @@ metadata:
     {{- include "circleguard.labels" $ctx | nindent 4 }}
 automountServiceAccountToken: false
 {{- end }}
-{{- /* With the canary on, Flagger creates <name>, <name>-primary and <name>-canary (canary.yaml). */ -}}
-{{- if not (and $canaryOn (eq $name $root.Values.canary.service)) }}
 ---
 apiVersion: v1
 kind: Service
@@ -71,7 +68,6 @@ spec:
       port: {{ $extra.port }}
       targetPort: {{ $extra.name }}
     {{- end }}
-{{- end }}
 ---
 apiVersion: apps/v1
 kind: {{ if $spec.storage }}StatefulSet{{ else }}Deployment{{ end }}

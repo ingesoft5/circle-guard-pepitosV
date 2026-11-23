@@ -18,6 +18,3 @@ configMapGenerator:
   - name: circleguard-dashboard-business
     files:
       - dashboards/circleguard-business.json
-  - name: circleguard-dashboard-canary
-    files:
-      - dashboards/circleguard-canary.json
