@@ -54,13 +54,15 @@ Los tres roots enlazan los mismos `.tf` de `envs/shared/`; lo único propio de c
 | Módulo | Crea | Recursos por ambiente |
 |:---|:---|---:|
 | [`network`](../../infra/terraform/modules/network/README.md) | VPC, subred pública, IGW, tabla de rutas, peering con la VPC de CI, ruta de CI al ambiente, Security Group del nodo con reglas sueltas (80 y 443 públicos; 22 y 6443 desde Jenkins) y una regla en el Security Group de `tools` que abre el `5000` a la VPC del ambiente | 14 |
-| [`cluster`](../../infra/terraform/modules/cluster/README.md) | EC2 `m7i-flex.large`, disco gp3 cifrado, IMDSv2, Elastic IP; k3s y `registries.yaml` por `user_data` | 3 |
+| [`cluster`](../../infra/terraform/modules/cluster/README.md) | EC2 `m7i-flex.large`, disco gp3 cifrado, IMDSv2 con hop limit 2, Elastic IP; k3s y `registries.yaml` por `user_data`; rol de IAM del nodo con acceso solo al bucket del ambiente (rol, política e instance profile) | 6 |
 | [`registry`](../../infra/terraform/modules/registry/README.md) | Un repositorio ECR por servicio con lifecycle | 16 |
 | [`storage`](../../infra/terraform/modules/storage/README.md) | Bucket S3 privado, versionado, cifrado, con lifecycle | 6 |
 | [`observability`](../../infra/terraform/modules/observability/README.md) | Log group de CloudWatch por servicio, alarmas de CPU y de status check, tema SNS, instalación de kube-prometheus-stack, Loki y Promtail | 13 |
 
-Total: 52 recursos administrados y 8 lecturas (`data`) por ambiente. Los tres estados tienen
-exactamente las mismas direcciones; solo cambian los identificadores.
+Total: 52 recursos administrados y 8 lecturas (`data`) por ambiente en el inventario del 22 de
+noviembre. El rol del nodo agrega 3 recursos y 2 lecturas (las políticas en `data`), así que con
+ese cambio aplicado son 55 y 10. Los tres estados tienen exactamente las mismas direcciones; solo
+cambian los identificadores.
 
 ## Diferencias por ambiente
 
@@ -76,21 +78,22 @@ exactamente las mismas direcciones; solo cambian los identificadores.
 
 ## Recursos sin consumidor
 
-Tres grupos de recursos existen en los tres estados, pero hoy nadie los usa. Se dejan declarados
-como reserva y no forman parte del camino de la aplicación:
+Dos grupos de recursos existen en los tres estados, pero nadie los usa. Se dejan declarados como
+reserva y no forman parte del camino de la aplicación:
 
 | Recurso | Por qué no se usa | Qué se usa en su lugar |
 |:---|:---|:---|
 | Repositorios ECR (`module.registry`) | El pipeline publica en Nexus y el nodo descarga de `tools:5000` por el peering | Nexus (`docker-hosted`) |
-| Bucket S3 de archivos (`module.storage`) | `file-service` no tiene cliente S3; guarda en `/app/uploads` del pod | Disco del pod (`emptyDir`) |
 | Log groups de CloudWatch por servicio | Ningún agente envía logs a CloudWatch | Loki, alimentado por Promtail |
 
 Además, el tema SNS de alarmas no tiene suscripción: `alarm_email` queda vacío y ningún estado tiene
 un `aws_sns_topic_subscription`. Las alarmas de CPU y de status check del nodo cambian de estado en CloudWatch,
 pero no avisan a nadie. Las alertas de la aplicación van a Discord por Alertmanager.
 
-Usar el bucket desde `file-service`, o quitar esos módulos, es una decisión pendiente del equipo.
-Mientras tanto, cuestan casi nada: los repositorios y el bucket están vacíos.
+El bucket de `module.storage` sí tiene consumidor: `file-service` guarda ahí los archivos con el
+rol del nodo (entra con la próxima versión; en la `0.7.0` el bucket está vacío). Quitar ECR y los
+log groups, o empezar a usarlos, es una decisión pendiente del equipo; mientras tanto cuestan casi
+nada, porque están vacíos.
 
 ## Verificación
 

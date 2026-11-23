@@ -1,5 +1,9 @@
 environment: dev
 services:
+  file:
+    config:
+      # Bucket of Terraform (output storage_bucket of envs/dev).
+      CIRCLEGUARD_STORAGE_S3_BUCKET: circleguard-k3s-dev-files-028658486093
   auth:
     config:
       QR_EXPIRATION: "120000"

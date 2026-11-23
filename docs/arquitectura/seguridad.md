@@ -30,6 +30,7 @@ usuarios entra por el Ingress al nginx del cliente web, que solo reenvía `/svc/
 | Grafana | Login propio; contraseña de admin por `TF_VAR_` | Paneles |
 | Equipo en AWS | IAM; la política del equipo enciende, apaga y autoriza IP según la etiqueta `Project=CircleGuard` | [`infra/cloud/aws/README.md`](../../infra/cloud/aws/README.md) |
 | Pods | Ninguno monta token de la API (`automountServiceAccountToken: false`) | Nada contra la API de Kubernetes |
+| `file-service` ante S3 | Rol de IAM del nodo por IMDSv2 (hop limit 2), sin llaves | Listar, leer, escribir y borrar objetos del bucket de su ambiente |
 
 Los permisos de la aplicación y el flujo del QR están documentados como patrones P9 a P11 en
 [`../patrones/existentes.md`](../patrones/existentes.md).
@@ -78,8 +79,10 @@ Resultados de la última corrida en [`../operaciones/informe-pruebas.md`](../ope
 
 - **Identidad.** Los nombres reales solo están en la bóveda de `identity`, cifrados y con sal. El
   grafo de Neo4j guarda seudónimos (patrón P12). `dashboard` aplica k-anonimato (P13).
-- **En reposo.** Disco gp3 cifrado en cada nodo; el bucket S3 (sin uso hoy) cifrado con AES256,
-  privado y versionado; el estado de Terraform cifrado y versionado en S3.
+- **En reposo.** Disco gp3 cifrado en cada nodo; el bucket de archivos cifrado con AES256, privado,
+  con bloqueo de acceso público y versionado; el estado de Terraform cifrado y versionado en S3.
+- **Archivos subidos.** El nombre que se guarda es `<uuid>_<nombre>` con solo `[A-Za-z0-9._-]`; la
+  descarga solo acepta nombres con esa forma, así que no hay rutas ni `..`.
 - **Instancia.** IMDSv2 obligatorio en los nodos k3s.
 
 ## Brechas conocidas
@@ -89,6 +92,8 @@ Resultados de la última corrida en [`../operaciones/informe-pruebas.md`](../ope
 | El Ingress sirve HTTP en `0.7.0` | Credenciales y JWT viajan sin cifrar | TLS con cert-manager está en `dev` y entra con `0.8.0` ([`../operaciones/tls.md`](../operaciones/tls.md)) |
 | Sin RBAC propio del namespace en `0.7.0` | El acceso al clúster es con el kubeconfig de administrador | Roles `circleguard-deployer` y `circleguard-viewer` en `dev`, entran con `0.8.0` |
 | Sin NetworkPolicy | Un pod comprometido alcanza a cualquier otro del namespace | Pendiente |
+| Cualquier pod del nodo puede usar el rol de IAM | Un pod comprometido lee o borra los archivos del bucket | La política se limita al bucket del ambiente; el bucket es versionado |
+| `file-service` no exige autenticación | Cualquiera que llegue a `/svc/file/` sube o descarga si conoce el nombre | Pendiente: validar el JWT como los demás servicios |
 | Tráfico interno sin cifrar (Kafka `PLAINTEXT`, `LDAP_TLS=false`) | Lectura del tráfico dentro del nodo | Aceptado: un solo nodo, sin red compartida |
 | Jenkins y SonarQube en HTTP | Credenciales en claro hacia CI | Proxy TLS opcional en `infra/compose/ci/docker-compose.tls.yml`, no activado |
 | Lockfile de `mobile/` con 1 CRITICAL y 74 HIGH | Dependencias de build vulnerables | No están en las imágenes publicadas; pendiente de actualizar |

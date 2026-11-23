@@ -88,12 +88,12 @@ flowchart LR
 | `notification` | Despacho multicanal de avisos a partir de eventos | — |
 | `dashboard` | Analítica de focos con k-anonimato | `circleguard_dashboard` |
 | `gateway` | Validación del QR en la entrada del campus | Redis (lectura) |
-| `file` | Subida de certificados y documentos | Disco del pod (`/app/uploads`, `emptyDir`) |
+| `file` | Subida y descarga de certificados y documentos | Bucket S3 del ambiente, con el rol del nodo |
 | `web` | Cliente web y reverse proxy | — |
 
-`file` guarda los archivos en el disco del pod, no en S3: el bucket que crea Terraform todavía no lo
-usa la aplicación (ver [`infraestructura.md`](infraestructura.md#recursos-sin-consumidor)). Los
-archivos se pierden si el pod se reemplaza.
+`file` guarda los archivos en el bucket S3 del ambiente con el rol de IAM del nodo, sin llaves
+(entra con la próxima versión; la `0.7.0` todavía los deja en un `emptyDir` del pod). Sin bucket
+configurado, como en Docker Compose, los guarda en el disco local.
 
 El detalle de cada patrón (database-per-service, eventos, cache-aside, máquina de estados,
 seudonimización, circuit breaker, configuración externa, outbox) y su evidencia en el código está en
@@ -139,7 +139,8 @@ flowchart TB
     subgraph AWSSVC["Servicios de AWS por ambiente · Terraform"]
         S3STATE[("S3 + DynamoDB<br/>estado y bloqueo")]
         CW["CloudWatch<br/>alarmas del nodo · SNS"]
-        ECR["ECR y bucket S3<br/>(sin consumidor)"]
+        ECR["ECR<br/>(sin consumidor)"]
+        S3FILES[("Bucket S3 de archivos<br/>rol del nodo")]
     end
 
     DEV_USER -->|push / PR| GH
@@ -153,6 +154,7 @@ flowchart TB
     K3DEV & K3STG & K3PRD -->|Alertmanager| DISCORD
     INTERNET -->|"80 / 443"| K3DEV & K3STG & K3PRD
     CW -.-> K3DEV & K3STG & K3PRD
+    K3DEV & K3STG & K3PRD -->|"file-service<br/>IMDSv2"| S3FILES
 ```
 
 | Host | Rol | Red | Lo crea |

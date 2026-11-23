@@ -70,7 +70,7 @@ CircleGuard follows a **Microservice Architecture** built on a **Hybrid Data Mod
 - **Form Service**: Dynamic health questionnaire engine.
 - **Gateway Service**: Campus entry validation via signed, time-limited QR tokens.
 - **Dashboard Service**: Geospatial hotspot analytics (Privacy-preserving).
-- **File Service**: Certificate and document uploads, stored on the pod's disk (the Terraform S3 bucket is not wired yet).
+- **File Service**: Certificate and document uploads and downloads, stored in the environment's S3 bucket.
 
 ---
 

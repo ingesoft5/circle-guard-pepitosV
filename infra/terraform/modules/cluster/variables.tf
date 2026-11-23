@@ -45,3 +45,8 @@ variable "ami_id" {
   type        = string
   default     = null
 }
+
+variable "storage_bucket_arn" {
+  description = "ARN of the environment bucket (module storage) the node role may read and write."
+  type        = string
+}

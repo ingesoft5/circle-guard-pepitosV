@@ -1,5 +1,9 @@
 environment: stage
 services:
+  file:
+    config:
+      # Bucket of Terraform (output storage_bucket of envs/stage).
+      CIRCLEGUARD_STORAGE_S3_BUCKET: circleguard-k3s-stage-files-028658486093
   auth:
     config:
       QR_EXPIRATION: "30000"

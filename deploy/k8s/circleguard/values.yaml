@@ -163,9 +163,13 @@ services:
     spring: true
     image: file-service
     port: 8085
-    # Uploads go to ./uploads (working directory /app); an emptyDir until the storage module is wired.
+    # With a bucket (values-<env>.yaml), uploads go to S3 with the node role (Terraform module
+    # cluster). Without one they go to ./uploads (working directory /app), an emptyDir.
     writablePaths: [/tmp, /app/uploads]
     readinessGroup: readinessState
+    config:
+      AWS_REGION: us-east-1
+      CIRCLEGUARD_STORAGE_S3_BUCKET: ""
   dashboard:
     spring: true
     image: dashboard-service
@@ -189,6 +193,7 @@ services:
       PROMOTION_UPSTREAM: "promotion.{{ .Release.Namespace }}.svc.cluster.local:8088"
       FORM_UPSTREAM: "form.{{ .Release.Namespace }}.svc.cluster.local:8086"
       GATEWAY_UPSTREAM: "gateway.{{ .Release.Namespace }}.svc.cluster.local:8087"
+      FILE_UPSTREAM: "file.{{ .Release.Namespace }}.svc.cluster.local:8085"
     resources:
       requests: {cpu: 20m, memory: 32Mi}
       limits: {memory: 128Mi}

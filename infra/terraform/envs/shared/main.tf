@@ -70,4 +70,7 @@ module "k3s" {
   root_volume_gb    = var.root_volume_gb
   k3s_version       = var.k3s_version
   registry          = "${data.aws_instance.tools.private_ip}:5000"
+
+  # Bucket of platform.tf: file-service reads and writes it through the node role.
+  storage_bucket_arn = module.storage.bucket_arn
 }
