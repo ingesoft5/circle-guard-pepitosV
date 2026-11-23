@@ -16,8 +16,8 @@ containment can happen in minutes, not days.
 CircleGuard is a cloud-native contact-tracing platform built as eight Spring Boot
 microservices. Kafka carries asynchronous events, Neo4j traverses contact circles, PostgreSQL
 stores transactional data, Redis keeps ephemeral health state, OpenLDAP supports campus
-authentication, and the file service keeps uploaded certificates on the pod's disk (an S3 bucket
-is provisioned for them but not wired yet). A web client provides the student and health-center
+authentication, and S3 holds uploaded certificates and documents, reached with the IAM role of
+the cluster node (no keys). A web client provides the student and health-center
 experience. The architecture, with diagrams, is in [arquitectura/README.md](arquitectura/README.md).
 
 Each environment runs its own single-node k3s cluster on AWS. The same Terraform modules and

@@ -39,7 +39,7 @@ ConfigMap `<componente>-config`, su Deployment o StatefulSet y su Service `Clust
 | `gateway` | Deployment | `gateway-service:0.7.0` | 8087 | `readinessState` | HPA 1–3 (prod 2–4), CPU 70 % |
 | `notification` | Deployment | `notification-service:0.7.0` | 8082 | `readinessState` | 1 réplica |
 | `dashboard` | Deployment | `dashboard-service:0.7.0` | 8084 | `readinessState,db` | 1 réplica |
-| `file` | Deployment | `file-service:0.7.0` | 8085 | `readinessState` | 1 réplica, archivos en `emptyDir` |
+| `file` | Deployment | `file-service:0.7.0` | 8085 | `readinessState` | 1 réplica; archivos en `emptyDir` (S3 desde la próxima versión) |
 | `web` | Deployment | `web-client:0.7.0` | 8080 | `/healthz` | 1 réplica |
 | `postgres` | StatefulSet | `postgres:16` | 5432 | `pg_isready` | PVC 2 Gi (stage 3 Gi, prod 5 Gi) |
 | `neo4j` | StatefulSet | `neo4j:5.26` | 7687 | TCP | PVC 2 Gi (prod 3 Gi) |
@@ -72,7 +72,8 @@ al repositorio ni al chart.
 
 El Ingress `circleguard` (clase `traefik`, sin host, puerto 80) envía `/` al Service `web`. El nginx
 del cliente web sirve la aplicación y reenvía `/svc/<servicio>/` a `auth`, `identity`, `promotion`,
-`form` y `gateway`. Ningún Service usa `NodePort`. Jaeger no se publica: su interfaz se abre con
+`form` y `gateway` (y a `file` desde la próxima versión: en la `0.7.0` su upstream apunta al nombre de
+Compose y no resuelve). Ningún Service usa `NodePort`. Jaeger no se publica: su interfaz se abre con
 `kubectl port-forward svc/jaeger 16686:16686`.
 
 ### Métricas
@@ -108,6 +109,7 @@ no los tiene. Por eso estos objetos no aparecen en ningún clúster:
 |:---|:---|:---|
 | TLS (HU-47) | `deploy/k8s/scripts/install-cert-manager.sh`, `deploy/k8s/cert-manager/issuers.yaml`, `templates/certificate.yaml`, `templates/ingress.yaml`, `observability/tls/` | cert-manager 1.18.6, `ClusterIssuer` `circleguard-ca`, Certificate `circleguard-tls`, Ingress `circleguard-http` con redirección a HTTPS, Middleware `https-redirect`, certificado `monitoring-tls` |
 | RBAC del namespace | `templates/rbac.yaml`, `deploy/k8s/scripts/check-rbac.sh` | ServiceAccounts, Roles y RoleBindings `circleguard-deployer` y `circleguard-viewer` |
+| Archivos en S3 | `services/circleguard-file-service`, `values-<env>.yaml`, `modules/cluster` | `file-config` con `CIRCLEGUARD_STORAGE_S3_BUCKET`; `web-config` con `FILE_UPSTREAM`, para que `/svc/file/` llegue al Service `file` |
 
 `deployK8s` instala cert-manager antes del `helm upgrade`, así que el primer despliegue de la `0.8.0`
 deja estos objetos en cada ambiente sin pasos manuales. Detalle en
