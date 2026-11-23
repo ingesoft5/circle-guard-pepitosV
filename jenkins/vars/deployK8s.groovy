@@ -97,8 +97,12 @@ def rollout(String environment, String version, String timeout, String descripti
                     kubectl -n "$DEPLOY_NAMESPACE" get events --sort-by=.lastTimestamp | tail -n 30 || true
                     helm -n "$DEPLOY_NAMESPACE" history circleguard --max 5 || true
                 '''
-                error("deployK8s: rollout of ${version} to ${environment} did not finish in ${timeout}; " +
-                        'Helm restored the previous revision')
+                // The step can fail before Helm runs (a helper script, the secrets, the DNS
+                // lookup), so the real error goes first; --atomic only restores a revision when
+                // the upgrade itself started.
+                error("deployK8s: deploy of ${version} to ${environment} failed: ${err.message}. " +
+                        "If the Helm upgrade started, --atomic restored the previous revision " +
+                        "(rollout timeout ${timeout}).")
             }
             // Dashboards (HU-40) and alert rules (HU-41) as code: Grafana and Prometheus run in
             // the monitoring namespace of the same cluster. A cluster without the monitoring stack
