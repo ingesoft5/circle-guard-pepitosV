@@ -4,6 +4,12 @@ mesh:
   enabled: true
 canary:
   enabled: true
+# The dev node has 2 vCPU. With the mesh, every service adds a Linkerd proxy and the canary
+# runs gateway-primary next to gateway, so the default 100m request per service left no room
+# and gateway-primary stayed Pending. Idle services use about 5-20m.
+spring:
+  resources:
+    requests: {cpu: 50m}
 services:
   file:
     config:
