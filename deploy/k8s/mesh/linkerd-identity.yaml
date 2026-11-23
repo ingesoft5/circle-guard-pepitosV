@@ -1,4 +1,4 @@
-# Linkerd identity issued by cert-manager (deploy/k8s/scripts/install-linkerd.sh applies it).
+# Linkerd identity issued by cert-manager (deploy/k8s/scripts/install-mesh.sh applies it).
 #
 #   circleguard-selfsigned (ClusterIssuer)
 #     -> linkerd-trust-anchor   root of the mesh, 10 years, rotated by hand
