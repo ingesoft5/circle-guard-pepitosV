@@ -16,3 +16,8 @@ services:
 middleware:
   postgres:
     storage: {size: 3Gi}
+# The k3s node has no ExternalIP, so deployK8s cannot find the public name. The Elastic IP is
+# fixed in Terraform (docs/arquitectura/infraestructura.md).
+ingress:
+  tls:
+    dnsName: 3.221.162.144.sslip.io
